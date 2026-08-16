@@ -30,11 +30,7 @@ class Network24P2pSession(
         Network24SignalingClient(
             config = config,
             registration = Network24DeviceRegistration(deviceId, deviceType(), BuildConfig.VERSION_NAME),
-            tokenProvider = Network24FirebaseTokenProvider(
-                deviceId = deviceId,
-                deviceType = deviceType(),
-                appVersion = BuildConfig.VERSION_NAME
-            ),
+            tokenProvider = Network24AccountTokenProvider(appContext, com.network24.player.core.preferences.PreferenceManager(appContext)),
             listener = signalingListener
         )
     }

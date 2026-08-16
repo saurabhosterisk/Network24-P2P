@@ -111,9 +111,9 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     private lateinit var prefs: PreferenceManager
 
-    /** Server-controlled rollout will replace this default-off configuration. */
+    /** P2P is available only after the existing IPTV account has logged in; HTTP remains fallback. */
     val p2pSession: Network24P2pSession by lazy {
-        Network24P2pSession(this, Network24P2pConfig(enabled = false)).also { it.start() }
+        Network24P2pSession(this, Network24P2pConfig(enabled = true)).also { it.start() }
     }
 
     override fun onCreate() {

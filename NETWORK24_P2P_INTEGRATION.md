@@ -7,8 +7,8 @@ The first Android integration layer is now present under
 
 - WebSocket: `wss://p2p.web24.live/ws`
 - Protocol: version `1`
-- P2P is disabled by default until the app receives a server-issued feature
-  flag and a short-lived client token.
+- P2P starts only for an already logged-in IPTV account and receives a
+  server-issued short-lived client token.
 
 ## Safety contract
 
@@ -28,9 +28,11 @@ or rejected.
 
 ## App wiring
 
-The app’s trusted authentication/backend layer must provide a short-lived
-Network24 client token. Do not derive it from an IPTV password and do not embed
-the server signing secret in the APK.
+The app’s existing IPTV username/password login is the source of identity. The
+broker validates those credentials against the configured IPTV origin and then
+returns a short-lived Network24 client token. The signing secret is never in
+the APK. Credentials must only be sent to the HTTPS broker and are never
+logged or persisted by the P2P layer.
 
 ```kotlin
 val client = Network24SignalingClient(
@@ -42,20 +44,15 @@ val client = Network24SignalingClient(
         region = region,
         country = country
     ),
-    tokenProvider = Network24FirebaseTokenProvider(
-        deviceId = stableDeviceId,
-        deviceType = "ANDROID",
-        appVersion = BuildConfig.VERSION_NAME
-    ),
+    tokenProvider = Network24AccountTokenProvider(appContext, preferences),
     listener = listener
 )
 ```
 
-The Firebase project is `network24`. Firebase Anonymous Auth is enabled for
-the current IPTV identity model. The Android provider exchanges the
-Firebase ID token with `/api/v1/client/token`; the API verifies Google’s
-signature and issues a five-minute Network24 token. The IPTV password is never
-sent to the P2P broker.
+Firebase Anonymous Auth is not used for P2P. The Android provider exchanges
+the existing IPTV account credentials with `/api/v1/client/token`; the API
+validates them against its allowlisted IPTV origin and issues a five-minute
+Network24 token.
 
 `Network24WebRtcPeerManager` and the bounded `Network24SegmentCache` plus
 `Network24HybridDataSource` are now present behind the same opt-in boundary.
@@ -63,7 +60,7 @@ The hybrid source checks cache, gives a peer at most 120 ms by default, and
 then immediately uses the existing HTTP source. Playback never waits
 indefinitely for a peer.
 
-The app now owns one default-off `Network24P2pSession`, joins the exact
+The app now owns one account-authenticated `Network24P2pSession`, joins the exact
 `LiveChannel.stream_id` room when a live channel is played, and exposes its
 bounded peer fetcher to the hybrid factory. The normal player still uses the
 existing HTTP factory while the server feature flag is off; an APK update
