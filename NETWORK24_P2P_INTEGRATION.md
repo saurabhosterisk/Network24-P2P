@@ -47,11 +47,18 @@ val client = Network24SignalingClient(
 )
 ```
 
-The next implementation phase adds the WebRTC peer manager and segment cache
-behind this client. It must use a short P2P deadline and immediately fall back
-to the existing HTTP source; playback must never wait indefinitely for a peer.
+`Network24WebRtcPeerManager` and the bounded `Network24SegmentCache` plus
+`Network24HybridDataSource` are now present behind the same opt-in boundary.
+The hybrid source checks cache, gives a peer at most 120 ms by default, and
+then immediately uses the existing HTTP source. Playback never waits
+indefinitely for a peer.
+
+The normal player still uses the existing HTTP factory. Wiring the hybrid
+factory into playback requires the production token issuer and the server
+feature flag; this is intentional so an APK update cannot silently change
+playback behavior.
 
 ## Validation
 
-Baseline `:app:assembleDebug` and the feature-layer `:app:compileDebugKotlin`
-both pass on the server with JDK 17 and Android API 35.
+Baseline and integrated `:app:assembleDebug` builds pass on the server with
+JDK 17 and Android API 35.
