@@ -42,10 +42,20 @@ val client = Network24SignalingClient(
         region = region,
         country = country
     ),
-    tokenProvider = Network24TokenProvider { tokenStore.currentShortLivedToken() },
+    tokenProvider = Network24FirebaseTokenProvider(
+        deviceId = stableDeviceId,
+        deviceType = "ANDROID",
+        appVersion = BuildConfig.VERSION_NAME
+    ),
     listener = listener
 )
 ```
+
+The Firebase project is `network24`. Firebase Anonymous Auth must be enabled
+for the current IPTV identity model. The Android provider exchanges the
+Firebase ID token with `/api/v1/client/token`; the API verifies Google’s
+signature and issues a five-minute Network24 token. The IPTV password is never
+sent to the P2P broker.
 
 `Network24WebRtcPeerManager` and the bounded `Network24SegmentCache` plus
 `Network24HybridDataSource` are now present behind the same opt-in boundary.

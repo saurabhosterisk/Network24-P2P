@@ -132,23 +132,24 @@ class Network24SignalingClient(
     }
 
     private fun authenticateAndRegister() {
-        val token = tokenProvider.getToken()
-        if (token.isNullOrBlank()) {
-            listener.onError("client_token_unavailable")
-            socket?.close(1008, "authentication_required")
-            return
+        tokenProvider.getToken { token ->
+            if (token.isNullOrBlank()) {
+                listener.onError("client_token_unavailable")
+                socket?.close(1008, "authentication_required")
+                return@getToken
+            }
+            send("authenticate", JsonObject().apply { addProperty("token", token) })
+            send("register", JsonObject().apply {
+                addProperty("device_id", registration.deviceId)
+                addProperty("device_type", registration.deviceType)
+                addProperty("app_version", registration.appVersion)
+                addProperty("protocol_version", config.protocolVersion)
+                registration.region?.let { addProperty("region", it) }
+                registration.country?.let { addProperty("country", it) }
+            })
+            currentStreamId?.let { send("join_stream", JsonObject().apply { addProperty("stream_id", it) }) }
+            send("request_peers", JsonObject())
         }
-        send("authenticate", JsonObject().apply { addProperty("token", token) })
-        send("register", JsonObject().apply {
-            addProperty("device_id", registration.deviceId)
-            addProperty("device_type", registration.deviceType)
-            addProperty("app_version", registration.appVersion)
-            addProperty("protocol_version", config.protocolVersion)
-            registration.region?.let { addProperty("region", it) }
-            registration.country?.let { addProperty("country", it) }
-        })
-        currentStreamId?.let { send("join_stream", JsonObject().apply { addProperty("stream_id", it) }) }
-        send("request_peers", JsonObject())
     }
 
     private fun startHeartbeat() {

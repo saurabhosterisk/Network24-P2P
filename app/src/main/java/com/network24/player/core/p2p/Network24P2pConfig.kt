@@ -12,8 +12,8 @@ data class Network24P2pConfig(
 )
 
 fun interface Network24TokenProvider {
-    /** Returns a short-lived signed Network24 client token. Never log or persist the token here. */
-    fun getToken(): String?
+    /** Asynchronously returns a short-lived token. Never log or persist the token here. */
+    fun getToken(callback: (String?) -> Unit)
 }
 
 data class Network24DeviceRegistration(
