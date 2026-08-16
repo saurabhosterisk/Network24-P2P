@@ -1255,7 +1255,8 @@ class ChannelListActivity : BaseActivity() {
         PlayerManager.play(
             this,
             binding.playerView,
-            buildStreamUrl(channel)
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
         )
 
 
@@ -1325,7 +1326,8 @@ class ChannelListActivity : BaseActivity() {
         PlayerManager.play(
             this,
             binding.playerView,
-            buildStreamUrl(channel)
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
         )
 
 
@@ -1861,7 +1863,8 @@ class ChannelListActivity : BaseActivity() {
                                     binding.playerView,
                                     buildStreamUrl(
                                         currentChannel
-                                    )
+                                    ),
+                                    currentChannel.stream_id?.toString()
                                 )
                             }
                     }

@@ -8,7 +8,8 @@ data class Network24P2pConfig(
     val heartbeatIntervalMs: Long = 15_000L,
     val reconnectInitialMs: Long = 1_000L,
     val reconnectMaxMs: Long = 30_000L,
-    val maxMessageBytes: Int = 64 * 1024
+    val maxMessageBytes: Int = 64 * 1024,
+    val iceServers: List<String> = listOf("stun:stun.l.google.com:19302")
 )
 
 fun interface Network24TokenProvider {

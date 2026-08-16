@@ -1118,7 +1118,8 @@ class PlayerActivity : BaseActivity() {
         PlayerManager.play(
             this,
             binding.playerView,
-            buildStreamUrl(channel)
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
         )
 
 

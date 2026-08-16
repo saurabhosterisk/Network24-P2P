@@ -19,6 +19,8 @@ import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.core.p2p.Network24P2pConfig
+import com.network24.player.core.p2p.Network24P2pSession
 
 class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
@@ -108,6 +110,11 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
     }
 
     private lateinit var prefs: PreferenceManager
+
+    /** Server-controlled rollout will replace this default-off configuration. */
+    val p2pSession: Network24P2pSession by lazy {
+        Network24P2pSession(this, Network24P2pConfig(enabled = false)).also { it.start() }
+    }
 
     override fun onCreate() {
         super.onCreate()

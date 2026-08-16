@@ -1045,7 +1045,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
             binding.playerView,
 
-            buildStreamUrl(channel)
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
 
         )
 
@@ -1119,7 +1120,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
             binding.playerView,
 
-            buildStreamUrl(channel)
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
 
         )
 

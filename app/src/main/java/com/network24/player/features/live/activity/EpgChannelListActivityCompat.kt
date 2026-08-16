@@ -102,7 +102,7 @@ fun EpgChannelListActivity.playChannel(channel: LiveChannel, program: EpgEntity?
         ?.invoke(this, channel, program)
         ?: privateMethod("updateTopInfo", LiveChannel::class.java)?.invoke(this, channel)
 
-    PlayerManager.play(this, playerView as androidx.media3.ui.PlayerView, url)
+    PlayerManager.play(this, playerView as androidx.media3.ui.PlayerView, url, channel.stream_id.toString())
 
     val focusViews = privateField("channelFocusViews") as? MutableList<*> ?: return
     val channels = (privateField("channels") as? List<*>)

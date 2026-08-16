@@ -18,6 +18,7 @@ import androidx.media3.ui.PlayerView
 
 import com.network24.player.core.net.StreamDataSourceFactory
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.Network24App
 import com.network24.player.features.live.models.LiveChannel
 import com.network24.player.features.player.state.PlayerState
 
@@ -426,10 +427,7 @@ object PlayerManager {
 
                 )
 
-                    .setMediaSourceFactory(
-                        StreamDataSourceFactory
-                            .createMediaSourceFactory()
-                    )
+                    .setMediaSourceFactory(mediaSourceFactory(context))
 
                     .setLoadControl(
                         loadControl
@@ -671,8 +669,11 @@ object PlayerManager {
     fun play(
         context: Context,
         playerView: PlayerView,
-        streamUrl: String
+        streamUrl: String,
+        streamId: String? = null
     ) {
+
+        (context.applicationContext as? Network24App)?.p2pSession?.joinStream(streamId)
 
         playbackSessionId++
 
@@ -758,6 +759,16 @@ object PlayerManager {
 
             player.play()
         }
+    }
+
+    private fun mediaSourceFactory(context: Context): androidx.media3.exoplayer.source.DefaultMediaSourceFactory {
+        val app = context.applicationContext as? Network24App
+        val session = app?.p2pSession
+        return if (session?.enabled == true) {
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                StreamDataSourceFactory.createHybridDataSourceFactory(context, session.dataSourceFetcher())
+            )
+        } else StreamDataSourceFactory.createMediaSourceFactory()
     }
 
 

@@ -51,8 +51,8 @@ val client = Network24SignalingClient(
 )
 ```
 
-The Firebase project is `network24`. Firebase Anonymous Auth must be enabled
-for the current IPTV identity model. The Android provider exchanges the
+The Firebase project is `network24`. Firebase Anonymous Auth is enabled for
+the current IPTV identity model. The Android provider exchanges the
 Firebase ID token with `/api/v1/client/token`; the API verifies Google’s
 signature and issues a five-minute Network24 token. The IPTV password is never
 sent to the P2P broker.
@@ -63,10 +63,11 @@ The hybrid source checks cache, gives a peer at most 120 ms by default, and
 then immediately uses the existing HTTP source. Playback never waits
 indefinitely for a peer.
 
-The normal player still uses the existing HTTP factory. Wiring the hybrid
-factory into playback requires the production token issuer and the server
-feature flag; this is intentional so an APK update cannot silently change
-playback behavior.
+The app now owns one default-off `Network24P2pSession`, joins the exact
+`LiveChannel.stream_id` room when a live channel is played, and exposes its
+bounded peer fetcher to the hybrid factory. The normal player still uses the
+existing HTTP factory while the server feature flag is off; an APK update
+cannot silently change playback behavior.
 
 ## Validation
 

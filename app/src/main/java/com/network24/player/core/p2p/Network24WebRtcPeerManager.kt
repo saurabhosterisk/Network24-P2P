@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class Network24WebRtcPeerManager(
     context: Context,
     private val signaling: Network24SignalingClient,
-    private val listener: Listener
+    private val listener: Listener,
+    private val iceServers: List<String> = emptyList()
 ) {
     interface Listener {
         fun onPeerReady(peerId: String, channel: DataChannel) {}
@@ -45,7 +46,8 @@ class Network24WebRtcPeerManager(
 
     fun connect(peerId: String, initiator: Boolean) {
         if (closed.get() || peerId.isBlank() || peers.containsKey(peerId)) return
-        val connection = factory.createPeerConnection(emptyList(), observer(peerId))
+        val rtcServers = iceServers.map { PeerConnection.IceServer.builder(it).createIceServer() }
+        val connection = factory.createPeerConnection(rtcServers, observer(peerId))
         if (connection == null) {
             listener.onPeerError(peerId, "peer_connection_create_failed")
             return
