@@ -9,6 +9,7 @@ build/
 
 # Local configuration
 local.properties
+gradle-local.properties
 
 # Android generated
 captures/

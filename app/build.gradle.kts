@@ -5,6 +5,11 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+fun buildConfigString(name: String): String {
+    val value = providers.gradleProperty(name).orNull.orEmpty()
+    return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+}
+
 android {
     namespace = "com.network24.player"
 
@@ -24,6 +29,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "P2P_TURN_USERNAME", buildConfigString("P2P_TURN_USERNAME"))
+        buildConfigField("String", "P2P_TURN_PASSWORD", buildConfigString("P2P_TURN_PASSWORD"))
     }
 
 

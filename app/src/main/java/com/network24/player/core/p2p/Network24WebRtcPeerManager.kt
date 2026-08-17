@@ -26,7 +26,7 @@ class Network24WebRtcPeerManager(
     context: Context,
     private val signaling: Network24SignalingClient,
     private val listener: Listener,
-    private val iceServers: List<String> = emptyList()
+    private val iceServers: List<Network24IceServer> = emptyList()
 ) {
     interface Listener {
         fun onPeerReady(peerId: String, channel: DataChannel) {}
@@ -51,7 +51,12 @@ class Network24WebRtcPeerManager(
 
     fun connect(peerId: String, initiator: Boolean) {
         if (closed.get() || peerId.isBlank() || peers.containsKey(peerId)) return
-        val rtcServers = iceServers.map { PeerConnection.IceServer.builder(it).createIceServer() }
+        val rtcServers = iceServers.map { server ->
+            PeerConnection.IceServer.builder(server.urls).apply {
+                server.username?.takeIf { it.isNotBlank() }?.let { setUsername(it) }
+                server.password?.takeIf { it.isNotBlank() }?.let { setPassword(it) }
+            }.createIceServer()
+        }
         val connection = factory.createPeerConnection(rtcServers, observer(peerId))
         if (connection == null) {
             listener.onPeerError(peerId, "peer_connection_create_failed")

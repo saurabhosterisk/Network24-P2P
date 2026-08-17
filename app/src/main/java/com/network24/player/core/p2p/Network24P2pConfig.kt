@@ -9,7 +9,13 @@ data class Network24P2pConfig(
     val reconnectInitialMs: Long = 1_000L,
     val reconnectMaxMs: Long = 30_000L,
     val maxMessageBytes: Int = 64 * 1024,
-    val iceServers: List<String> = listOf("stun:stun.l.google.com:19302")
+    val iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
+)
+
+data class Network24IceServer(
+    val urls: String,
+    val username: String? = null,
+    val password: String? = null,
 )
 
 fun interface Network24TokenProvider {
