@@ -110,3 +110,13 @@ Validated locally with JDK 17 / Android API 35:
 
 Physical two-phone media and mobile-CGNAT/TURN acceptance remain mandatory
 before production rollout; no Android device is attached to this build host.
+
+## Signed release publication
+
+On 2026-08-17, `:app:assembleRelease` completed successfully and APK v1/v2
+signature verification passed. The published artifact at
+`https://p2p.web24.live/app/N.apk` is byte-for-byte identical to the local
+release APK (SHA-256:
+`a2b6eb2b7f8026469fdacfa214441b155411bf51a0ef849a6cedfd188c960812`). The
+previous published APK is recoverable at
+`/opt/network24-p2p/backups/apk-before-release-20260817152320/N.apk`.
