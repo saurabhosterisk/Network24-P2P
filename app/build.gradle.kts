@@ -27,12 +27,25 @@ android {
     }
 
 
-    signingConfigs {
-        create("release") {
-            storeFile = file(project.property("RELEASE_STORE_FILE") as String)
-            storePassword = project.property("RELEASE_STORE_PASSWORD") as String
-            keyAlias = project.property("RELEASE_KEY_ALIAS") as String
-            keyPassword = project.property("RELEASE_KEY_PASSWORD") as String
+    val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE").orNull
+    val releaseStorePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+    val hasReleaseSigning = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() } && file(releaseStoreFile!!).isFile
+
+    if (hasReleaseSigning) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -42,7 +55,9 @@ android {
         release {
             isMinifyEnabled = false
 
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
 
             proguardFiles(
                 getDefaultProguardFile(

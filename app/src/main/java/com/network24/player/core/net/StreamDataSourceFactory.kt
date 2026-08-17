@@ -41,7 +41,7 @@ object StreamDataSourceFactory {
     fun createHybridDataSourceFactory(
         context: Context,
         peerFetcher: Network24PeerSegmentFetcher?,
-        p2pTimeoutMs: Long = 120L
+        p2pTimeoutMs: Long = 1_500L
     ): DataSource.Factory {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)

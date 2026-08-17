@@ -24,6 +24,8 @@ captures/
 *.keystore
 *.p12
 *.pem
+*.key
+apk_key
 
 # Environment files
 .env
@@ -41,4 +43,3 @@ Thumbs.db
 # Temporary files
 *.log
 *.tmp
-

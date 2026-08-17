@@ -37,6 +37,7 @@ class Network24SignalingClient(
 ) {
     interface Listener {
         fun onState(state: State)
+        fun onLocalPeerId(peerId: String) {}
         fun onPeerList(peers: List<Peer>) {}
         fun onSignal(type: String, payload: JsonObject) {}
         fun onError(code: String) {}
@@ -98,9 +99,28 @@ class Network24SignalingClient(
         if (authenticated) send("request_peers", JsonObject())
     }
 
+    fun sendTelemetry(payload: JsonObject) {
+        if (authenticated) send("telemetry", payload)
+    }
+
     fun sendOffer(targetPeerId: String, sdp: String) = sendSignal("offer", targetPeerId, sdp, null)
     fun sendAnswer(targetPeerId: String, sdp: String) = sendSignal("answer", targetPeerId, sdp, null)
-    fun sendIceCandidate(targetPeerId: String, candidate: String) = sendSignal("ice_candidate", targetPeerId, null, candidate)
+    fun sendIceCandidate(
+        targetPeerId: String,
+        candidate: String,
+        sdpMid: String,
+        sdpMLineIndex: Int
+    ) {
+        if (candidate.isBlank() || sdpMid.isBlank() || sdpMLineIndex < 0) {
+            listener.onError("invalid_local_ice_candidate")
+            return
+        }
+        sendSignal("ice_candidate", targetPeerId, null, candidate, sdpMid, sdpMLineIndex)
+    }
+
+    fun sendEndOfCandidates(targetPeerId: String) {
+        sendSignal("ice_candidate", targetPeerId, null, null, endOfCandidates = true)
+    }
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
@@ -111,11 +131,24 @@ class Network24SignalingClient(
         listener.onState(State.CLOSED)
     }
 
-    private fun sendSignal(type: String, targetPeerId: String, sdp: String?, candidate: String?) {
+    private fun sendSignal(
+        type: String,
+        targetPeerId: String,
+        sdp: String?,
+        candidate: String?,
+        sdpMid: String? = null,
+        sdpMLineIndex: Int? = null,
+        endOfCandidates: Boolean? = null
+    ) {
         val payload = JsonObject().apply {
             addProperty("target_peer_id", targetPeerId)
             if (sdp != null) addProperty("sdp", sdp)
-            if (candidate != null) addProperty("candidate", candidate)
+            if (candidate != null) {
+                addProperty("candidate", candidate)
+                if (sdpMid != null) addProperty("sdpMid", sdpMid)
+                if (sdpMLineIndex != null) addProperty("sdpMLineIndex", sdpMLineIndex)
+            }
+            if (endOfCandidates == true) addProperty("endOfCandidates", true)
         }
         send(type, payload)
     }
@@ -187,6 +220,7 @@ class Network24SignalingClient(
                 when (type) {
                     "peer_connected" -> {
                         authenticated = true
+                        payload.stringOrNull("peer_id")?.let { listener.onLocalPeerId(it) }
                         listener.onState(State.AUTHENTICATED)
                         listener.onPeerList(emptyList())
                     }
@@ -194,13 +228,16 @@ class Network24SignalingClient(
                         val peer = item.asJsonObject
                         peer.get("peer_id")?.asString?.let { Peer(it, peer.stringOrNull("device_type"), peer.stringOrNull("app_version"), peer.stringOrNull("region"), peer.stringOrNull("country")) }
                     } ?: emptyList())
-                    "client_error" -> listener.onError(payload.stringOrNull("code") ?: "client_error")
-                    "offer", "answer", "ice_candidate" -> listener.onSignal(type, payload)
+                "client_error" -> listener.onError(payload.stringOrNull("code") ?: "client_error")
+                    "offer", "answer", "ice_candidate" -> {
+                        validateSignal(type, payload)
+                        listener.onSignal(type, payload)
+                    }
                     "heartbeat" -> Unit
                 }
             } catch (error: Exception) {
-                Log.w(TAG, "Ignoring malformed signaling message", error)
-                listener.onError("invalid_message")
+                Log.w(TAG, "Ignoring malformed signaling message code=${error.message ?: "invalid_message"}")
+                listener.onError(error.message ?: "invalid_message")
             }
         }
 
@@ -226,6 +263,25 @@ class Network24SignalingClient(
 
     companion object {
         private const val TAG = "Network24P2P"
-        private fun JsonObject.stringOrNull(name: String): String? = get(name)?.takeUnless { it.isJsonNull }?.asString
+        private fun JsonObject.stringOrNull(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+
+        private fun validateSignal(type: String, payload: JsonObject) {
+            require(!payload.stringOrNull("from_peer_id").isNullOrBlank()) { "signal_sender_required" }
+            when (type) {
+                "offer", "answer" -> require(!payload.stringOrNull("sdp").isNullOrBlank()) { "invalid_sdp" }
+                "ice_candidate" -> if (payload.get("endOfCandidates")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == true) {
+                    require(payload.get("candidate") == null && payload.get("sdpMid") == null && payload.get("sdpMLineIndex") == null) { "invalid_end_of_candidates" }
+                } else {
+                    require(payload.get("endOfCandidates") == null) { "invalid_ice_candidate" }
+                    require(!payload.stringOrNull("candidate").isNullOrBlank()) { "invalid_ice_candidate" }
+                    require(!payload.stringOrNull("sdpMid").isNullOrBlank()) { "invalid_ice_candidate_sdp_mid" }
+                    require(payload.get("sdpMLineIndex")?.takeUnless { it.isJsonNull }
+                        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+                        ?.asJsonPrimitive?.asNumber?.toDouble()
+                        ?.let { it.isFinite() && it % 1.0 == 0.0 && it >= 0.0 } == true) { "invalid_ice_candidate_sdp_m_line_index" }
+                }
+            }
+        }
     }
 }

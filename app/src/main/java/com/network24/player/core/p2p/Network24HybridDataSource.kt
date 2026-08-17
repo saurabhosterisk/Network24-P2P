@@ -20,7 +20,7 @@ class Network24HybridDataSource(
     private val httpDataSource: DataSource,
     private val cache: Network24SegmentCache,
     private val peerFetcher: Network24PeerSegmentFetcher?,
-    private val p2pTimeoutMs: Long = 120L
+    private val p2pTimeoutMs: Long = 1_500L
 ) : DataSource {
     private val peerExecutor = Executors.newCachedThreadPool { runnable ->
         Thread(runnable, "network24-p2p-fetch").apply { isDaemon = true }
@@ -66,6 +66,7 @@ class Network24HybridDataSource(
         val input = cachedInput
         if (input != null) return input.read(buffer, offset, length)
         val read = httpDataSource.read(buffer, offset, length)
+        if (read > 0) (peerFetcher as? Network24TransferTelemetry)?.recordCdnBytes(read.toLong())
         if (read > 0 && cacheCandidate) {
             val capture = cdnCapture
             if (capture != null && capture.size() + read <= MAX_CACHE_BYTES) capture.write(buffer, offset, read)
@@ -90,10 +91,14 @@ class Network24HybridDataSource(
     private fun boundedPeerFetch(segmentUri: String): ByteArray? {
         val fetcher = peerFetcher ?: return null
         return try {
-            peerExecutor.submit(Callable { fetcher.fetch(segmentUri) }).get(p2pTimeoutMs, TimeUnit.MILLISECONDS)
+            val result = peerExecutor.submit(Callable { fetcher.fetch(segmentUri) }).get(p2pTimeoutMs, TimeUnit.MILLISECONDS)
+            if (result == null) (fetcher as? Network24TransferTelemetry)?.recordP2pMiss(segmentUri)
+            result
         } catch (_: TimeoutException) {
+            (fetcher as? Network24TransferTelemetry)?.recordP2pMiss(segmentUri)
             null
         } catch (_: Exception) {
+            (fetcher as? Network24TransferTelemetry)?.recordP2pMiss(segmentUri)
             null
         }
     }

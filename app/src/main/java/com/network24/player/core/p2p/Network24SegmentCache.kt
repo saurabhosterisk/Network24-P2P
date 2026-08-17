@@ -18,6 +18,16 @@ class Network24SegmentCache(
     @Synchronized
     fun get(uri: String): ByteArray? {
         val file = fileFor(uri)
+        return getFile(file)
+    }
+
+    @Synchronized
+    fun getBySegmentId(segmentId: String): ByteArray? {
+        if (!segmentId.matches(SEGMENT_ID_PATTERN)) return null
+        return getFile(File(directory, segmentId))
+    }
+
+    private fun getFile(file: File): ByteArray? {
         if (!file.isFile || file.length() <= 0L || file.length() > maxSegmentBytes) return null
         return try {
             file.setLastModified(System.currentTimeMillis())
@@ -66,4 +76,8 @@ class Network24SegmentCache(
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8))
         .joinToString("") { byte -> "%02x".format(byte) }
+
+    companion object {
+        private val SEGMENT_ID_PATTERN = Regex("[0-9a-f]{64}")
+    }
 }
