@@ -122,7 +122,15 @@ class Network24P2pSession(
             connectToDiscoveredPeers()
         }
         override fun onState(state: Network24SignalingClient.State) {
-            if (state == Network24SignalingClient.State.AUTHENTICATED) streamId?.let { signaling.joinStream(it) }
+            if (state == Network24SignalingClient.State.AUTHENTICATED) {
+                streamId?.let {
+                    signaling.joinStream(it)
+                    // A join acknowledgement is not a peer list. Refresh
+                    // explicitly so a client that joined before auth cannot
+                    // remain registered with candidate_count=0.
+                    signaling.requestPeers()
+                }
+            }
             publishTelemetry()
         }
         override fun onPeerList(peers: List<Network24SignalingClient.Peer>) {
