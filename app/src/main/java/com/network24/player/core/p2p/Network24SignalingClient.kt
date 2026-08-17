@@ -10,6 +10,9 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.util.UUID
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -111,7 +114,7 @@ class Network24SignalingClient(
         sdpMid: String,
         sdpMLineIndex: Int
     ) {
-        if (candidate.isBlank() || sdpMid.isBlank() || sdpMLineIndex < 0) {
+        if (!Network24IceValidation.candidate(candidate) || !Network24IceValidation.sdpMid(sdpMid) || !Network24IceValidation.sdpMLineIndex(sdpMLineIndex)) {
             listener.onError("invalid_local_ice_candidate")
             return
         }
@@ -187,7 +190,7 @@ class Network24SignalingClient(
 
     private fun startHeartbeat() {
         heartbeat?.cancel(false)
-        heartbeat = scheduler.scheduleAtFixedRate({
+        heartbeat = scheduler.scheduleWithFixedDelay({
             if (authenticated) send("heartbeat", JsonObject())
         }, config.heartbeatIntervalMs, config.heartbeatIntervalMs, TimeUnit.MILLISECONDS)
     }
@@ -263,10 +266,12 @@ class Network24SignalingClient(
         }
     }
 
-    private fun nowIso(): String = java.time.Instant.now().toString()
+    private fun nowIso(): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date())
 
     companion object {
-        private const val TAG = "Network24P2P"
+        private const val TAG = "N24-P2P"
         private fun JsonObject.stringOrNull(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
 
@@ -278,8 +283,8 @@ class Network24SignalingClient(
                     require(payload.get("candidate") == null && payload.get("sdpMid") == null && payload.get("sdpMLineIndex") == null) { "invalid_end_of_candidates" }
                 } else {
                     require(payload.get("endOfCandidates") == null) { "invalid_ice_candidate" }
-                    require(!payload.stringOrNull("candidate").isNullOrBlank()) { "invalid_ice_candidate" }
-                    require(!payload.stringOrNull("sdpMid").isNullOrBlank()) { "invalid_ice_candidate_sdp_mid" }
+                    require(Network24IceValidation.candidate(payload.stringOrNull("candidate"))) { "invalid_ice_candidate" }
+                    require(Network24IceValidation.sdpMid(payload.stringOrNull("sdpMid"))) { "invalid_ice_candidate_sdp_mid" }
                     require(payload.get("sdpMLineIndex")?.takeUnless { it.isJsonNull }
                         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
                         ?.asJsonPrimitive?.asNumber?.toDouble()

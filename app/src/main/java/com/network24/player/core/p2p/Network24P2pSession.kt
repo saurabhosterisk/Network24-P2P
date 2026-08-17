@@ -2,286 +2,632 @@ package com.network24.player.core.p2p
 
 import android.content.Context
 import android.provider.Settings
-import android.util.Base64
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.network24.player.BuildConfig
-import java.security.MessageDigest
 import java.util.UUID
+import java.util.Collections
+import java.util.HashSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
-/** Owns one app-wide signaling/WebRTC session. It is inert while disabled. */
+/** One app-wide, stream-generation-scoped bridge between Media3 and WebRTC peers. */
 class Network24P2pSession(
     context: Context,
-    private val config: Network24P2pConfig = Network24P2pConfig()
-) : Network24PeerSegmentFetcher, Network24TransferTelemetry {
+    private val config: Network24P2pConfig = Network24P2pConfig(),
+) : Network24MediaBridge {
     val enabled: Boolean get() = config.enabled
     private val appContext = context.applicationContext
     private val gson = Gson()
     private val cache = Network24SegmentCache(appContext)
     private val pending = ConcurrentHashMap<String, PendingRequest>()
-    private val incoming = ConcurrentHashMap<String, IncomingSegment>()
+    private val outbound = ConcurrentHashMap<String, OutboundTransfer>()
+    private val advertisedSegments = ConcurrentHashMap<String, RecentSegmentSet>()
     private val deviceId = Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
         ?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
+    private val scheduler = ScheduledThreadPoolExecutor(1) { runnable ->
+        Thread(runnable, "network24-p2p-session").apply { isDaemon = true }
+    }
     private val signaling: Network24SignalingClient by lazy {
         Network24SignalingClient(
             config = config,
             registration = Network24DeviceRegistration(deviceId, deviceType(), BuildConfig.VERSION_NAME),
             tokenProvider = Network24AccountTokenProvider(appContext, com.network24.player.core.preferences.PreferenceManager(appContext)),
-            listener = signalingListener
+            listener = signalingListener,
         )
     }
     private val webrtc: Network24WebRtcPeerManager by lazy {
-        Network24WebRtcPeerManager(appContext, signaling, webRtcListener, config.iceServers)
+        Network24WebRtcPeerManager(
+            appContext, signaling, webRtcListener, config.iceServers,
+            config.uploadDeadlineMs.coerceIn(250L, 5_000L),
+            config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 2L * 1024L * 1024L),
+        )
     }
+
     @Volatile private var streamId: String? = null
+    @Volatile private var displayStreamId: String? = null
+    @Volatile private var mediaSessionId = UUID.randomUUID().toString()
     @Volatile private var localPeerId: String? = null
-    @Volatile private var peerIds: List<String> = emptyList()
     @Volatile private var discoveredPeers: List<Network24SignalingClient.Peer> = emptyList()
-    private val p2pBytesUploaded = AtomicLong(0)
-    private val p2pBytesDownloaded = AtomicLong(0)
-    private val cdnBytesDownloaded = AtomicLong(0)
-    private val successfulTransfers = AtomicLong(0)
-    private val failedTransfers = AtomicLong(0)
-    private val lastSegmentId = AtomicReference<String?>(null)
-    private val lastTransferResult = AtomicReference<String?>(null)
+    private val generation = AtomicLong(0L)
+    private val stats = AtomicReference(SessionStats())
     private val connectionStates = ConcurrentHashMap<String, String>()
     private val connectionRoles = ConcurrentHashMap<String, MutableSet<String>>()
+    private val connectionTransports = ConcurrentHashMap<String, String>()
 
     fun start() {
-        if (config.enabled) signaling.connect()
+        if (!config.enabled) return
+        signaling.connect()
+        scheduler.scheduleWithFixedDelay({
+            if (streamId != null) {
+                signaling.requestPeers()
+                publishTelemetry()
+                expireOutbound()
+            }
+        }, PEER_REFRESH_MS, PEER_REFRESH_MS, TimeUnit.MILLISECONDS)
     }
 
-    fun joinStream(newStreamId: String?) {
-        val normalized = newStreamId?.trim()?.takeIf { it.isNotEmpty() && it.length <= 256 }
+    fun joinStream(newStreamId: String?, streamUri: String? = null) {
+        val raw = newStreamId?.trim()?.takeIf { it.isNotEmpty() && it.length <= 256 }
+        val normalized = if (raw != null && !streamUri.isNullOrBlank()) {
+            Network24MediaRequest.streamIdentity(raw, streamUri)
+        } else raw
         if (normalized == streamId) return
+
+        logSessionSummary("stream_switch")
+        generation.incrementAndGet()
+        cancelPending(Network24PeerMissReason.SWITCHED)
+        outbound.keys.forEach(webrtc::cancelUpload)
+        outbound.clear()
+        webrtc.dropAll()
+        discoveredPeers = emptyList()
+        advertisedSegments.clear()
+        connectionStates.clear()
+        connectionRoles.clear()
+        connectionTransports.clear()
         signaling.leaveStream()
+
         streamId = normalized
-        normalized?.let {
-            signaling.joinStream(it)
+        displayStreamId = raw
+        mediaSessionId = UUID.randomUUID().toString()
+        stats.set(SessionStats())
+        if (normalized != null) {
+            Log.i(TAG, "event=session_start stream=${safeLog(raw)} room=${normalized.take(24)} generation=${generation.get()}")
+            signaling.joinStream(normalized)
             signaling.requestPeers()
         }
     }
 
-    fun dataSourceFetcher(): Network24PeerSegmentFetcher = this
+    fun mediaCache(): Network24SegmentCache = cache
+    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(100L, 2_000L)
+    override fun currentStreamId(): String? = streamId
 
     fun close() {
-        pending.values.forEach { it.latch.countDown() }
-        pending.clear()
+        logSessionSummary("close")
+        cancelPending(Network24PeerMissReason.NO_SESSION)
+        scheduler.shutdownNow()
         webrtc.close()
         signaling.close()
     }
 
-    override fun recordCdnBytes(bytes: Long) { if (bytes > 0) cdnBytesDownloaded.addAndGet(bytes); publishTelemetry() }
-    override fun recordP2pMiss(segmentUri: String) {
-        failedTransfers.incrementAndGet(); lastSegmentId.set(sha256(segmentUri)); lastTransferResult.set("p2p_miss"); publishTelemetry()
-    }
+    override fun fetch(request: Network24MediaRequest, timeoutMs: Long): Network24PeerFetchOutcome {
+        val room = streamId ?: return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_SESSION)
+        val requestGeneration = generation.get()
+        if (request.streamId != room) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.SWITCHED)
+        val openPeers = webrtc.openPeerIds().filter { peer -> discoveredPeers.any { it.peerId == peer } }
+        if (openPeers.isEmpty()) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_PEER)
 
-    override fun fetch(segmentUri: String): ByteArray? {
-        val room = streamId ?: return null
-        val peers = peerIds
-        if (peers.isEmpty()) return null
-        val segmentId = sha256(segmentUri)
-        for (peerId in peers.take(4)) {
+        val currentStats = stats.get()
+        currentStats.p2pRequests.incrementAndGet()
+        val advertised = openPeers.filter { advertisedSegments[it]?.contains(request.segmentKey) == true }
+        val orderedPeers = (advertised + openPeers).distinct().take(MAX_DOWNLOAD_PEERS)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs.coerceIn(50L, 2_000L))
+        var finalReason = Network24PeerMissReason.UNAVAILABLE
+
+        for (peerId in orderedPeers) {
+            if (generation.get() != requestGeneration || streamId != room) {
+                finalReason = Network24PeerMissReason.SWITCHED
+                break
+            }
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0L) {
+                finalReason = Network24PeerMissReason.TIMEOUT
+                break
+            }
             val requestId = UUID.randomUUID().toString()
-            val request = PendingRequest(CountDownLatch(1))
-            pending[requestId] = request
-            if (webrtc.requestSegment(peerId, room, segmentId, requestId, segmentUri)) {
-                try {
-                    if (request.latch.await(1_200, TimeUnit.MILLISECONDS)) {
-                        request.bytes?.let {
-                            p2pBytesDownloaded.addAndGet(it.size.toLong())
-                            successfulTransfers.incrementAndGet()
-                            lastSegmentId.set(segmentId)
-                            lastTransferResult.set("p2p_hit")
-                            markRole(peerId, "downloader")
-                            publishTelemetry()
-                            return it
-                        }
-                    }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    return null
-                }
+            val state = PendingRequest(request, requestGeneration, peerId)
+            pending[requestId] = state
+            val sent = sendControl(peerId, JsonObject().apply {
+                addProperty("protocol", Network24PeerProtocol.VERSION)
+                addProperty("type", "segment_request")
+                addProperty("stream_id", room)
+                addProperty("request_id", requestId)
+                addProperty("segment_key", request.segmentKey)
+            })
+            if (!sent) {
+                pending.remove(requestId)
+                finalReason = Network24PeerMissReason.SEND_FAILED
+                continue
+            }
+            try {
+                state.latch.await(remaining, TimeUnit.NANOSECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                pending.remove(requestId)
+                sendCancel(peerId, room, requestId, request.segmentKey)
+                finalReason = Network24PeerMissReason.TIMEOUT
+                break
             }
             pending.remove(requestId)
+            val bytes = state.bytes
+            if (bytes != null) {
+                val transport = connectionTransports[peerId] ?: "unknown"
+                return Network24PeerFetchOutcome.Hit(request, requestId, peerId, bytes, transport, requestGeneration)
+            }
+            if (!state.completed) {
+                sendCancel(peerId, room, requestId, request.segmentKey)
+                finalReason = Network24PeerMissReason.TIMEOUT
+                break
+            }
+            finalReason = state.failure ?: Network24PeerMissReason.UNAVAILABLE
         }
-        return null
+
+        if (finalReason == Network24PeerMissReason.TIMEOUT) currentStats.p2pTimeouts.incrementAndGet()
+        currentStats.p2pMisses.incrementAndGet()
+        publishTelemetry()
+        return Network24PeerFetchOutcome.Miss(finalReason)
+    }
+
+    override fun consumed(hit: Network24PeerFetchOutcome.Hit, bytes: Long, durationMs: Long) {
+        if (bytes != hit.bytes.size.toLong() || generation.get() != hit.generation || streamId != hit.request.streamId) {
+            cancel(hit, "stale_or_partial_media3_read")
+            return
+        }
+        val currentStats = stats.get()
+        currentStats.bytesFromP2p.addAndGet(bytes)
+        currentStats.segmentsFromP2p.incrementAndGet()
+        currentStats.p2pHits.incrementAndGet()
+        if (hit.transport == "relay") currentStats.turnBytes.addAndGet(bytes)
+        markRole(hit.peerId, "downloader")
+        sendControl(hit.peerId, JsonObject().apply {
+            addProperty("protocol", Network24PeerProtocol.VERSION)
+            addProperty("type", "segment_ack")
+            addProperty("stream_id", hit.request.streamId)
+            addProperty("request_id", hit.requestId)
+            addProperty("segment_key", hit.request.segmentKey)
+            addProperty("bytes", bytes)
+        })
+        Log.i(TAG, "event=media stream=${safeLog(displayStreamId)} segment=${hit.request.logLabel} source=P2P peer=${shortPeer(hit.peerId)} transport=${hit.transport} bytes=$bytes duration_ms=$durationMs")
+        publishTelemetry()
+    }
+
+    override fun reject(hit: Network24PeerFetchOutcome.Hit, reason: String) = cancel(hit, reason)
+
+    override fun cancel(hit: Network24PeerFetchOutcome.Hit, reason: String) {
+        sendCancel(hit.peerId, hit.request.streamId, hit.requestId, hit.request.segmentKey)
+        Log.w(TAG, "event=p2p_discard stream=${safeLog(displayStreamId)} segment=${hit.request.logLabel} reason=$reason")
+    }
+
+    override fun recordHttpBytes(bytes: Long) {
+        if (bytes > 0L) stats.get().bytesFromHttp.addAndGet(bytes)
+    }
+
+    override fun httpSegmentComplete(
+        request: Network24MediaRequest,
+        bytes: Int,
+        reason: Network24PeerMissReason,
+        durationMs: Long,
+    ) {
+        if (streamId != request.streamId || bytes <= 0) return
+        stats.get().segmentsFromHttp.incrementAndGet()
+        if (cache.get(request.segmentKey) != null) announceSegment(request.segmentKey)
+        Log.i(TAG, "event=media stream=${safeLog(displayStreamId)} segment=${request.logLabel} source=HTTP reason=$reason bytes=$bytes duration_ms=$durationMs")
     }
 
     private val signalingListener = object : Network24SignalingClient.Listener {
         override fun onLocalPeerId(peerId: String) {
+            if (localPeerId != null && localPeerId != peerId) {
+                cancelPending(Network24PeerMissReason.NO_SESSION)
+                webrtc.dropAll()
+            }
             localPeerId = peerId
+            Log.i(TAG, "event=registered peer=${shortPeer(peerId)}")
             if (streamId != null) signaling.requestPeers()
             connectToDiscoveredPeers()
         }
+
         override fun onState(state: Network24SignalingClient.State) {
+            Log.i(TAG, "event=signaling state=$state stream=${safeLog(displayStreamId)}")
             if (state == Network24SignalingClient.State.AUTHENTICATED) {
                 streamId?.let {
                     signaling.joinStream(it)
-                    // A join acknowledgement is not a peer list. Refresh
-                    // explicitly so a client that joined before auth cannot
-                    // remain registered with candidate_count=0.
                     signaling.requestPeers()
                 }
+            } else if (state == Network24SignalingClient.State.IDLE) {
+                cancelPending(Network24PeerMissReason.NO_SESSION)
+                discoveredPeers = emptyList()
+                webrtc.dropAll()
             }
             publishTelemetry()
         }
+
         override fun onPeerList(peers: List<Network24SignalingClient.Peer>) {
-            discoveredPeers = peers
-            peerIds = peers.map { it.peerId }.distinct().take(4)
-            val currentPeerIds = peerIds.toSet()
-            connectionStates.keys.toList().filterNot { it in currentPeerIds }.forEach { connectionStates.remove(it) }
-            connectionRoles.keys.toList().filterNot { it in currentPeerIds }.forEach { connectionRoles.remove(it) }
-            peerIds.forEach { connectionStates.putIfAbsent(it, "connecting") }
+            val old = discoveredPeers.map { it.peerId }.toSet()
+            discoveredPeers = peers.distinctBy { it.peerId }.take(MAX_CONNECTED_PEERS)
+            val current = discoveredPeers.map { it.peerId }.toSet()
+            (old - current).forEach { peer ->
+                webrtc.drop(peer)
+                connectionStates.remove(peer)
+                connectionRoles.remove(peer)
+                connectionTransports.remove(peer)
+                advertisedSegments.remove(peer)
+            }
+            (current - old).forEach { Log.i(TAG, "event=peer_discovered stream=${safeLog(displayStreamId)} peer=${shortPeer(it)}") }
+            current.forEach { connectionStates.putIfAbsent(it, "connecting") }
             publishTelemetry()
             connectToDiscoveredPeers()
         }
+
         override fun onSignal(type: String, payload: JsonObject) = webrtc.handleSignal(type, payload)
-        override fun onError(code: String) { Log.w(TAG, "P2P signaling error: $code") }
+        override fun onError(code: String) { Log.w(TAG, "event=signaling_error code=$code") }
     }
 
     private fun connectToDiscoveredPeers() {
         val ownId = localPeerId ?: return
-        discoveredPeers.map { it.peerId }.distinct().take(4).forEach { peerId ->
-            // Deterministic offerer selection prevents simultaneous-offer glare.
-            webrtc.connect(peerId, initiator = ownId < peerId)
+        discoveredPeers.forEach { peer ->
+            webrtc.connect(peer.peerId, initiator = ownId < peer.peerId)
         }
     }
 
     private val webRtcListener = object : Network24WebRtcPeerManager.Listener {
         override fun onPeerReady(peerId: String, channel: org.webrtc.DataChannel) {
             connectionStates[peerId] = "connected"
+            stats.get().peerConnectionsSuccessful.incrementAndGet()
+            Log.i(TAG, "event=datachannel state=OPEN peer=${shortPeer(peerId)}")
+            cache.recentKeys().forEach { announceSegmentToPeer(peerId, it) }
             publishTelemetry()
-        }
-        override fun onPeerClosed(peerId: String) {
-            connectionStates[peerId] = "disconnected"
-            webrtc.drop(peerId)
-            publishTelemetry()
-            signaling.requestPeers()
-        }
-        override fun onPeerState(peerId: String, state: String) {
-            connectionStates[peerId] = state
-            publishTelemetry()
-        }
-        override fun onPeerError(peerId: String, code: String) {
-            connectionStates[peerId] = "failed"
-            // A PeerConnection cannot be reused after ICE failure. Remove it so
-            // the next candidate refresh can start a clean offer/answer cycle.
-            webrtc.drop(peerId)
-            publishTelemetry()
-            signaling.requestPeers()
-        }
-        override fun onPeerMessage(peerId: String, bytes: ByteArray) {
-            if (bytes.size > config.maxMessageBytes) return
-            try {
-                val message = JsonParser.parseString(bytes.toString(Charsets.UTF_8)).asJsonObject
-                val type = message.get("type")?.asString ?: return
-                if (type == "segment_request") {
-                    serveSegmentRequest(peerId, message)
-                    return
-                }
-                if (type != "segment_response") return
-                val requestId = message.get("request_id")?.asString ?: return
-                val segmentId = message.get("segment_id")?.asString ?: return
-                val chunkIndex = message.get("chunk_index")?.asInt ?: return
-                val chunkCount = message.get("chunk_count")?.asInt ?: return
-                val encoded = message.get("data_base64")?.asString ?: return
-                if (chunkCount !in 1..MAX_SEGMENT_CHUNKS || chunkIndex !in 0 until chunkCount) return
-                val result = Base64.decode(encoded, Base64.DEFAULT)
-                if (result.isEmpty() || result.size > MAX_CHUNK_BYTES) return
-                val request = pending[requestId] ?: return
-                val state = incoming.computeIfAbsent(requestId) { IncomingSegment(segmentId, chunkCount) }
-                if (state.segmentId != segmentId || state.chunkCount != chunkCount || state.chunks.containsKey(chunkIndex)) return
-                state.chunks[chunkIndex] = result
-                if (state.chunks.size == chunkCount) {
-                    val combined = ByteArray(state.chunks.values.sumOf { it.size })
-                    var offset = 0
-                    for (index in 0 until chunkCount) { val chunk = state.chunks[index] ?: return; chunk.copyInto(combined, offset); offset += chunk.size }
-                    if (combined.size <= MAX_SEGMENT_BYTES) request.bytes = combined
-                    incoming.remove(requestId)
-                    request.latch.countDown()
-                }
-            } catch (_: Exception) {
-                Log.w(TAG, "Ignoring invalid peer data")
-            }
         }
 
-        private fun serveSegmentRequest(peerId: String, message: JsonObject) {
-            val room = streamId ?: return
-            if (message.get("stream_id")?.asString != room) return
-            val requestId = message.get("request_id")?.asString ?: return
-            val segmentId = message.get("segment_id")?.asString ?: return
-            val segmentUri = message.get("segment_uri")?.asString ?: return
-            if (segmentUri.length > 2048 || sha256(segmentUri) != segmentId) return
-            val bytes = cache.get(segmentUri) ?: return
-            if (bytes.size > MAX_SEGMENT_BYTES) return
-            if (webrtc.sendSegmentResponse(peerId, room, segmentId, requestId, bytes)) {
-                p2pBytesUploaded.addAndGet(bytes.size.toLong())
-                successfulTransfers.incrementAndGet()
-                lastSegmentId.set(segmentId)
-                lastTransferResult.set("p2p_upload")
-                markRole(peerId, "uploader")
-                publishTelemetry()
+        override fun onPeerClosed(peerId: String) {
+            connectionStates[peerId] = "disconnected"
+            cancelPendingForPeer(peerId)
+            publishTelemetry()
+            signaling.requestPeers()
+        }
+
+        override fun onPeerState(peerId: String, state: String) {
+            connectionStates[peerId] = state
+            Log.i(TAG, "event=webrtc peer=${shortPeer(peerId)} state=$state")
+            publishTelemetry()
+        }
+
+        override fun onPeerTransport(peerId: String, candidateType: String) {
+            connectionTransports[peerId] = candidateType
+            Log.i(TAG, "event=ice_selected peer=${shortPeer(peerId)} candidate_type=$candidateType direct=${candidateType != "relay"}")
+            publishTelemetry()
+        }
+
+        override fun onPeerError(peerId: String, code: String) {
+            Log.w(TAG, "event=webrtc_error peer=${shortPeer(peerId)} code=$code")
+            if (code.startsWith("invalid_") || code == "ice_candidate_after_end" || code == "too_many_pending_ice_candidates") return
+            connectionStates[peerId] = "failed"
+            stats.get().peerConnectionsFailed.incrementAndGet()
+            cancelPendingForPeer(peerId)
+            webrtc.drop(peerId)
+            publishTelemetry()
+            signaling.requestPeers()
+        }
+
+        override fun onPeerMessage(peerId: String, bytes: ByteArray) {
+            if (bytes.isEmpty() || bytes.size > config.maxMessageBytes) return
+            val chunk = Network24PeerProtocol.decodeChunk(bytes)
+            if (chunk != null) {
+                pending[chunk.requestId]?.acceptChunk(peerId, chunk)
+                return
+            }
+            handleControl(peerId, bytes)
+        }
+    }
+
+    private fun handleControl(peerId: String, bytes: ByteArray) {
+        try {
+            val message = JsonParser.parseString(bytes.toString(Charsets.UTF_8)).asJsonObject
+            if (message.int("protocol") != Network24PeerProtocol.VERSION) return
+            when (message.string("type")) {
+                "segment_have" -> {
+                    if (message.string("stream_id") == streamId) message.segmentKey()?.let {
+                        val created = RecentSegmentSet()
+                        (advertisedSegments.putIfAbsent(peerId, created) ?: created).add(it)
+                    }
+                }
+                "segment_request" -> serveSegmentRequest(peerId, message)
+                "segment_meta" -> {
+                    val id = message.requestId() ?: return
+                    pending[id]?.acceptMeta(peerId, message)
+                }
+                "segment_complete" -> {
+                    val id = message.requestId() ?: return
+                    pending[id]?.complete(peerId, message)
+                }
+                "segment_unavailable" -> {
+                    val id = message.requestId() ?: return
+                    pending[id]?.unavailable(peerId)
+                }
+                "segment_cancel" -> message.requestId()?.let {
+                    webrtc.cancelUpload(it)
+                    outbound.remove(it)
+                }
+                "segment_ack" -> acceptUploadAck(peerId, message)
+            }
+        } catch (_: Exception) {
+            Log.w(TAG, "event=peer_message_rejected peer=${shortPeer(peerId)}")
+        }
+    }
+
+    private fun serveSegmentRequest(peerId: String, message: JsonObject) {
+        val room = streamId ?: return
+        if (message.string("stream_id") != room || discoveredPeers.none { it.peerId == peerId }) return
+        val requestId = message.requestId() ?: return
+        val segmentKey = message.segmentKey() ?: return
+        val bytes = cache.get(segmentKey)
+        if (bytes == null) {
+            sendControl(peerId, responseControl("segment_unavailable", room, requestId, segmentKey))
+            return
+        }
+        val hash = Network24MediaRequest.sha256(bytes)
+        val chunks = (bytes.size + Network24PeerProtocol.CHUNK_BYTES - 1) / Network24PeerProtocol.CHUNK_BYTES
+        val transfer = OutboundTransfer(peerId, room, segmentKey, bytes.size, hash, System.currentTimeMillis())
+        outbound[requestId] = transfer
+        val accepted = webrtc.sendSegment(
+            peerId, requestId, segmentKey, bytes,
+            sendControl = { stage ->
+                val control = responseControl(if (stage == "meta") "segment_meta" else "segment_complete", room, requestId, segmentKey).apply {
+                    if (stage == "meta") {
+                        addProperty("total_size", bytes.size)
+                        addProperty("chunk_count", chunks)
+                        addProperty("sha256", hash)
+                    }
+                }
+                sendControl(peerId, control)
+            },
+            onQueued = { success ->
+                if (!success) {
+                    outbound.remove(requestId)
+                    Log.w(TAG, "event=upload_failed peer=${shortPeer(peerId)} segment=${segmentKey.take(12)}")
+                }
+            },
+        )
+        if (!accepted) {
+            outbound.remove(requestId)
+            sendControl(peerId, responseControl("segment_unavailable", room, requestId, segmentKey))
+        }
+    }
+
+    private fun acceptUploadAck(peerId: String, message: JsonObject) {
+        val requestId = message.requestId() ?: return
+        val transfer = outbound.remove(requestId) ?: return
+        if (transfer.peerId != peerId || transfer.streamId != streamId || message.segmentKey() != transfer.segmentKey ||
+            message.long("bytes") != transfer.bytes.toLong()
+        ) return
+        val currentStats = stats.get()
+        currentStats.bytesUploadedToPeers.addAndGet(transfer.bytes.toLong())
+        currentStats.segmentsUploaded.incrementAndGet()
+        markRole(peerId, "uploader")
+        Log.i(TAG, "event=media_upload stream=${safeLog(displayStreamId)} segment=${transfer.segmentKey.take(12)} peer=${shortPeer(peerId)} transport=${connectionTransports[peerId] ?: "unknown"} bytes=${transfer.bytes}")
+        publishTelemetry()
+    }
+
+    private fun announceSegment(segmentKey: String) {
+        webrtc.openPeerIds().take(MAX_UPLOAD_PEERS).forEach { announceSegmentToPeer(it, segmentKey) }
+    }
+
+    private fun announceSegmentToPeer(peerId: String, segmentKey: String) {
+        val room = streamId ?: return
+        sendControl(peerId, JsonObject().apply {
+            addProperty("protocol", Network24PeerProtocol.VERSION)
+            addProperty("type", "segment_have")
+            addProperty("stream_id", room)
+            addProperty("segment_key", segmentKey)
+        })
+    }
+
+    private fun sendCancel(peerId: String, room: String, requestId: String, segmentKey: String) {
+        sendControl(peerId, responseControl("segment_cancel", room, requestId, segmentKey))
+    }
+
+    private fun sendControl(peerId: String, message: JsonObject): Boolean =
+        webrtc.sendControl(peerId, gson.toJson(message).toByteArray(Charsets.UTF_8))
+
+    private fun responseControl(type: String, room: String, requestId: String, segmentKey: String) = JsonObject().apply {
+        addProperty("protocol", Network24PeerProtocol.VERSION)
+        addProperty("type", type)
+        addProperty("stream_id", room)
+        addProperty("request_id", requestId)
+        addProperty("segment_key", segmentKey)
+    }
+
+    private fun cancelPending(reason: Network24PeerMissReason) {
+        pending.values.forEach { it.fail(reason) }
+        pending.clear()
+    }
+
+    private fun cancelPendingForPeer(peerId: String) {
+        pending.values.filter { it.peerId == peerId }.forEach { it.fail(Network24PeerMissReason.NO_PEER) }
+    }
+
+    private fun expireOutbound() {
+        val cutoff = System.currentTimeMillis() - OUTBOUND_TTL_MS
+        outbound.entries.toList().forEach { entry ->
+            if (entry.value.createdAtMs < cutoff) {
+                webrtc.cancelUpload(entry.key)
+                outbound.remove(entry.key)
             }
         }
     }
 
     private fun markRole(peerId: String, role: String) {
-        connectionRoles.computeIfAbsent(peerId) { ConcurrentHashMap.newKeySet() }.add(role)
+        val created = Collections.synchronizedSet(HashSet<String>())
+        (connectionRoles.putIfAbsent(peerId, created) ?: created).add(role)
     }
 
     private fun publishTelemetry() {
         val room = streamId ?: return
+        val values = stats.get()
         val payload = JsonObject().apply {
             addProperty("stream_id", room)
+            addProperty("media_session_id", mediaSessionId)
             addProperty("webrtc_state", when {
                 connectionStates.values.any { it == "connected" } -> "connected"
                 connectionStates.values.any { it == "connecting" } -> "connecting"
                 connectionStates.values.any { it == "failed" } -> "failed"
                 else -> "idle"
             })
-            addProperty("p2p_bytes_uploaded", p2pBytesUploaded.get())
-            addProperty("p2p_bytes_downloaded", p2pBytesDownloaded.get())
-            addProperty("cdn_bytes_downloaded", cdnBytesDownloaded.get())
-            addProperty("successful_transfers", successfulTransfers.get())
-            addProperty("failed_transfers", failedTransfers.get())
-            lastSegmentId.get()?.let { addProperty("last_segment_id", it) }
-            lastTransferResult.get()?.let { addProperty("last_transfer_result", it) }
-            val connections = com.google.gson.JsonArray()
+            addProperty("p2p_bytes_uploaded", values.bytesUploadedToPeers.get())
+            addProperty("p2p_bytes_downloaded", values.bytesFromP2p.get())
+            addProperty("cdn_bytes_downloaded", values.bytesFromHttp.get())
+            addProperty("successful_transfers", values.p2pHits.get())
+            addProperty("failed_transfers", values.p2pMisses.get())
+            addProperty("p2p_requests", values.p2pRequests.get())
+            addProperty("p2p_hits", values.p2pHits.get())
+            addProperty("p2p_misses", values.p2pMisses.get())
+            addProperty("p2p_timeouts", values.p2pTimeouts.get())
+            addProperty("segments_from_http", values.segmentsFromHttp.get())
+            addProperty("segments_from_p2p", values.segmentsFromP2p.get())
+            addProperty("segments_uploaded", values.segmentsUploaded.get())
+            addProperty("peer_connections_successful", values.peerConnectionsSuccessful.get())
+            addProperty("peer_connections_failed", values.peerConnectionsFailed.get())
+            addProperty("turn_bytes", values.turnBytes.get())
+            val connections = JsonArray()
             connectionStates.forEach { (peerId, state) ->
-                val connection = JsonObject().apply {
-                    addProperty("peer_id", peerId); addProperty("state", state)
-                    val roles = connectionRoles[peerId].orEmpty()
+                connections.add(JsonObject().apply {
+                    addProperty("peer_id", peerId)
+                    addProperty("state", state)
+                    val roles = rolesFor(peerId)
                     if (roles.isNotEmpty()) addProperty("role", if (roles.size > 1) "both" else roles.first())
-                }
-                connections.add(connection)
+                    connectionTransports[peerId]?.let { addProperty("candidate_type", it) }
+                })
             }
             add("connections", connections)
         }
         signaling.sendTelemetry(payload)
     }
 
+    private fun logSessionSummary(reason: String) {
+        val room = displayStreamId ?: return
+        val value = stats.get()
+        Log.i(TAG, "event=session_stats reason=$reason stream=${safeLog(room)} bytesFromP2p=${value.bytesFromP2p.get()} bytesFromHttp=${value.bytesFromHttp.get()} bytesUploadedToPeers=${value.bytesUploadedToPeers.get()} segmentsFromP2p=${value.segmentsFromP2p.get()} segmentsFromHttp=${value.segmentsFromHttp.get()} p2pRequests=${value.p2pRequests.get()} p2pHits=${value.p2pHits.get()} p2pMisses=${value.p2pMisses.get()} p2pTimeouts=${value.p2pTimeouts.get()} turnBytes=${value.turnBytes.get()}")
+    }
+
+    private fun rolesFor(peerId: String): Set<String> {
+        val roles = connectionRoles[peerId] ?: return emptySet()
+        return synchronized(roles) { roles.toSet() }
+    }
+
     private fun deviceType(): String = if (appContext.packageManager.hasSystemFeature("android.software.leanback")) "ANDROID_TV" else "ANDROID"
-    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
-    private data class PendingRequest(val latch: CountDownLatch, @Volatile var bytes: ByteArray? = null)
-    private data class IncomingSegment(val segmentId: String, val chunkCount: Int, val chunks: MutableMap<Int, ByteArray> = ConcurrentHashMap())
+    private fun safeLog(value: String?): String = value?.replace(Regex("[^A-Za-z0-9._:-]"), "_")?.take(80) ?: "none"
+    private fun shortPeer(peerId: String): String = peerId.takeLast(12)
+
+    private class PendingRequest(
+        val request: Network24MediaRequest,
+        val generation: Long,
+        val peerId: String,
+    ) {
+        val latch = CountDownLatch(1)
+        @Volatile var bytes: ByteArray? = null
+        @Volatile var completed = false
+        @Volatile var failure: Network24PeerMissReason? = null
+        private val assembler = Network24SegmentAssembler(request.segmentKey, request.length)
+
+        @Synchronized
+        fun acceptMeta(sender: String, message: JsonObject) {
+            if (sender != peerId || completed || message.string("stream_id") != request.streamId || message.segmentKey() != request.segmentKey) return
+            val size = message.int("total_size") ?: return fail(Network24PeerMissReason.INTEGRITY)
+            val count = message.int("chunk_count") ?: return fail(Network24PeerMissReason.INTEGRITY)
+            val hash = message.string("sha256")?.takeIf { it.matches(Regex("[0-9a-f]{64}")) } ?: return fail(Network24PeerMissReason.INTEGRITY)
+            if (!assembler.acceptMeta(request.segmentKey, size, count, hash)) fail(Network24PeerMissReason.INTEGRITY)
+        }
+
+        @Synchronized
+        fun acceptChunk(sender: String, chunk: Network24PeerProtocol.Chunk) {
+            if (sender != peerId || completed) return
+            if (!assembler.acceptChunk(chunk)) fail(Network24PeerMissReason.INTEGRITY)
+        }
+
+        @Synchronized
+        fun complete(sender: String, message: JsonObject) {
+            if (sender != peerId || completed || message.string("stream_id") != request.streamId || message.segmentKey() != request.segmentKey) return
+            val result = assembler.complete() ?: return fail(Network24PeerMissReason.INTEGRITY)
+            bytes = result
+            completed = true
+            latch.countDown()
+        }
+
+        @Synchronized fun unavailable(sender: String) { if (sender == peerId) fail(Network24PeerMissReason.UNAVAILABLE) }
+        @Synchronized fun fail(reason: Network24PeerMissReason) {
+            if (completed) return
+            failure = reason
+            completed = true
+            latch.countDown()
+        }
+    }
+
+    private data class OutboundTransfer(
+        val peerId: String,
+        val streamId: String,
+        val segmentKey: String,
+        val bytes: Int,
+        val hash: String,
+        val createdAtMs: Long,
+    )
+
+    private class RecentSegmentSet {
+        private val values = LinkedHashSet<String>()
+        @Synchronized fun add(value: String) {
+            values.add(value)
+            while (values.size > MAX_ADVERTISED_SEGMENTS) values.remove(values.first())
+        }
+        @Synchronized fun contains(value: String): Boolean = values.contains(value)
+    }
+
+    private class SessionStats {
+        val bytesFromP2p = AtomicLong()
+        val bytesFromHttp = AtomicLong()
+        val bytesUploadedToPeers = AtomicLong()
+        val segmentsFromP2p = AtomicLong()
+        val segmentsFromHttp = AtomicLong()
+        val segmentsUploaded = AtomicLong()
+        val p2pRequests = AtomicLong()
+        val p2pHits = AtomicLong()
+        val p2pMisses = AtomicLong()
+        val p2pTimeouts = AtomicLong()
+        val peerConnectionsSuccessful = AtomicLong()
+        val peerConnectionsFailed = AtomicLong()
+        val turnBytes = AtomicLong()
+    }
 
     companion object {
-        private const val TAG = "Network24P2PSession"
-        private const val MAX_SEGMENT_BYTES = 8 * 1024 * 1024
-        private const val MAX_CHUNK_BYTES = 32 * 1024
-        private const val MAX_SEGMENT_CHUNKS = 256
-    }
-}
+        private const val TAG = "N24-P2P"
+        private const val MAX_CONNECTED_PEERS = 4
+        private const val MAX_DOWNLOAD_PEERS = 4
+        private const val MAX_UPLOAD_PEERS = 3
+        private const val MAX_ADVERTISED_SEGMENTS = 64
+        private const val PEER_REFRESH_MS = 3_000L
+        private const val OUTBOUND_TTL_MS = 5_000L
 
-interface Network24TransferTelemetry {
-    fun recordCdnBytes(bytes: Long)
-    fun recordP2pMiss(segmentUri: String)
+        private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+        private fun JsonObject.int(name: String): Int? = get(name)?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
+        private fun JsonObject.long(name: String): Long? = get(name)?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+        private fun JsonObject.requestId(): String? = string("request_id")?.takeIf { it.length in 1..128 }
+        private fun JsonObject.segmentKey(): String? = string("segment_key")?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
+    }
 }

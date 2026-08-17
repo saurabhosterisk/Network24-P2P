@@ -60,12 +60,32 @@ the existing IPTV account credentials with `/api/v1/client/token`; the API
 validates them against its allowlisted IPTV origin and issues a five-minute
 Network24 token.
 
-`Network24WebRtcPeerManager` and the bounded `Network24SegmentCache` plus
-`Network24HybridDataSource` are now present behind the same opt-in boundary.
-The hybrid source checks cache, gives a peer at most 1.5 seconds by default,
-and then immediately uses the existing HTTP source. Playlist/manifests are
-excluded from P2P attempts; bounded media responses are cached for the next
-same-stream peer. Playback never waits indefinitely for a peer.
+The live source used by this app is HLS: every live call site constructs an
+Xtream-style `.m3u8` URL. `PlayerManager` installs `Network24HybridDataSource`
+in the singleton Media3 player's actual request path. Manifests and encryption
+keys remain HTTP-authoritative. Each media request uses this path:
+
+```
+Media3 -> complete local cache -> WebRTC peer (750 ms default) -> original HTTP
+```
+
+The cache accepts known- and unknown-content-length HLS media bodies only after
+complete EOF/range validation. Keys are scoped by IPTV origin, logical stream,
+credential-free segment identity, byte offset, and byte length. IPTV usernames,
+passwords, signed URLs, and raw segment URLs are never sent to peers or logged.
+
+DataChannel protocol v2 uses small JSON control frames (`segment_have`,
+`segment_request`, `segment_meta`, `segment_complete`, `segment_unavailable`,
+`segment_cancel`, `segment_ack`) and 16 KiB binary media frames. The receiver
+requires exact stream/request/key, total byte count, complete chunk set, and
+SHA-256 before making bytes available to Media3. Upload queues are bounded,
+respect `bufferedAmount`, and are counted successful only after Media3 consumes
+the complete peer body and sends an acknowledgement.
+
+Channel switches increment a generation, cancel pending requests/uploads, drop
+old PeerConnections, leave the old room, and join a credential-free origin +
+channel room. Late frames cannot complete a new stream request. A first viewer
+does not wait for P2P; HTTP opens immediately when no DataChannel is ready.
 
 The app now owns one account-authenticated `Network24P2pSession`, joins the exact
 `LiveChannel.stream_id` room when a live channel is played, and exposes its
@@ -75,5 +95,18 @@ cannot silently change playback behavior.
 
 ## Validation
 
-Baseline and integrated `:app:assembleDebug` builds pass on the server with
-JDK 17 and Android API 35.
+Validated locally with JDK 17 / Android API 35:
+
+- `./gradlew :app:testDebugUnitTest :app:assembleDebug` passes.
+- 12 focused JVM tests cover credential-independent keys, exact ranges,
+  unknown-length completion, binary framing, checksum/incomplete rejection,
+  native ICE input validation, peer-first selection, timeout fallback, and peer recovery.
+- Backend tests include a real localhost WebSocket integration test proving
+  both room members refresh, canonical ICE is routed, disconnect is removed,
+  and a replacement peer is discovered.
+- `N24-P2P` Logcat records session/room, discovery, SDP/ICE/DataChannel state,
+  selected `host`/`srflx`/`relay` path, peer/HTTP media source, bytes, duration,
+  fallback reason, upload acknowledgement, and final session counters.
+
+Physical two-phone media and mobile-CGNAT/TURN acceptance remain mandatory
+before production rollout; no Android device is attached to this build host.

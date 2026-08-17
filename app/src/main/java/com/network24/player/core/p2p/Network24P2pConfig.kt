@@ -8,6 +8,9 @@ data class Network24P2pConfig(
     val heartbeatIntervalMs: Long = 15_000L,
     val reconnectInitialMs: Long = 1_000L,
     val reconnectMaxMs: Long = 30_000L,
+    val segmentRequestTimeoutMs: Long = 750L,
+    val uploadDeadlineMs: Long = 1_200L,
+    val maxDataChannelBufferedBytes: Long = 256L * 1024L,
     val maxMessageBytes: Int = 64 * 1024,
     val iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
 )

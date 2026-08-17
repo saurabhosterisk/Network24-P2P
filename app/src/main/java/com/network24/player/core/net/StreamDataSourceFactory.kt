@@ -6,7 +6,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.network24.player.core.p2p.Network24HybridDataSource
-import com.network24.player.core.p2p.Network24PeerSegmentFetcher
+import com.network24.player.core.p2p.Network24MediaBridge
 import com.network24.player.core.p2p.Network24SegmentCache
 
 /**
@@ -39,9 +39,9 @@ object StreamDataSourceFactory {
      * createMediaSourceFactory() until the server feature flag is enabled.
      */
     fun createHybridDataSourceFactory(
-        context: Context,
-        peerFetcher: Network24PeerSegmentFetcher?,
-        p2pTimeoutMs: Long = 1_500L
+        mediaBridge: Network24MediaBridge?,
+        cache: Network24SegmentCache,
+        p2pTimeoutMs: Long = 750L
     ): DataSource.Factory {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
@@ -49,9 +49,8 @@ object StreamDataSourceFactory {
             .setReadTimeoutMs(30_000)
             .setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(mapOf("Connection" to "close"))
-        val cache = Network24SegmentCache(context)
         return DataSource.Factory {
-            Network24HybridDataSource(httpFactory.createDataSource(), cache, peerFetcher, p2pTimeoutMs)
+            CountingDataSource(Network24HybridDataSource(httpFactory.createDataSource(), cache, mediaBridge, p2pTimeoutMs))
         }
     }
 

@@ -3,32 +3,28 @@ package com.network24.player.core.p2p
 import android.content.Context
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 
-/** Bounded, private cache for recently downloaded HLS media segments. */
+/** Bounded, private sliding cache for complete, validated live-media requests. */
 class Network24SegmentCache(
     context: Context,
     private val maxSegmentBytes: Int = 8 * 1024 * 1024,
-    private val maxCacheBytes: Long = 64L * 1024L * 1024L
+    private val maxCacheBytes: Long = 64L * 1024L * 1024L,
+    private val maxEntryAgeMs: Long = 90_000L,
 ) {
     private val directory = File(context.applicationContext.cacheDir, "network24_segments").apply { mkdirs() }
 
     @Synchronized
-    fun get(uri: String): ByteArray? {
-        val file = fileFor(uri)
-        return getFile(file)
-    }
-
-    @Synchronized
-    fun getBySegmentId(segmentId: String): ByteArray? {
-        if (!segmentId.matches(SEGMENT_ID_PATTERN)) return null
-        return getFile(File(directory, segmentId))
+    fun get(segmentKey: String): ByteArray? {
+        if (!segmentKey.matches(SEGMENT_ID_PATTERN)) return null
+        return getFile(File(directory, segmentKey))
     }
 
     private fun getFile(file: File): ByteArray? {
         if (!file.isFile || file.length() <= 0L || file.length() > maxSegmentBytes) return null
+        if (System.currentTimeMillis() - file.lastModified() > maxEntryAgeMs) {
+            file.delete()
+            return null
+        }
         return try {
             file.setLastModified(System.currentTimeMillis())
             file.readBytes()
@@ -38,13 +34,14 @@ class Network24SegmentCache(
     }
 
     @Synchronized
-    fun put(uri: String, bytes: ByteArray): Boolean {
-        if (bytes.isEmpty() || bytes.size > maxSegmentBytes) return false
-        val target = fileFor(uri)
+    fun put(segmentKey: String, bytes: ByteArray): Boolean {
+        if (!segmentKey.matches(SEGMENT_ID_PATTERN) || bytes.isEmpty() || bytes.size > maxSegmentBytes) return false
+        val target = File(directory, segmentKey)
         val temporary = File(directory, "${target.name}.tmp-${System.nanoTime()}")
         return try {
             temporary.writeBytes(bytes)
-            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            if (target.exists() && !target.delete()) throw IOException("cache_replace_failed")
+            if (!temporary.renameTo(target)) throw IOException("cache_move_failed")
             trim()
             true
         } catch (_: IOException) {
@@ -58,7 +55,15 @@ class Network24SegmentCache(
         directory.listFiles()?.forEach { it.delete() }
     }
 
-    private fun fileFor(uri: String): File = File(directory, sha256(uri))
+    @Synchronized
+    fun recentKeys(limit: Int = 32): List<String> = directory.listFiles()
+        ?.asSequence()
+        ?.filter { it.isFile && it.name.matches(SEGMENT_ID_PATTERN) && System.currentTimeMillis() - it.lastModified() <= maxEntryAgeMs }
+        ?.sortedByDescending { it.lastModified() }
+        ?.take(limit.coerceIn(0, 128))
+        ?.map { it.name }
+        ?.toList()
+        .orEmpty()
 
     private fun trim() {
         var total = directory.listFiles()?.sumOf { it.length() } ?: 0L
@@ -72,10 +77,6 @@ class Network24SegmentCache(
                 file.delete()
             }
     }
-
-    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(Charsets.UTF_8))
-        .joinToString("") { byte -> "%02x".format(byte) }
 
     companion object {
         private val SEGMENT_ID_PATTERN = Regex("[0-9a-f]{64}")

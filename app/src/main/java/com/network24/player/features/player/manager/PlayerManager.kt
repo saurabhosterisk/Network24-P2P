@@ -19,6 +19,7 @@ import androidx.media3.ui.PlayerView
 import com.network24.player.core.net.StreamDataSourceFactory
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.Network24App
+import com.network24.player.core.p2p.Network24P2pSession
 import com.network24.player.features.live.models.LiveChannel
 import com.network24.player.features.player.state.PlayerState
 
@@ -33,6 +34,7 @@ import java.lang.ref.WeakReference
 
 
 
+@Suppress("UnsafeOptInUsageError")
 object PlayerManager {
 
 
@@ -47,6 +49,8 @@ object PlayerManager {
 
 
     private var currentPlayerView: PlayerView? = null
+
+    private var p2pSession: Network24P2pSession? = null
 
     private var playbackSessionId = 0
 
@@ -673,7 +677,8 @@ object PlayerManager {
         streamId: String? = null
     ) {
 
-        (context.applicationContext as? Network24App)?.p2pSession?.joinStream(streamId)
+        p2pSession = (context.applicationContext as? Network24App)?.p2pSession
+        p2pSession?.joinStream(streamId, streamUrl)
 
         playbackSessionId++
 
@@ -766,7 +771,7 @@ object PlayerManager {
         val session = app?.p2pSession
         return if (session?.enabled == true) {
             androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-                StreamDataSourceFactory.createHybridDataSourceFactory(context, session.dataSourceFetcher())
+                StreamDataSourceFactory.createHybridDataSourceFactory(session, session.mediaCache(), session.mediaRequestTimeoutMs())
             )
         } else StreamDataSourceFactory.createMediaSourceFactory()
     }
@@ -851,6 +856,8 @@ object PlayerManager {
 
         currentUrl =
             null
+
+        p2pSession?.joinStream(null)
     }
 
 
@@ -1274,6 +1281,9 @@ object PlayerManager {
 
         currentUrl =
             null
+
+        p2pSession?.joinStream(null)
+        p2pSession = null
 
 
 
