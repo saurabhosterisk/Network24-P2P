@@ -46,7 +46,7 @@ class Network24HybridDataSource(
             return cached.size.toLong()
         }
 
-        val peerBytes = boundedPeerFetch(uri!!)
+        val peerBytes = if (isPeerEligible(dataSpec.uri)) boundedPeerFetch(uri!!) else null
         if (peerBytes != null && peerBytes.isNotEmpty()) {
             cache.put(uri!!, peerBytes)
             cachedInput = ByteArrayInputStream(peerBytes)
@@ -55,7 +55,7 @@ class Network24HybridDataSource(
         }
 
         val length = httpDataSource.open(dataSpec)
-        cacheCandidate = dataSpec.position == 0L && isLikelyMediaSegment(dataSpec.uri) && length <= MAX_CACHE_BYTES
+        cacheCandidate = dataSpec.position == 0L && isPeerEligible(dataSpec.uri) && length in 1..MAX_CACHE_BYTES
         if (cacheCandidate) cdnCapture = ByteArrayOutputStream(minOf(length.coerceAtLeast(0L).toInt(), MAX_CACHE_BYTES.toInt()))
         opened = true
         return length
@@ -115,6 +115,13 @@ class Network24HybridDataSource(
     private fun isLikelyMediaSegment(uri: Uri): Boolean {
         val path = uri.path?.lowercase() ?: return false
         return path.endsWith(".ts") || path.endsWith(".m4s") || path.endsWith(".mp4") || path.endsWith(".aac") || path.endsWith(".webvtt")
+    }
+
+    private fun isPeerEligible(uri: Uri): Boolean {
+        val path = uri.path?.lowercase() ?: return false
+        // Playlists/manifests are control metadata, not transferable media segments.
+        if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".json")) return false
+        return isLikelyMediaSegment(uri) || path.substringAfterLast('/').contains('.') || path.isNotBlank()
     }
 
     companion object {

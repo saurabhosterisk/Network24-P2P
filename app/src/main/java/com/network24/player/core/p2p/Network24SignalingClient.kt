@@ -220,9 +220,13 @@ class Network24SignalingClient(
                 when (type) {
                     "peer_connected" -> {
                         authenticated = true
-                        payload.stringOrNull("peer_id")?.let { listener.onLocalPeerId(it) }
-                        listener.onState(State.AUTHENTICATED)
-                        listener.onPeerList(emptyList())
+                        // The server also uses peer_connected as the auth acknowledgement.
+                        // Only the registration acknowledgement contains our server-owned ID.
+                        payload.stringOrNull("peer_id")?.let {
+                            listener.onLocalPeerId(it)
+                            listener.onState(State.AUTHENTICATED)
+                            listener.onPeerList(emptyList())
+                        }
                     }
                     "peer_list" -> listener.onPeerList(payload.getAsJsonArray("peers")?.mapNotNull { item ->
                         val peer = item.asJsonObject

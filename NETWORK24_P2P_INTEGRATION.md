@@ -56,9 +56,10 @@ Network24 token.
 
 `Network24WebRtcPeerManager` and the bounded `Network24SegmentCache` plus
 `Network24HybridDataSource` are now present behind the same opt-in boundary.
-The hybrid source checks cache, gives a peer at most 120 ms by default, and
-then immediately uses the existing HTTP source. Playback never waits
-indefinitely for a peer.
+The hybrid source checks cache, gives a peer at most 1.5 seconds by default,
+and then immediately uses the existing HTTP source. Playlist/manifests are
+excluded from P2P attempts; bounded media responses are cached for the next
+same-stream peer. Playback never waits indefinitely for a peer.
 
 The app now owns one account-authenticated `Network24P2pSession`, joins the exact
 `LiveChannel.stream_id` room when a live channel is played, and exposes its
