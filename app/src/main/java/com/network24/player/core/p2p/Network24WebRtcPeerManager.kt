@@ -69,8 +69,11 @@ class Network24WebRtcPeerManager(
             if (channel != null) attachChannel(peerId, channel)
             connection.createOffer(SdpCallback(
                 onSuccess = { description ->
-                    connection.setLocalDescription(SdpCallback(onSuccess = {}, onFailure = { listener.onPeerError(peerId, "set_local_description_failed") }), description)
-                    signaling.sendOffer(peerId, description.description)
+                    connection.setLocalDescription(SdpCallback(
+                        onSuccess = {},
+                        onFailure = { listener.onPeerError(peerId, "set_local_description_failed") },
+                        afterSetSuccess = { signaling.sendOffer(peerId, description.description) }
+                    ), description)
                 },
                 onFailure = { listener.onPeerError(peerId, "offer_failed") }
             ), MediaConstraints())
@@ -95,8 +98,11 @@ class Network24WebRtcPeerManager(
                         flushPendingIceCandidates(peerId, connection)
                         connection.createAnswer(SdpCallback(
                             onSuccess = { answer ->
-                                connection.setLocalDescription(SdpCallback(onSuccess = {}, onFailure = { listener.onPeerError(peerId, "set_local_description_failed") }), answer)
-                                signaling.sendAnswer(peerId, answer.description)
+                                connection.setLocalDescription(SdpCallback(
+                                    onSuccess = {},
+                                    onFailure = { listener.onPeerError(peerId, "set_local_description_failed") },
+                                    afterSetSuccess = { signaling.sendAnswer(peerId, answer.description) }
+                                ), answer)
                             },
                             onFailure = { listener.onPeerError(peerId, "answer_failed") }
                         ), MediaConstraints())
@@ -297,10 +303,11 @@ class Network24WebRtcPeerManager(
 
     private class SdpCallback(
         private val onSuccess: (SessionDescription) -> Unit,
-        private val onFailure: (String) -> Unit
+        private val onFailure: (String) -> Unit,
+        private val afterSetSuccess: () -> Unit = {}
     ) : SdpObserver {
         override fun onCreateSuccess(description: SessionDescription) = onSuccess(description)
-        override fun onSetSuccess() = Unit
+        override fun onSetSuccess() = afterSetSuccess()
         override fun onCreateFailure(error: String) = onFailure(error)
         override fun onSetFailure(error: String) = onFailure(error)
     }
