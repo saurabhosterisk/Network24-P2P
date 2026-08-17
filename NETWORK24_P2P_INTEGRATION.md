@@ -9,6 +9,12 @@ The first Android integration layer is now present under
 - Protocol: version `1`
 - P2P starts only for an already logged-in IPTV account and receives a
   server-issued short-lived client token.
+- A public coturn relay is required for peers on networks that cannot form a
+  direct ICE path. STUN alone is not sufficient for mobile-carrier NAT. The
+  Android client supports authenticated UDP/TCP TURN and should be given a
+  `turns:` endpoint too when TLS TURN is enabled. See
+  `deploy/coturn/network24.conf.example`; inject the auth secret at deploy
+  time and never commit it.
 
 ## Safety contract
 

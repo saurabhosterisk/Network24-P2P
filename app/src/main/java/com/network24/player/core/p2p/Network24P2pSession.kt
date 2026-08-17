@@ -154,11 +154,21 @@ class Network24P2pSession(
         }
         override fun onPeerClosed(peerId: String) {
             connectionStates[peerId] = "disconnected"
+            webrtc.drop(peerId)
+            publishTelemetry()
+            signaling.requestPeers()
+        }
+        override fun onPeerState(peerId: String, state: String) {
+            connectionStates[peerId] = state
             publishTelemetry()
         }
         override fun onPeerError(peerId: String, code: String) {
             connectionStates[peerId] = "failed"
+            // A PeerConnection cannot be reused after ICE failure. Remove it so
+            // the next candidate refresh can start a clean offer/answer cycle.
+            webrtc.drop(peerId)
             publishTelemetry()
+            signaling.requestPeers()
         }
         override fun onPeerMessage(peerId: String, bytes: ByteArray) {
             if (bytes.size > config.maxMessageBytes) return

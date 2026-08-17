@@ -119,6 +119,7 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
             if (BuildConfig.P2P_TURN_USERNAME.isNotBlank() && BuildConfig.P2P_TURN_PASSWORD.isNotBlank()) {
                 add(Network24IceServer("turn:p2p.web24.live:3478?transport=udp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
                 add(Network24IceServer("turn:p2p.web24.live:3478?transport=tcp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
+                add(Network24IceServer("turns:p2p.web24.live:5349?transport=tcp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
             }
         }
         Network24P2pSession(this, Network24P2pConfig(enabled = true, iceServers = iceServers)).also { it.start() }

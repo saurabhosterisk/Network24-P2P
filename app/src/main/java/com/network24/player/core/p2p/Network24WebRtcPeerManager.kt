@@ -32,6 +32,7 @@ class Network24WebRtcPeerManager(
         fun onPeerReady(peerId: String, channel: DataChannel) {}
         fun onPeerMessage(peerId: String, bytes: ByteArray) {}
         fun onPeerClosed(peerId: String) {}
+        fun onPeerState(peerId: String, state: String) {}
         fun onPeerError(peerId: String, code: String) {}
     }
 
@@ -200,12 +201,24 @@ class Network24WebRtcPeerManager(
         factory.dispose()
     }
 
+    /** Remove a dead connection so the session can create a fresh ICE/SDP attempt. */
+    fun drop(peerId: String) {
+        channels.remove(peerId)?.close()
+        pendingIceCandidates.remove(peerId)
+        remoteDescriptionSet.remove(peerId)
+        remoteIceEnded.remove(peerId)
+        peers.remove(peerId)?.close()
+    }
+
     private fun attachChannel(peerId: String, channel: DataChannel) {
         channels[peerId] = channel
         channel.registerObserver(object : DataChannel.Observer {
             override fun onBufferedAmountChange(previousAmount: Long) = Unit
             override fun onStateChange() {
-                if (channel.state() == DataChannel.State.OPEN) listener.onPeerReady(peerId, channel)
+                if (channel.state() == DataChannel.State.OPEN) {
+                    listener.onPeerState(peerId, "connected")
+                    listener.onPeerReady(peerId, channel)
+                }
                 if (channel.state() == DataChannel.State.CLOSING || channel.state() == DataChannel.State.CLOSED) listener.onPeerClosed(peerId)
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
@@ -230,6 +243,14 @@ class Network24WebRtcPeerManager(
         }
         override fun onDataChannel(dataChannel: DataChannel) = attachChannel(peerId, dataChannel)
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+            listener.onPeerState(peerId, when (state) {
+                PeerConnection.IceConnectionState.CHECKING -> "connecting"
+                PeerConnection.IceConnectionState.CONNECTED,
+                PeerConnection.IceConnectionState.COMPLETED -> "connected"
+                PeerConnection.IceConnectionState.DISCONNECTED -> "disconnected"
+                PeerConnection.IceConnectionState.FAILED -> "failed"
+                else -> "new"
+            })
             if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.DISCONNECTED) listener.onPeerError(peerId, "ice_${state.name.lowercase()}")
         }
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
@@ -239,7 +260,15 @@ class Network24WebRtcPeerManager(
         override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
         override fun onRenegotiationNeeded() = Unit
         override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
-        override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) = Unit
+        override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
+            listener.onPeerState(peerId, when (newState) {
+                PeerConnection.PeerConnectionState.CONNECTED -> "connected"
+                PeerConnection.PeerConnectionState.CONNECTING -> "connecting"
+                PeerConnection.PeerConnectionState.DISCONNECTED -> "disconnected"
+                PeerConnection.PeerConnectionState.FAILED -> "failed"
+                else -> "new"
+            })
+        }
         override fun onStandardizedIceConnectionChange(newState: PeerConnection.IceConnectionState) = Unit
     }
 
