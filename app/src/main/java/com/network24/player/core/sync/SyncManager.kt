@@ -1,6 +1,8 @@
 package com.network24.player.core.sync
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import androidx.room.withTransaction
 import com.network24.player.core.api.ApiClient
 import com.network24.player.core.database.DatabaseProvider
@@ -11,6 +13,7 @@ import com.network24.player.core.database.mapper.toChannelEntity
 import com.network24.player.core.database.mapper.toEpgEntity
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.cache.memory.MemoryCache
+import com.network24.player.common.models.LoginCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -20,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CancellationException
 import android.util.Xml
 import com.network24.player.core.database.entity.EpgEntity
 import okhttp3.ResponseBody
@@ -33,6 +37,7 @@ import java.util.TimeZone
 class SyncManager(private val context: Context) {
 
     private companion object {
+        private const val TAG = "Network24Sync"
         private const val EPG_INSERT_BATCH_SIZE = 2_000
         private const val FULL_EPG_FRESH_MS = 6L * 60L * 60L * 1000L
 
@@ -59,9 +64,20 @@ class SyncManager(private val context: Context) {
 
     private fun baseUrl(server: String): String = server.trim().trimEnd('/') + "/"
 
-    suspend fun syncLiveCategories(force: Boolean = false): SyncResult = withContext(Dispatchers.IO) {
+    private fun resolveCredentials(provided: LoginCredentials?): LoginCredentials? {
+        return provided ?: PreferenceManager(context).getLoginCredentials()
+    }
+
+    private fun serverForLog(server: String): String {
+        return server.trim().trimEnd('/').replace(Regex("(?i)(https?://)[^/]+"), "$1<configured-host>")
+    }
+
+    suspend fun syncLiveCategories(
+        force: Boolean = false,
+        credentials: LoginCredentials? = null
+    ): SyncResult = withContext(Dispatchers.IO) {
         try {
-            val creds = PreferenceManager(context).getLoginCredentials()
+            val creds = resolveCredentials(credentials)
                 ?: return@withContext SyncResult.Error("Missing login credentials")
 
             val service = ApiClient.get(baseUrl(creds.server))
@@ -73,12 +89,16 @@ class SyncManager(private val context: Context) {
                 db.syncMetaDao().get(SyncKeys.LIVE_CATEGORIES)
             }
 
+            val startedAt = SystemClock.elapsedRealtime()
+            Log.i(TAG, "categories_start server=${serverForLog(creds.server)} user=${creds.username}")
             val response = service.getLiveCategories(creds.username, creds.password)
             if (!response.isSuccessful) {
+                Log.e(TAG, "categories_http status=${response.code()} elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
                 return@withContext SyncResult.Error("Categories sync failed: HTTP ${response.code()}")
             }
 
             val categories = response.body().orEmpty()
+            Log.i(TAG, "categories_success count=${categories.size} elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
 
             val entities = categories.mapIndexed { index, api ->
                 api.toCategoryEntity(position = index)
@@ -98,13 +118,18 @@ class SyncManager(private val context: Context) {
 
             SyncResult.Success
         } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.e(TAG, "categories_exception ${t.message}", t)
             SyncResult.Error("Categories sync exception: ${t.message}", t)
         }
     }
 
-    suspend fun syncLiveChannelsAll(force: Boolean = false): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun syncLiveChannelsAll(
+        force: Boolean = false,
+        credentials: LoginCredentials? = null
+    ): SyncResult = withContext(Dispatchers.IO) {
         try {
-            val creds = PreferenceManager(context).getLoginCredentials()
+            val creds = resolveCredentials(credentials)
                 ?: return@withContext SyncResult.Error("Missing login credentials")
 
             val service = ApiClient.get(baseUrl(creds.server))
@@ -116,6 +141,8 @@ class SyncManager(private val context: Context) {
             }
 
             // Xtream: categoryId="" commonly returns all channels
+            val startedAt = SystemClock.elapsedRealtime()
+            Log.i(TAG, "channels_start server=${serverForLog(creds.server)} user=${creds.username}")
             val response = service.getLiveStreams(
                 username = creds.username,
                 password = creds.password,
@@ -123,10 +150,12 @@ class SyncManager(private val context: Context) {
             )
 
             if (!response.isSuccessful) {
+                Log.e(TAG, "channels_http status=${response.code()} elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
                 return@withContext SyncResult.Error("Channels sync failed: HTTP ${response.code()}")
             }
 
             val channels = response.body().orEmpty()
+            Log.i(TAG, "channels_success count=${channels.size} elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
             val entities = channels
                 .filter { (it.stream_id ?: 0) != 0 }
                 .map { it.toChannelEntity() }
@@ -145,6 +174,8 @@ class SyncManager(private val context: Context) {
 
             SyncResult.Success
         } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.e(TAG, "channels_exception ${t.message}", t)
             SyncResult.Error("Channels sync exception: ${t.message}", t)
         }
     }

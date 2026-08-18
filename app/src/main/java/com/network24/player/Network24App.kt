@@ -115,6 +115,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
     /** P2P is available only after the existing IPTV account has logged in; HTTP remains fallback. */
     val p2pSession: Network24P2pSession by lazy {
         val iceServers = buildList {
+            // Keep a public STUN server for VPN/NAT networks. Host candidates
+            // remain available, while TURN entries are added when configured.
             add(Network24IceServer("stun:stun.l.google.com:19302"))
             if (BuildConfig.P2P_TURN_USERNAME.isNotBlank() && BuildConfig.P2P_TURN_PASSWORD.isNotBlank()) {
                 add(Network24IceServer("turn:p2p.web24.live:3478?transport=udp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))

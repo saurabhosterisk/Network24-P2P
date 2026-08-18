@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 /** Bounded binary framing for media payloads; JSON remains control-only. */
 object Network24PeerProtocol {
     const val VERSION = 2
-    const val CHUNK_BYTES = 16 * 1024
+    const val CHUNK_BYTES = 64 * 1024
     const val MAX_SEGMENT_BYTES = 8 * 1024 * 1024
     const val MAX_CHUNKS = MAX_SEGMENT_BYTES / CHUNK_BYTES
     private const val MAGIC = 0x4e323450 // N24P
