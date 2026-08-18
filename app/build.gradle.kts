@@ -5,11 +5,6 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-fun buildConfigString(name: String): String {
-    val value = providers.gradleProperty(name).orNull.orEmpty()
-    return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-}
-
 android {
     namespace = "com.network24.player"
 

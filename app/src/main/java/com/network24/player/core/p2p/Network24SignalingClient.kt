@@ -43,8 +43,8 @@ class Network24SignalingClient(
         fun onLocalPeerId(peerId: String) {}
         fun onPeerList(peers: List<Peer>) {}
         fun onSignal(type: String, payload: JsonObject) {}
-        fun onError(code: String) {}
         fun onIceServers(iceServers: List<Network24IceServer>) {}
+        fun onError(code: String) {}
     }
 
     enum class State { DISABLED, IDLE, CONNECTING, AUTHENTICATED, CLOSED }
@@ -175,7 +175,8 @@ class Network24SignalingClient(
                 socket?.close(1008, "authentication_required")
                 return@getToken
             }
-            if (result.iceServers.isNotEmpty()) listener.onIceServers(result.iceServers)
+            listener.onIceServers(result.iceServers)
+            Log.i(TAG, "event=token_ready turn_servers=${result.iceServers.size}")
             send("authenticate", JsonObject().apply { addProperty("token", result.token) })
             send("register", JsonObject().apply {
                 addProperty("device_id", registration.deviceId)

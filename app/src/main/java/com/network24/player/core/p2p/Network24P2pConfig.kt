@@ -8,11 +8,13 @@ data class Network24P2pConfig(
     val heartbeatIntervalMs: Long = 15_000L,
     val reconnectInitialMs: Long = 1_000L,
     val reconnectMaxMs: Long = 30_000L,
-    val segmentRequestTimeoutMs: Long = 750L,
-    val uploadDeadlineMs: Long = 1_200L,
-    val maxDataChannelBufferedBytes: Long = 256L * 1024L,
-    val maxMessageBytes: Int = 64 * 1024,
-    var iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
+    val segmentRequestTimeoutMs: Long = 15_000L,
+    val uploadDeadlineMs: Long = 20_000L,
+    val maxDataChannelBufferedBytes: Long = 8L * 1024L * 1024L,
+    // Binary frames include the request ID, segment key and framing header in
+    // addition to the 64 KiB media chunk.
+    val maxMessageBytes: Int = 128 * 1024,
+    val iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
 )
 
 data class Network24IceServer(
@@ -21,13 +23,14 @@ data class Network24IceServer(
     val password: String? = null,
 )
 
+/** Short-lived authentication result returned by the P2P token broker. */
 data class Network24TokenResult(
     val token: String,
     val iceServers: List<Network24IceServer> = emptyList(),
 )
 
 fun interface Network24TokenProvider {
-    /** Asynchronously returns a short-lived token. Never log or persist the token here. */
+    /** Asynchronously returns a short-lived token and its runtime ICE servers. */
     fun getToken(callback: (Network24TokenResult?) -> Unit)
 }
 

@@ -44,6 +44,7 @@ class Network24WebRtcPeerManager(
     }
 
     private val factory: PeerConnectionFactory
+    @Volatile private var activeIceServers: List<Network24IceServer> = iceServers.toList()
     private val peers = ConcurrentHashMap<String, PeerConnection>()
     private val channels = ConcurrentHashMap<String, DataChannel>()
     private val remoteDescriptionSet = ConcurrentHashMap<String, Boolean>()
@@ -87,7 +88,7 @@ class Network24WebRtcPeerManager(
     }
 
     private fun createConnection(peerId: String, initiator: Boolean) {
-        val rtcServers = iceServers.map { server ->
+        val rtcServers = activeIceServers.map { server ->
             PeerConnection.IceServer.builder(server.urls).apply {
                 server.username?.takeIf { it.isNotBlank() }?.let { setUsername(it) }
                 server.password?.takeIf { it.isNotBlank() }?.let { setPassword(it) }
@@ -130,6 +131,15 @@ class Network24WebRtcPeerManager(
                 }
             ), MediaConstraints())
         }
+    }
+
+    /** Applies token-broker ICE servers to connections created after authentication. */
+    fun updateIceServers(servers: List<Network24IceServer>) {
+        if (closed.get()) return
+        activeIceServers = servers.distinctBy { Triple(it.urls, it.username, it.password) }
+        val turnCount = activeIceServers.count { it.urls.startsWith("turn:") || it.urls.startsWith("turns:") }
+        Log.i(TAG, "event=ice_servers_updated count=${activeIceServers.size} " +
+            "turn=$turnCount")
     }
 
     fun handleSignal(type: String, payload: JsonObject) {
@@ -254,6 +264,7 @@ class Network24WebRtcPeerManager(
                     return
                 }
                 val iceCandidate = IceCandidate(mid, line, candidate)
+                Log.i(TAG, "event=ice_candidate peer=${shortPeer(peerId)} direction=remote type=${candidateType(candidate)}")
                 if (remoteDescriptionSet.containsKey(peerId)) addIceCandidate(peerId, connection, iceCandidate)
                 else {
                     val candidateQueue = ConcurrentLinkedQueue<IceCandidate>()
@@ -287,6 +298,7 @@ class Network24WebRtcPeerManager(
                 var success = false
                 try {
                     val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(uploadDeadlineMs)
+                    Log.i(TAG, "event=upload_start peer=${shortPeer(peerId)} request=${requestId.take(8)} bytes=${bytes.size}")
                     success = sendControl("meta")
                     val chunks = (bytes.size + Network24PeerProtocol.CHUNK_BYTES - 1) / Network24PeerProtocol.CHUNK_BYTES
                     for (index in 0 until chunks) {
@@ -305,8 +317,19 @@ class Network24WebRtcPeerManager(
                         val end = minOf(bytes.size, start + Network24PeerProtocol.CHUNK_BYTES)
                         val frame = Network24PeerProtocol.encodeChunk(requestId, segmentKey, index, bytes.copyOfRange(start, end))
                         success = channel.send(DataChannel.Buffer(ByteBuffer.wrap(frame), true))
+                        if (success && (index == 0 || index == chunks - 1 || index % 8 == 0)) {
+                            Log.i(TAG, "event=upload_chunk peer=${shortPeer(peerId)} request=${requestId.take(8)} " +
+                                "index=${index + 1}/$chunks bytes=${end - start} buffered=${channel.bufferedAmount()}")
+                        }
                     }
-                    if (success && !cancelledUploads.containsKey(requestId)) success = sendControl("complete")
+                    if (success && !cancelledUploads.containsKey(requestId)) {
+                        while (channel.bufferedAmount() > maxBufferedAmount && System.nanoTime() < deadline &&
+                            !cancelledUploads.containsKey(requestId) && channel.state() == DataChannel.State.OPEN
+                        ) Thread.sleep(BACKPRESSURE_POLL_MS)
+                        success = System.nanoTime() < deadline && channel.bufferedAmount() <= maxBufferedAmount &&
+                            !cancelledUploads.containsKey(requestId) && sendControl("complete")
+                        if (success) Log.i(TAG, "event=upload_complete_queued peer=${shortPeer(peerId)} request=${requestId.take(8)}")
+                    }
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
                     success = false
@@ -383,6 +406,7 @@ class Network24WebRtcPeerManager(
         channel.registerObserver(object : DataChannel.Observer {
             override fun onBufferedAmountChange(previousAmount: Long) = Unit
             override fun onStateChange() {
+                Log.i(TAG, "event=datachannel peer=${shortPeer(peerId)} state=${channel.state()}")
                 if (channel.state() == DataChannel.State.OPEN) {
                     listener.onPeerState(peerId, "connected")
                     listener.onPeerReady(peerId, channel)
@@ -408,13 +432,16 @@ class Network24WebRtcPeerManager(
                 listener.onPeerError(peerId, "invalid_local_ice_candidate")
                 return
             }
+            Log.i(TAG, "event=ice_candidate peer=${shortPeer(peerId)} direction=local type=${candidateType(candidate.sdp)}")
             signaling.sendIceCandidate(peerId, candidate.sdp, mid, candidate.sdpMLineIndex)
         }
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
+            Log.i(TAG, "event=ice_gathering peer=${shortPeer(peerId)} state=$state")
             if (state == PeerConnection.IceGatheringState.COMPLETE) signaling.sendEndOfCandidates(peerId)
         }
         override fun onDataChannel(dataChannel: DataChannel) = attachChannel(peerId, dataChannel)
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+            Log.i(TAG, "event=ice_connection peer=${shortPeer(peerId)} state=$state")
             listener.onPeerState(peerId, when (state) {
                 PeerConnection.IceConnectionState.CHECKING -> "connecting"
                 PeerConnection.IceConnectionState.CONNECTED,
@@ -434,6 +461,7 @@ class Network24WebRtcPeerManager(
         override fun onRenegotiationNeeded() = Unit
         override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
         override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
+            Log.i(TAG, "event=peer_connection_state peer=${shortPeer(peerId)} state=$newState")
             listener.onPeerState(peerId, when (newState) {
                 PeerConnection.PeerConnectionState.CONNECTED -> "connected"
                 PeerConnection.PeerConnectionState.CONNECTING -> "connecting"
@@ -476,6 +504,7 @@ class Network24WebRtcPeerManager(
                 candidate.members["candidateType"] as? String
             }
             val selected = if (types.any { it == "relay" }) "relay" else types.firstOrNull { it in setOf("host", "srflx", "prflx") } ?: "unknown"
+            Log.i(TAG, "event=ice_selected_pair peer=${shortPeer(peerId)} local_type=${types.getOrNull(0) ?: "unknown"} remote_type=${types.getOrNull(1) ?: "unknown"} transport=$selected")
             listener.onPeerTransport(peerId, selected)
         }
     }
@@ -542,6 +571,13 @@ class Network24WebRtcPeerManager(
                 line.startsWith("a=sctp-") || line.startsWith("a=max-message-size:")
         }
         .joinToString(";")
+
+    private fun candidateType(candidate: String): String = candidate
+        .split(' ')
+        .dropWhile { it != "typ" }
+        .getOrNull(1)
+        ?.takeIf { it in setOf("host", "srflx", "prflx", "relay") }
+        ?: "unknown"
 
     private class SdpCallback(
         private val onSuccess: (SessionDescription) -> Unit,

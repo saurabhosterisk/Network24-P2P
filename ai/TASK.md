@@ -90,3 +90,10 @@ selected pair and sustained P2P media bytes.
 
 ## Goal
 Stable P2P media transfer for long duration with proper fallback.
+
+## Next required Server Agent action
+
+Provision and validate the approved coturn shared-secret/TLS deployment described
+in `ai/SERVER_LOG.md`, then run the forced-TURN two-device test. Android now
+accepts the token broker's short-lived TURN URLs and credentials at runtime;
+do not add static TURN credentials to the APK.

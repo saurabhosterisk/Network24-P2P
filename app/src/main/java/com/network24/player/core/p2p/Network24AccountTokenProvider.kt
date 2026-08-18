@@ -10,6 +10,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.IOException
 import org.json.JSONObject
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.util.concurrent.TimeUnit
 
 /** Exchanges the already validated IPTV account session for a short-lived P2P token. */
@@ -45,25 +47,59 @@ class Network24AccountTokenProvider(
             override fun onResponse(call: Call, response: okhttp3.Response) {
                 response.use {
                     if (!it.isSuccessful) { callback(null); return }
-                    val json = JSONObject(it.body?.string().orEmpty())
-                    val token = json.optString("token").takeIf(String::isNotBlank)
-                    if (token == null) { callback(null); return }
-                    val turn = json.optJSONObject("turn")
-                    val iceServers = if (turn != null) {
-                        val username = turn.optString("username").takeIf(String::isNotBlank)
-                        val password = turn.optString("password").takeIf(String::isNotBlank)
-                        val urls = turn.optJSONArray("urls")
-                        if (username != null && password != null && urls != null) {
-                            (0 until urls.length()).mapNotNull { index -> urls.optString(index).takeIf(String::isNotBlank)?.let { Network24IceServer(it, username, password) } }
-                        } else emptyList()
-                    } else emptyList()
-                    cachedResult = Network24TokenResult(token, iceServers)
-                    expiresAtMs = System.currentTimeMillis() + json.optLong("expires_in", 300) * 1000
-                    callback(cachedResult)
+                    val result = runCatching {
+                        val json = JsonParser.parseString(it.body?.string().orEmpty()).asJsonObject
+                        val token = json.stringValue("token")
+                            ?: return@runCatching null
+                        val expiresInMs = json.longValue("expires_in")
+                            .takeIf { it > 0L } ?: 300L
+                        val boundedExpiresInMs = expiresInMs
+                            .coerceIn(30L, 3_600L) * 1_000L
+                        Network24TokenResult(token, parseTurnServers(json)) to boundedExpiresInMs
+                    }.getOrNull()
+                    if (result == null) {
+                        callback(null)
+                        return
+                    }
+                    cachedResult = result.first
+                    expiresAtMs = System.currentTimeMillis() + result.second
+                    callback(result.first)
                 }
             }
         })
     }
 
-    companion object { private val JSON = "application/json; charset=utf-8".toMediaType() }
+    companion object {
+        private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        internal fun parseTurnServers(json: JsonObject): List<Network24IceServer> {
+            val turn = json.get("turn")?.takeIf { it.isJsonObject }?.asJsonObject ?: return emptyList()
+            val username = turn.stringValue("username") ?: return emptyList()
+            val password = turn.stringValue("password") ?: return emptyList()
+            val urlsElement = turn.get("urls") ?: return emptyList()
+            val urls = if (urlsElement.isJsonArray) {
+                urlsElement.asJsonArray.mapNotNull { element ->
+                    element.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                        ?.takeIf(String::isNotBlank)
+                }
+            } else {
+                listOfNotNull(urlsElement.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                    ?.asString?.takeIf(String::isNotBlank))
+            }
+            return urls
+                .asSequence()
+                .filter { it.startsWith("turn:") || it.startsWith("turns:") }
+                .distinct()
+                .map { Network24IceServer(it, username, password) }
+                .toList()
+        }
+
+        private fun JsonObject.stringValue(name: String): String? = get(name)
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString?.takeIf(String::isNotBlank)
+
+        private fun JsonObject.longValue(name: String): Long = get(name)
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+            ?.asLong ?: 0L
+    }
 }

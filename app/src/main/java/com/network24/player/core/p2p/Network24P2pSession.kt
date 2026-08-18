@@ -55,6 +55,7 @@ class Network24P2pSession(
     @Volatile private var displayStreamId: String? = null
     @Volatile private var mediaSessionId = UUID.randomUUID().toString()
     @Volatile private var localPeerId: String? = null
+    @Volatile private var runtimeIceServers: List<Network24IceServer> = emptyList()
     @Volatile private var discoveredPeers: List<Network24SignalingClient.Peer> = emptyList()
     private val generation = AtomicLong(0L)
     private val stats = AtomicReference(SessionStats())
@@ -99,7 +100,7 @@ class Network24P2pSession(
         mediaSessionId = UUID.randomUUID().toString()
         stats.set(SessionStats())
         if (normalized != null) {
-            Log.i(TAG, "event=session_start stream=${safeLog(raw)} room=${normalized.take(24)} generation=${generation.get()}")
+            Log.i(TAG, "event=session_start device=${shortDevice(deviceId)} stream=${safeLog(raw)} room=${normalized.take(24)} generation=${generation.get()}")
             signaling.joinStream(normalized)
             signaling.requestPeers()
         }
@@ -247,8 +248,12 @@ class Network24P2pSession(
 
     private val signalingListener = object : Network24SignalingClient.Listener {
         override fun onIceServers(iceServers: List<Network24IceServer>) {
-            if (iceServers.isNotEmpty()) config.iceServers = iceServers
-            Log.i(TAG, "event=ice_servers count=${iceServers.size} source=token")
+            // Keep the public STUN fallback and add only the short-lived TURN
+            // servers returned by the authenticated token broker.
+            runtimeIceServers = iceServers
+            val merged = (config.iceServers + runtimeIceServers)
+                .distinctBy { Triple(it.urls, it.username, it.password) }
+            Log.i(TAG, "event=ice_servers count=${merged.size} turn=${iceServers.size} source=token")
         }
 
         override fun onLocalPeerId(peerId: String) {
@@ -257,6 +262,7 @@ class Network24P2pSession(
                 webrtc.dropAll()
             }
             localPeerId = peerId
+            webrtc.updateIceServers(config.iceServers + runtimeIceServers)
             Log.i(TAG, "event=registered peer=${shortPeer(peerId)}")
             if (streamId != null) signaling.requestPeers()
             connectToDiscoveredPeers()
@@ -465,15 +471,16 @@ class Network24P2pSession(
 
     private fun acceptUploadAck(peerId: String, message: JsonObject) {
         val requestId = message.requestId() ?: return
-        val transfer = outbound.remove(requestId) ?: return
+        val transfer = outbound[requestId] ?: return
         if (transfer.peerId != peerId || transfer.streamId != streamId || message.segmentKey() != transfer.segmentKey ||
             message.long("bytes") != transfer.bytes.toLong()
         ) return
+        if (!outbound.remove(requestId, transfer)) return
         val currentStats = stats.get()
         currentStats.bytesUploadedToPeers.addAndGet(transfer.bytes.toLong())
         currentStats.segmentsUploaded.incrementAndGet()
         markRole(peerId, "uploader")
-        Log.i(TAG, "event=media_upload stream=${safeLog(displayStreamId)} segment=${transfer.segmentKey.take(12)} peer=${shortPeer(peerId)} transport=${connectionTransports[peerId] ?: "unknown"} bytes=${transfer.bytes}")
+        Log.i(TAG, "event=upload_ack stream=${safeLog(displayStreamId)} request=${requestId.take(8)} segment=${transfer.segmentKey.take(12)} peer=${shortPeer(peerId)} transport=${connectionTransports[peerId] ?: "unknown"} bytes=${transfer.bytes}")
         publishTelemetry()
     }
 
@@ -586,6 +593,7 @@ class Network24P2pSession(
     private fun deviceType(): String = if (appContext.packageManager.hasSystemFeature("android.software.leanback")) "ANDROID_TV" else "ANDROID"
     private fun safeLog(value: String?): String = value?.replace(Regex("[^A-Za-z0-9._:-]"), "_")?.take(80) ?: "none"
     private fun shortPeer(peerId: String): String = peerId.takeLast(12)
+    private fun shortDevice(value: String): String = value.takeLast(8)
 
     private class PendingRequest(
         val request: Network24MediaRequest,
@@ -672,7 +680,9 @@ class Network24P2pSession(
         private const val MAX_UPLOAD_PEERS = 3
         private const val MAX_ADVERTISED_SEGMENTS = 64
         private const val PEER_REFRESH_MS = 3_000L
-        private const val OUTBOUND_TTL_MS = 5_000L
+        // Keep the transfer record until the receiver has consumed and verified
+        // the segment. The old 5-second TTL discarded valid late ACKs.
+        private const val OUTBOUND_TTL_MS = 60_000L
 
         private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
