@@ -44,6 +44,7 @@ class Network24SignalingClient(
         fun onPeerList(peers: List<Peer>) {}
         fun onSignal(type: String, payload: JsonObject) {}
         fun onError(code: String) {}
+        fun onIceServers(iceServers: List<Network24IceServer>) {}
     }
 
     enum class State { DISABLED, IDLE, CONNECTING, AUTHENTICATED, CLOSED }
@@ -168,13 +169,14 @@ class Network24SignalingClient(
     }
 
     private fun authenticateAndRegister() {
-        tokenProvider.getToken { token ->
-            if (token.isNullOrBlank()) {
+        tokenProvider.getToken { result ->
+            if (result == null || result.token.isBlank()) {
                 listener.onError("client_token_unavailable")
                 socket?.close(1008, "authentication_required")
                 return@getToken
             }
-            send("authenticate", JsonObject().apply { addProperty("token", token) })
+            if (result.iceServers.isNotEmpty()) listener.onIceServers(result.iceServers)
+            send("authenticate", JsonObject().apply { addProperty("token", result.token) })
             send("register", JsonObject().apply {
                 addProperty("device_id", registration.deviceId)
                 addProperty("device_type", registration.deviceType)

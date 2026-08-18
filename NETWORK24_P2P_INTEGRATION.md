@@ -12,7 +12,11 @@ The first Android integration layer is now present under
 - A public coturn relay is required for peers on networks that cannot form a
   direct ICE path. STUN alone is not sufficient for mobile-carrier NAT. The
   Android client supports authenticated UDP/TCP TURN and should be given a
-  `turns:` endpoint too when TLS TURN is enabled. See
+  `turns:` endpoint too when TLS TURN is enabled. The broker now returns
+  short-lived TURN REST credentials alongside the short-lived client token;
+  the APK no longer embeds TURN credentials. Set
+  `NETWORK24_TURN_ENABLED=true`, `NETWORK24_TURN_HOST`, and the server-only
+  `NETWORK24_TURN_AUTH_SECRET` when coturn is ready. See
   `deploy/coturn/network24.conf.example`; inject the auth secret at deploy
   time and never commit it.
 

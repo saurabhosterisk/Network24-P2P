@@ -232,6 +232,11 @@ class Network24P2pSession(
     }
 
     private val signalingListener = object : Network24SignalingClient.Listener {
+        override fun onIceServers(iceServers: List<Network24IceServer>) {
+            if (iceServers.isNotEmpty()) config.iceServers = iceServers
+            Log.i(TAG, "event=ice_servers count=${iceServers.size} source=token")
+        }
+
         override fun onLocalPeerId(peerId: String) {
             if (localPeerId != null && localPeerId != peerId) {
                 cancelPending(Network24PeerMissReason.NO_SESSION)

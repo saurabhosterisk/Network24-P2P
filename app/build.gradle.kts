@@ -30,8 +30,6 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "P2P_TURN_USERNAME", buildConfigString("P2P_TURN_USERNAME"))
-        buildConfigField("String", "P2P_TURN_PASSWORD", buildConfigString("P2P_TURN_PASSWORD"))
     }
 
 

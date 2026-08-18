@@ -19,7 +19,6 @@ import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.network24.player.core.preferences.PreferenceManager
-import com.network24.player.core.p2p.Network24IceServer
 import com.network24.player.core.p2p.Network24P2pConfig
 import com.network24.player.core.p2p.Network24P2pSession
 
@@ -114,15 +113,9 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     /** P2P is available only after the existing IPTV account has logged in; HTTP remains fallback. */
     val p2pSession: Network24P2pSession by lazy {
-        val iceServers = buildList {
-            add(Network24IceServer("stun:stun.l.google.com:19302"))
-            if (BuildConfig.P2P_TURN_USERNAME.isNotBlank() && BuildConfig.P2P_TURN_PASSWORD.isNotBlank()) {
-                add(Network24IceServer("turn:p2p.web24.live:3478?transport=udp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
-                add(Network24IceServer("turn:p2p.web24.live:3478?transport=tcp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
-                add(Network24IceServer("turns:p2p.web24.live:5349?transport=tcp", BuildConfig.P2P_TURN_USERNAME, BuildConfig.P2P_TURN_PASSWORD))
-            }
-        }
-        Network24P2pSession(this, Network24P2pConfig(enabled = true, iceServers = iceServers)).also { it.start() }
+        // TURN is delivered as a short-lived credential with the authenticated token.
+        // Keep only the public STUN default here; HTTP playback remains fallback.
+        Network24P2pSession(this, Network24P2pConfig(enabled = true)).also { it.start() }
     }
 
     override fun onCreate() {

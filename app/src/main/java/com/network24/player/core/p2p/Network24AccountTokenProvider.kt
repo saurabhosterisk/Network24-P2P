@@ -19,12 +19,12 @@ class Network24AccountTokenProvider(
     private val tokenEndpoint: String = "https://p2p.web24.live/api/v1/client/token",
     private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(10, TimeUnit.SECONDS).build()
 ) : Network24TokenProvider {
-    @Volatile private var cachedToken: String? = null
+    @Volatile private var cachedResult: Network24TokenResult? = null
     @Volatile private var expiresAtMs: Long = 0
 
     override fun getToken(callback: (String?) -> Unit) {
-        if (cachedToken != null && expiresAtMs > System.currentTimeMillis() + 15_000) {
-            callback(cachedToken)
+        if (cachedResult != null && expiresAtMs > System.currentTimeMillis() + 15_000) {
+            callback(cachedResult)
             return
         }
         val credentials = preferences.getLoginCredentials()
@@ -46,9 +46,20 @@ class Network24AccountTokenProvider(
                 response.use {
                     if (!it.isSuccessful) { callback(null); return }
                     val json = JSONObject(it.body?.string().orEmpty())
-                    cachedToken = json.optString("token").takeIf(String::isNotBlank)
+                    val token = json.optString("token").takeIf(String::isNotBlank)
+                    if (token == null) { callback(null); return }
+                    val turn = json.optJSONObject("turn")
+                    val iceServers = if (turn != null) {
+                        val username = turn.optString("username").takeIf(String::isNotBlank)
+                        val password = turn.optString("password").takeIf(String::isNotBlank)
+                        val urls = turn.optJSONArray("urls")
+                        if (username != null && password != null && urls != null) {
+                            (0 until urls.length()).mapNotNull { index -> urls.optString(index).takeIf(String::isNotBlank)?.let { Network24IceServer(it, username, password) } }
+                        } else emptyList()
+                    } else emptyList()
+                    cachedResult = Network24TokenResult(token, iceServers)
                     expiresAtMs = System.currentTimeMillis() + json.optLong("expires_in", 300) * 1000
-                    callback(cachedToken)
+                    callback(cachedResult)
                 }
             }
         })

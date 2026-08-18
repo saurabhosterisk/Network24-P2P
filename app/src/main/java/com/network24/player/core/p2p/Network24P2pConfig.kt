@@ -12,7 +12,7 @@ data class Network24P2pConfig(
     val uploadDeadlineMs: Long = 1_200L,
     val maxDataChannelBufferedBytes: Long = 256L * 1024L,
     val maxMessageBytes: Int = 64 * 1024,
-    val iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
+    var iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
 )
 
 data class Network24IceServer(
@@ -21,9 +21,14 @@ data class Network24IceServer(
     val password: String? = null,
 )
 
+data class Network24TokenResult(
+    val token: String,
+    val iceServers: List<Network24IceServer> = emptyList(),
+)
+
 fun interface Network24TokenProvider {
     /** Asynchronously returns a short-lived token. Never log or persist the token here. */
-    fun getToken(callback: (String?) -> Unit)
+    fun getToken(callback: (Network24TokenResult?) -> Unit)
 }
 
 data class Network24DeviceRegistration(
