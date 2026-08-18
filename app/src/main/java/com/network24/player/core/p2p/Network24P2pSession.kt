@@ -46,8 +46,8 @@ class Network24P2pSession(
     private val webrtc: Network24WebRtcPeerManager by lazy {
         Network24WebRtcPeerManager(
             appContext, signaling, webRtcListener, config.iceServers,
-            config.uploadDeadlineMs.coerceIn(250L, 5_000L),
-            config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 2L * 1024L * 1024L),
+            config.uploadDeadlineMs.coerceIn(500L, 30_000L),
+            config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
         )
     }
 
@@ -106,7 +106,7 @@ class Network24P2pSession(
     }
 
     fun mediaCache(): Network24SegmentCache = cache
-    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(100L, 2_000L)
+    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(500L, 20_000L)
     override fun currentStreamId(): String? = streamId
 
     fun close() {
@@ -128,7 +128,15 @@ class Network24P2pSession(
         currentStats.p2pRequests.incrementAndGet()
         val advertised = openPeers.filter { advertisedSegments[it]?.contains(request.segmentKey) == true }
         val orderedPeers = (advertised + openPeers).distinct().take(MAX_DOWNLOAD_PEERS)
-        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs.coerceIn(50L, 2_000L))
+        // A peer that explicitly advertised this segment gets enough time to
+        // drain a multi-megabyte transfer. A non-advertised peer is only a
+        // quick probe; fall back to HTTP promptly when it cannot serve it.
+        val requestTimeoutMs = if (advertised.isNotEmpty()) {
+            timeoutMs.coerceIn(500L, 20_000L)
+        } else {
+            timeoutMs.coerceIn(500L, 1_500L)
+        }
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(requestTimeoutMs)
         var finalReason = Network24PeerMissReason.UNAVAILABLE
 
         for (peerId in orderedPeers) {
@@ -227,7 +235,13 @@ class Network24P2pSession(
     ) {
         if (streamId != request.streamId || bytes <= 0) return
         stats.get().segmentsFromHttp.incrementAndGet()
-        if (cache.get(request.segmentKey) != null) announceSegment(request.segmentKey)
+        val cached = cache.get(request.segmentKey) != null
+        Log.i(
+            TAG,
+            "event=cache_ready stream=${safeLog(displayStreamId)} segment=${request.logLabel} " +
+                "key=${request.segmentKey.take(12)} cached=$cached reason=$reason"
+        )
+        if (cached) announceSegment(request.segmentKey)
         Log.i(TAG, "event=media stream=${safeLog(displayStreamId)} segment=${request.logLabel} source=HTTP reason=$reason bytes=$bytes duration_ms=$durationMs")
     }
 
@@ -265,7 +279,12 @@ class Network24P2pSession(
 
         override fun onPeerList(peers: List<Network24SignalingClient.Peer>) {
             val old = discoveredPeers.map { it.peerId }.toSet()
-            discoveredPeers = peers.distinctBy { it.peerId }.take(MAX_CONNECTED_PEERS)
+            discoveredPeers = peers
+                .asSequence()
+                .filter { it.peerId != localPeerId }
+                .distinctBy { it.peerId }
+                .take(MAX_CONNECTED_PEERS)
+                .toList()
             val current = discoveredPeers.map { it.peerId }.toSet()
             (old - current).forEach { peer ->
                 webrtc.drop(peer)
@@ -280,14 +299,37 @@ class Network24P2pSession(
             connectToDiscoveredPeers()
         }
 
-        override fun onSignal(type: String, payload: JsonObject) = webrtc.handleSignal(type, payload)
+        override fun onSignal(type: String, payload: JsonObject) {
+            val from = payload.get("from_peer_id")?.takeIf { it.isJsonPrimitive }?.asString
+                ?: payload.get("peer_id")?.takeIf { it.isJsonPrimitive }?.asString
+                ?: "unknown"
+            Log.i(TAG, "event=signal_received type=$type peer=${shortPeer(from)}")
+            runCatching { webrtc.handleSignal(type, payload) }
+                .onFailure { error ->
+                    Log.e(TAG, "event=signal_exception type=$type peer=${shortPeer(from)}", error)
+                    webRtcListener.onPeerError(from, "signal_exception")
+                }
+        }
         override fun onError(code: String) { Log.w(TAG, "event=signaling_error code=$code") }
     }
 
     private fun connectToDiscoveredPeers() {
-        val ownId = localPeerId ?: return
+        val ownId = localPeerId ?: run {
+            Log.w(TAG, "event=connect_skipped reason=local_peer_id_missing")
+            return
+        }
         discoveredPeers.forEach { peer ->
-            webrtc.connect(peer.peerId, initiator = ownId < peer.peerId)
+            val initiator = ownId < peer.peerId
+            Log.i(TAG, "event=connect_attempt peer=${shortPeer(peer.peerId)} initiator=$initiator")
+            if (initiator) {
+                runCatching { webrtc.connect(peer.peerId, initiator = true) }
+                    .onFailure { error ->
+                        Log.e(TAG, "event=connect_exception peer=${shortPeer(peer.peerId)}", error)
+                        webRtcListener.onPeerError(peer.peerId, "connect_exception")
+                    }
+            } else {
+                Log.i(TAG, "event=connect_waiting_for_offer peer=${shortPeer(peer.peerId)}")
+            }
         }
     }
 
@@ -350,6 +392,7 @@ class Network24P2pSession(
                     if (message.string("stream_id") == streamId) message.segmentKey()?.let {
                         val created = RecentSegmentSet()
                         (advertisedSegments.putIfAbsent(peerId, created) ?: created).add(it)
+                        Log.i(TAG, "event=segment_have peer=${shortPeer(peerId)} key=${it.take(12)}")
                     }
                 }
                 "segment_request" -> serveSegmentRequest(peerId, message)
@@ -382,6 +425,11 @@ class Network24P2pSession(
         val requestId = message.requestId() ?: return
         val segmentKey = message.segmentKey() ?: return
         val bytes = cache.get(segmentKey)
+        Log.i(
+            TAG,
+            "event=segment_request peer=${shortPeer(peerId)} key=${segmentKey.take(12)} " +
+                "cache=${if (bytes != null) "hit" else "miss"}"
+        )
         if (bytes == null) {
             sendControl(peerId, responseControl("segment_unavailable", room, requestId, segmentKey))
             return

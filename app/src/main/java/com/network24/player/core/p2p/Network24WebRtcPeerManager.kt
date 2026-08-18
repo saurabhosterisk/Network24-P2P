@@ -1,6 +1,8 @@
 package com.network24.player.core.p2p
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.gson.JsonObject
 import org.webrtc.DataChannel
@@ -45,12 +47,14 @@ class Network24WebRtcPeerManager(
     private val peers = ConcurrentHashMap<String, PeerConnection>()
     private val channels = ConcurrentHashMap<String, DataChannel>()
     private val remoteDescriptionSet = ConcurrentHashMap<String, Boolean>()
+    private val remoteAnswerStarted = ConcurrentHashMap<String, Boolean>()
     private val pendingIceCandidates = ConcurrentHashMap<String, ConcurrentLinkedQueue<IceCandidate>>()
     private val remoteIceEnded = ConcurrentHashMap<String, Boolean>()
     private val cancelledUploads = ConcurrentHashMap<String, Boolean>()
     private val closed = AtomicBoolean(false)
+    private val signalingHandler = Handler(Looper.getMainLooper())
     private val uploadExecutor = ThreadPoolExecutor(
-        2, 2, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(16),
+        1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(16),
         { runnable -> Thread(runnable, "network24-p2p-upload").apply { isDaemon = true } },
         ThreadPoolExecutor.AbortPolicy()
     )
@@ -63,9 +67,22 @@ class Network24WebRtcPeerManager(
 
     fun connect(peerId: String, initiator: Boolean) {
         if (closed.get() || peerId.isBlank()) return
+        try {
+            signalingHandler.post { connectOnSignalingThread(peerId, initiator) }
+        } catch (_: RejectedExecutionException) {
+            listener.onPeerError(peerId, "signaling_executor_rejected")
+        }
+    }
+
+    private fun connectOnSignalingThread(peerId: String, initiator: Boolean) {
         synchronized(connectionLock) {
-            if (peers.containsKey(peerId)) return
-            createConnection(peerId, initiator)
+            if (closed.get() || peers.containsKey(peerId)) return
+            try {
+                createConnection(peerId, initiator)
+            } catch (error: Throwable) {
+                Log.e(TAG, "event=peer_connection_exception peer=${shortPeer(peerId)} initiator=$initiator", error)
+                listener.onPeerError(peerId, "peer_connection_exception")
+            }
         }
     }
 
@@ -76,8 +93,10 @@ class Network24WebRtcPeerManager(
                 server.password?.takeIf { it.isNotBlank() }?.let { setPassword(it) }
             }.createIceServer()
         }
+        Log.i(TAG, "event=peer_connection_create peer=${shortPeer(peerId)} initiator=$initiator iceServers=${rtcServers.size}")
         val connection = factory.createPeerConnection(rtcServers, observer(peerId))
         if (connection == null) {
+            Log.e(TAG, "event=peer_connection_create_failed peer=${shortPeer(peerId)}")
             listener.onPeerError(peerId, "peer_connection_create_failed")
             return
         }
@@ -88,72 +107,140 @@ class Network24WebRtcPeerManager(
                 maxRetransmits = -1
                 protocol = "n24-media-v2"
             })
-            if (channel != null) attachChannel(peerId, channel)
+            if (channel != null) {
+                Log.i(TAG, "event=datachannel_created peer=${shortPeer(peerId)}")
+                attachChannel(peerId, channel)
+            } else {
+                Log.e(TAG, "event=datachannel_create_failed peer=${shortPeer(peerId)}")
+            }
             connection.createOffer(SdpCallback(
                 onSuccess = { description ->
                     connection.setLocalDescription(SdpCallback(
                         onSuccess = {},
                         onFailure = { listener.onPeerError(peerId, "set_local_description_failed") },
-                        afterSetSuccess = { signaling.sendOffer(peerId, description.description) }
+                        afterSetSuccess = {
+                            Log.i(TAG, "event=offer_sent peer=${shortPeer(peerId)}")
+                            signaling.sendOffer(peerId, description.description)
+                        }
                     ), description)
                 },
-                onFailure = { listener.onPeerError(peerId, "offer_failed") }
+                onFailure = { error ->
+                    Log.e(TAG, "event=offer_failed peer=${shortPeer(peerId)} error=$error")
+                    listener.onPeerError(peerId, "offer_failed")
+                }
             ), MediaConstraints())
         }
     }
 
     fun handleSignal(type: String, payload: JsonObject) {
+        try {
+            signalingHandler.post {
+                try {
+                    handleSignalOnSignalingThread(type, payload)
+                } catch (error: Throwable) {
+                    val peerId = payload.stringField("from_peer_id") ?: payload.stringField("peer_id") ?: "unknown"
+                    Log.e(TAG, "event=signal_processing_exception type=$type peer=${shortPeer(peerId)}", error)
+                    listener.onPeerError(peerId, "signal_processing_exception")
+                    if (peerId != "unknown") dropOnSignalingThread(peerId)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            val peerId = payload.stringField("from_peer_id") ?: payload.stringField("peer_id") ?: "unknown"
+            listener.onPeerError(peerId, "signaling_executor_rejected")
+        }
+    }
+
+    private fun handleSignalOnSignalingThread(type: String, payload: JsonObject) {
         val peerId = payload.stringField("from_peer_id") ?: payload.stringField("peer_id") ?: run {
             rejectSignal("unknown", "missing_signal_sender")
             return
         }
-        val connection = peers[peerId] ?: run { connect(peerId, initiator = false); peers[peerId] } ?: return
+        val connection = peers[peerId] ?: run {
+            Log.i(TAG, "event=peer_connection_from_signal peer=${shortPeer(peerId)} type=$type")
+            connectOnSignalingThread(peerId, initiator = false)
+            peers[peerId]
+        } ?: run {
+            listener.onPeerError(peerId, "peer_connection_missing_after_signal")
+            return
+        }
         when (type) {
             "offer" -> {
                 val sdp = payload.stringField("sdp")?.takeIf { it.isNotBlank() } ?: run {
                     listener.onPeerError(peerId, "invalid_sdp")
                     return
                 }
+                val normalizedSdp = normalizeSdp(sdp)
+                Log.i(
+                    TAG,
+                        "event=offer_received peer=${shortPeer(peerId)} sdp_chars=${normalizedSdp.length} " +
+                        "lines=${normalizedSdp.lineSequence().count()} escaped=${sdp.contains("\\\\n")} " +
+                        "shape=${sdpShape(normalizedSdp)} " +
+                        "has_application=${normalizedSdp.contains("m=application")} has_ice=${normalizedSdp.contains("a=ice-ufrag:")}"
+                )
+                Log.i(TAG, "event=set_remote_offer_begin peer=${shortPeer(peerId)}")
                 connection.setRemoteDescription(SdpCallback(
                     onSuccess = {
-                        remoteDescriptionSet[peerId] = true
-                        flushPendingIceCandidates(peerId, connection)
-                        connection.createAnswer(SdpCallback(
-                            onSuccess = { answer ->
-                                connection.setLocalDescription(SdpCallback(
-                                    onSuccess = {},
-                                    onFailure = { listener.onPeerError(peerId, "set_local_description_failed") },
-                                    afterSetSuccess = { signaling.sendAnswer(peerId, answer.description) }
-                                ), answer)
-                            },
-                            onFailure = { listener.onPeerError(peerId, "answer_failed") }
-                        ), MediaConstraints())
+                        continueAfterRemoteOffer(peerId, connection, "callback")
                     },
-                    onFailure = { listener.onPeerError(peerId, "set_remote_description_failed") }
-                ), SessionDescription(SessionDescription.Type.OFFER, sdp))
+                    onFailure = { error ->
+                        Log.e(TAG, "event=set_remote_offer_failed peer=${shortPeer(peerId)} error=$error")
+                        listener.onPeerError(peerId, "set_remote_description_failed")
+                    }
+                ), SessionDescription(SessionDescription.Type.OFFER, normalizedSdp))
+                signalingHandler.postDelayed({
+                    if (remoteDescriptionSet[peerId] == true || remoteAnswerStarted[peerId] == true) return@postDelayed
+                    val nativeRemote = runCatching { connection.remoteDescription }.getOrNull()
+                    Log.w(
+                        TAG,
+                        "event=remote_offer_poll peer=${shortPeer(peerId)} " +
+                            "native_remote_present=${nativeRemote != null}"
+                    )
+                    if (nativeRemote != null) {
+                        continueAfterRemoteOffer(peerId, connection, "poll")
+                    } else {
+                        listener.onPeerError(peerId, "set_remote_description_timeout")
+                        dropOnSignalingThread(peerId)
+                    }
+                }, REMOTE_DESCRIPTION_POLL_MS)
             }
             "answer" -> payload.stringField("sdp")?.let { sdp ->
                 if (sdp.isBlank()) {
                     listener.onPeerError(peerId, "invalid_sdp")
                     return
                 }
+                Log.i(TAG, "event=set_remote_answer_begin peer=${shortPeer(peerId)}")
                 connection.setRemoteDescription(SdpCallback(
                     onSuccess = {
-                        remoteDescriptionSet[peerId] = true
-                        flushPendingIceCandidates(peerId, connection)
+                        continueAfterRemoteAnswer(peerId, connection, "callback")
                     },
-                    onFailure = { listener.onPeerError(peerId, "set_remote_description_failed") }
-                ), SessionDescription(SessionDescription.Type.ANSWER, sdp))
+                    onFailure = { error ->
+                        Log.e(TAG, "event=set_remote_answer_failed peer=${shortPeer(peerId)} error=$error")
+                        listener.onPeerError(peerId, "set_remote_description_failed")
+                    }
+                ), SessionDescription(SessionDescription.Type.ANSWER, normalizeSdp(sdp)))
+                signalingHandler.postDelayed({
+                    if (remoteDescriptionSet[peerId] == true) return@postDelayed
+                    val nativeRemote = runCatching { connection.remoteDescription }.getOrNull()
+                    Log.w(
+                        TAG,
+                        "event=remote_answer_poll peer=${shortPeer(peerId)} " +
+                            "native_remote_present=${nativeRemote != null}"
+                    )
+                    if (nativeRemote != null) {
+                        continueAfterRemoteAnswer(peerId, connection, "poll")
+                    } else {
+                        listener.onPeerError(peerId, "set_remote_description_timeout")
+                        dropOnSignalingThread(peerId)
+                    }
+                }, REMOTE_DESCRIPTION_POLL_MS)
             } ?: listener.onPeerError(peerId, "invalid_sdp")
             "ice_candidate" -> {
                 if (payload.booleanField("endOfCandidates") == true) {
                     remoteIceEnded[peerId] = true
                     return
                 }
-                if (remoteIceEnded.containsKey(peerId)) {
-                    rejectSignal(peerId, "ice_candidate_after_end")
-                    return
-                }
+                // Signaling transports may deliver the end marker before the final
+                // candidate callbacks. Keep accepting validated late candidates.
                 val candidate = payload.stringField("candidate")?.takeIf(Network24IceValidation::candidate) ?: run {
                     listener.onPeerError(peerId, "invalid_ice_candidate")
                     return
@@ -224,6 +311,15 @@ class Network24WebRtcPeerManager(
                     Thread.currentThread().interrupt()
                     success = false
                 } finally {
+                    if (!success) {
+                        Log.w(
+                            TAG,
+                            "event=upload_failed_detail peer=${shortPeer(peerId)} " +
+                                "request=${requestId.take(8)} bytes=${bytes.size} " +
+                                "channel_state=${channel.state()} buffered=${channel.bufferedAmount()} " +
+                                "cancelled=${cancelledUploads.containsKey(requestId)}"
+                        )
+                    }
                     cancelledUploads.remove(requestId)
                     onQueued(success)
                 }
@@ -239,11 +335,13 @@ class Network24WebRtcPeerManager(
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
+        signalingHandler.removeCallbacksAndMessages(null)
         channels.values.forEach { it.close() }
         peers.values.forEach { it.close() }
         channels.clear()
         pendingIceCandidates.clear()
         remoteDescriptionSet.clear()
+        remoteAnswerStarted.clear()
         remoteIceEnded.clear()
         peers.clear()
         cancelledUploads.clear()
@@ -253,14 +351,31 @@ class Network24WebRtcPeerManager(
 
     /** Remove a dead connection so the session can create a fresh ICE/SDP attempt. */
     fun drop(peerId: String) {
+        if (closed.get()) return
+        try {
+            signalingHandler.post { dropOnSignalingThread(peerId) }
+        } catch (_: RejectedExecutionException) {
+            // The manager is already shutting down.
+        }
+    }
+
+    private fun dropOnSignalingThread(peerId: String) {
         channels.remove(peerId)?.close()
         pendingIceCandidates.remove(peerId)
         remoteDescriptionSet.remove(peerId)
+        remoteAnswerStarted.remove(peerId)
         remoteIceEnded.remove(peerId)
         peers.remove(peerId)?.close()
     }
 
-    fun dropAll() { peers.keys.toList().forEach(::drop) }
+    fun dropAll() {
+        if (closed.get()) return
+        try {
+            signalingHandler.post { peers.keys.toList().forEach(::dropOnSignalingThread) }
+        } catch (_: RejectedExecutionException) {
+            // The manager is already shutting down.
+        }
+    }
 
     private fun attachChannel(peerId: String, channel: DataChannel) {
         val previous = channels.put(peerId, channel)
@@ -371,6 +486,63 @@ class Network24WebRtcPeerManager(
         listener.onPeerError(peerId, code)
     }
 
+    private fun continueAfterRemoteOffer(peerId: String, connection: PeerConnection, source: String) {
+        if (remoteDescriptionSet.putIfAbsent(peerId, true) != null) return
+        Log.i(TAG, "event=remote_offer_set peer=${shortPeer(peerId)} source=$source")
+        flushPendingIceCandidates(peerId, connection)
+        if (remoteAnswerStarted.putIfAbsent(peerId, true) != null) return
+        connection.createAnswer(SdpCallback(
+            onSuccess = { answer ->
+                connection.setLocalDescription(SdpCallback(
+                    onSuccess = {},
+                    onFailure = { error ->
+                        Log.e(TAG, "event=set_answer_failed peer=${shortPeer(peerId)} error=$error")
+                        listener.onPeerError(peerId, "set_local_description_failed")
+                    },
+                    afterSetSuccess = {
+                        Log.i(TAG, "event=answer_sent peer=${shortPeer(peerId)}")
+                        signaling.sendAnswer(peerId, answer.description)
+                    }
+                ), answer)
+            },
+            onFailure = { error ->
+                Log.e(TAG, "event=answer_failed peer=${shortPeer(peerId)} error=$error")
+                listener.onPeerError(peerId, "answer_failed")
+            }
+        ), MediaConstraints())
+    }
+
+    private fun continueAfterRemoteAnswer(peerId: String, connection: PeerConnection, source: String) {
+        if (remoteDescriptionSet.putIfAbsent(peerId, true) != null) return
+        Log.i(TAG, "event=remote_answer_set peer=${shortPeer(peerId)} source=$source")
+        flushPendingIceCandidates(peerId, connection)
+    }
+
+    private fun normalizeSdp(sdp: String): String {
+        // Some signaling proxies double-encode SDP line endings inside the
+        // JSON string. Decode those first, then emit the CRLF form expected by
+        // the native WebRTC SDP parser.
+        val decoded = sdp
+            .replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\\r", "\n")
+
+        return decoded
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .lineSequence()
+            .joinToString("\r\n")
+            .trimEnd('\r', '\n') + "\r\n"
+    }
+
+    private fun sdpShape(sdp: String): String = sdp.lineSequence()
+        .filter { line ->
+            line.startsWith("m=") || line.startsWith("a=group:") ||
+                line.startsWith("a=setup:") || line.startsWith("a=mid:") ||
+                line.startsWith("a=sctp-") || line.startsWith("a=max-message-size:")
+        }
+        .joinToString(";")
+
     private class SdpCallback(
         private val onSuccess: (SessionDescription) -> Unit,
         private val onFailure: (String) -> Unit,
@@ -386,7 +558,10 @@ class Network24WebRtcPeerManager(
         private const val TAG = "N24-P2P"
         private const val DATA_CHANNEL_LABEL = "network24-segments-v2"
         private const val MAX_MESSAGE_BYTES = 64 * 1024
+
+        private fun shortPeer(peerId: String): String = peerId.takeLast(12)
         private const val MAX_PENDING_ICE_CANDIDATES = 256
+        private const val REMOTE_DESCRIPTION_POLL_MS = 2_000L
         private const val BACKPRESSURE_POLL_MS = 5L
         private val initialized = AtomicBoolean(false)
 

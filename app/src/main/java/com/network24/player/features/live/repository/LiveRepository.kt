@@ -5,6 +5,7 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import com.network24.player.core.cache.memory.CacheKeys as MemKeys
 import com.network24.player.core.cache.memory.CacheTtl
 import com.network24.player.core.cache.memory.MemoryCache
+import com.network24.player.common.models.LoginCredentials
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.entity.CategoryType
 import com.network24.player.core.database.entity.MasterChannelSearchResult
@@ -35,10 +36,11 @@ class LiveRepository(private val context: Context) {
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val r1 = sync.syncLiveCategories(force = true)
+                val credentials = LoginCredentials(server.trim(), username.trim(), password)
+                val r1 = sync.syncLiveCategories(force = true, credentials = credentials)
                 if (r1 is SyncResult.Error) throw Exception(r1.message)
 
-                val r2 = sync.syncLiveChannelsAll(force = true)
+                val r2 = sync.syncLiveChannelsAll(force = true, credentials = credentials)
                 if (r2 is SyncResult.Error) throw Exception(r2.message)
 
                 MemoryCache.clearAll()
@@ -66,7 +68,8 @@ class LiveRepository(private val context: Context) {
             return roomList
         }
 
-        val syncResult = sync.syncLiveCategories(force = true)
+        val credentials = LoginCredentials(server.trim(), username.trim(), password)
+        val syncResult = sync.syncLiveCategories(force = true, credentials = credentials)
         if (syncResult is SyncResult.Error) {
             if (roomList.isNotEmpty()) return roomList
             throw Exception(syncResult.message)
@@ -102,7 +105,8 @@ class LiveRepository(private val context: Context) {
             return roomList
         }
 
-        val syncResult = sync.syncLiveChannelsAll(force = true)
+        val credentials = LoginCredentials(server.trim(), username.trim(), password)
+        val syncResult = sync.syncLiveChannelsAll(force = true, credentials = credentials)
         if (syncResult is SyncResult.Error) {
             if (roomList.isNotEmpty()) return roomList
             throw Exception(syncResult.message)
