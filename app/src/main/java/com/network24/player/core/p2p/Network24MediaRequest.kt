@@ -1,8 +1,6 @@
 package com.network24.player.core.p2p
 
 import java.net.URI
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 /** A credential-free, stream-scoped identity for one exact Media3 byte request. */
@@ -14,11 +12,6 @@ data class Network24MediaRequest(
     val logLabel: String,
 ) {
     companion object {
-        private val sensitiveQueryNames = setOf(
-            "auth", "authorization", "credential", "expires", "hdnts", "key", "pass", "password",
-            "policy", "sig", "signature", "token", "user", "username"
-        )
-
         fun create(streamId: String, uri: String, position: Long, length: Long): Network24MediaRequest {
             require(streamId.isNotBlank() && streamId.length <= 256) { "invalid_stream_id" }
             require(position >= 0L && length >= -1L) { "invalid_media_range" }
@@ -33,13 +26,12 @@ data class Network24MediaRequest(
             val pathIdentity = credentialFreeParts.joinToString("/").ifBlank {
                 parts.lastOrNull().orEmpty().ifBlank { "segment" }
             }
-            val queryIdentity = parsed?.rawQuery.orEmpty().split('&').mapNotNull { pair ->
-                if (pair.isBlank()) return@mapNotNull null
-                val name = pair.substringBefore('=').let(::decode).lowercase()
-                if (name in sensitiveQueryNames) null else pair
-            }.sorted().joinToString("&")
-            val resourceIdentity = if (queryIdentity.isBlank()) pathIdentity else "$pathIdentity?$queryIdentity"
-            val key = sha256("$streamId\n$resourceIdentity\n$position\n$length")
+            // Signed URLs, server directory prefixes and Media3 range metadata
+            // can differ between devices for the same HLS segment. The final
+            // segment filename is the shared content identity; the stream id
+            // scopes it to one channel/origin.
+            val segmentIdentity = parts.lastOrNull().orEmpty().ifBlank { pathIdentity }
+            val key = sha256("$streamId\n$segmentIdentity")
             val logLabel = parts.lastOrNull().orEmpty().replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(96).ifBlank { key.take(12) }
             return Network24MediaRequest(streamId, key, position, length, logLabel)
         }
@@ -59,8 +51,5 @@ data class Network24MediaRequest(
             .digest(bytes).joinToString("") { "%02x".format(it) }
 
         private fun sha256(value: String): String = sha256(value.toByteArray(Charsets.UTF_8))
-        private fun decode(value: String): String = runCatching {
-            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
-        }.getOrDefault(value)
     }
 }
