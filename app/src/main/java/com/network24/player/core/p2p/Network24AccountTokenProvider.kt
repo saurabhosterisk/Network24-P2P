@@ -22,7 +22,7 @@ class Network24AccountTokenProvider(
     @Volatile private var cachedResult: Network24TokenResult? = null
     @Volatile private var expiresAtMs: Long = 0
 
-    override fun getToken(callback: (String?) -> Unit) {
+    override fun getToken(callback: (Network24TokenResult?) -> Unit) {
         if (cachedResult != null && expiresAtMs > System.currentTimeMillis() + 15_000) {
             callback(cachedResult)
             return

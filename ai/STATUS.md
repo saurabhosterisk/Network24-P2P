@@ -24,6 +24,26 @@ Android client + WebRTC P2P media sharing + signaling server.
 
 Find why ICE connection becomes unstable after approximately 40 seconds and switches to HTTP fallback.
 
+## Server investigation result (2026-08-19)
+
+Primary deployment finding: coturn is running, but Network24 TURN issuance is
+disabled (`NETWORK24_TURN_ENABLED=false`) and the server has no configured
+TURN REST secret or TLS listener. Android therefore receives no TURN servers
+and uses STUN-only ICE. This is consistent with a direct path opening and
+later failing under carrier/symmetric NAT, but a two-device ICE candidate-pair
+Logcat capture is still required for final causal proof.
+
+No server configuration was changed because the approved TURN secret,
+certificate, relay range, and firewall policy are missing. See
+`ai/SERVER_LOG.md` for evidence and the safe deployment sequence.
+
+Validation completed:
+
+- Android `:app:testDebugUnitTest :app:assembleDebug`: passed, 12 tests.
+- Backend `npm run typecheck`: passed.
+- Backend `npm test`: 5 suites passed; signaling integration suite failed and
+  needs follow-up before claiming the backend suite is green.
+
 ## Next Steps
 
 1. Verify TURN server and credentials

@@ -31,7 +31,7 @@ data class Network24MediaRequest(
             // segment filename is the shared content identity; the stream id
             // scopes it to one channel/origin.
             val segmentIdentity = parts.lastOrNull().orEmpty().ifBlank { pathIdentity }
-            val key = sha256("$streamId\n$segmentIdentity")
+            val key = sha256("$streamId\n$segmentIdentity\n$position\n$length")
             val logLabel = parts.lastOrNull().orEmpty().replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(96).ifBlank { key.take(12) }
             return Network24MediaRequest(streamId, key, position, length, logLabel)
         }
