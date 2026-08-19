@@ -245,11 +245,8 @@ failure with timestamps.
 
 ## Android Agent Next Action
 
-The Server Agent could not reach an unconfined production host from the
-current namespace, so TURN provisioning and forced-relay evidence are still
-pending. After the server operator enables the approved shared-secret/TLS
-deployment and confirms the token broker returns three TURN URLs with
-short-lived credentials, install the latest debug APK on
+TURN provisioning is now complete on the production host. The remaining
+action is the forced-relay two-device capture. Install the latest debug APK on
 `TANK300000041351` and `RZCT90MRXQM`. Capture both devices for 10 minutes on
 the same channel with:
 

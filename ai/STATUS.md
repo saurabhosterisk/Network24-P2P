@@ -53,10 +53,7 @@ Validation completed:
 
 ## Server Agent execution update (2026-08-19)
 
-The required deployment pass remains blocked by the restricted execution
-namespace: systemd, the host firewall, network interfaces, external DNS, and
-the production API are not accessible. Current configuration remains
-unchanged (`NETWORK24_TURN_ENABLED=false`; coturn has no REST shared-secret
-or TLS 5349 directives). Configuration backups were created outside Git at
-`/root/network24-backups/`; see `ai/SERVER_LOG.md` for hashes and redacted
-evidence. No relay-based WebRTC transport has been proven.
+The production TURN deployment is now active and locally allocation-tested.
+The remaining proof is the two-device forced-relay capture; no Android
+devices are currently connected. See `ai/SERVER_LOG.md` for restart time,
+redacted logs, and backup paths.

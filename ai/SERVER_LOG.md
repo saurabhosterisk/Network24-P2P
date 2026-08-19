@@ -50,6 +50,42 @@ Validation result:
   `relay` candidates, sustained relay DataChannel bytes, or a 10-minute
   relay-based media session.
 
+## Live deployment completed (2026-08-19 11:10 UTC)
+
+After elevated host access became available, the approved TURN deployment was
+applied and backed up before editing:
+
+- Generated one server-only 256-bit shared secret and stored it outside Git
+  at `/root/network24-backups/turn-auth-secret.20260819` with mode 600.
+- Installed coturn TLS material under `/etc/turnserver/`; the private key is
+  mode 640 and readable only by root and the `turnserver` service group,
+  required because coturn runs as that service account.
+- Configured public address `204.12.206.90`, TLS TCP `5349`, realm
+  `p2p.web24.live`, REST shared-secret auth, and relay range `49152-65535`.
+  TCP relay was not disabled.
+- Enabled API TURN issuance with `NETWORK24_TURN_ENABLED=true`, host
+  `p2p.web24.live`, and the matching secret. The TURN-capable backend artifact
+  from the authoritative `/root` source was installed after typecheck and
+  build passed; the previous artifact is backed up at
+  `/root/network24-backups/dist-before-turn-20260819-110915`.
+- Restarted coturn and API at `2026-08-19T11:10:49Z`; coturn, API, signaling,
+  and Nginx all report active.
+- Public TCP/UDP `3478` and TCP/UDP `5349` listeners are present as
+  appropriate. TLS handshake to `p2p.web24.live:5349` verified the expected
+  certificate name.
+- Coturn’s built-in authenticated client completed UDP 3478, TCP 3478, and
+  TLS 5349 allocations and client-to-client probes with 0% packet loss. The
+  API secret equals the coturn secret; credential shape/HMAC, three TURN URLs,
+  and 300-second expiry checks passed without printing credentials.
+- The invalid-credential token request returned HTTP 401 as expected. A valid
+  account request was not run because no approved IPTV test credentials are
+  available in this session.
+
+The required proof of actual relay-based WebRTC segment transport remains
+pending: `adb devices` currently reports no connected devices, so no
+two-device forced-relay capture, `type=relay` candidate-pair evidence, or
+10-minute `source=P2P transport=relay` media-byte evidence exists yet.
+
 ## Result
 
 The primary server-side finding is a TURN deployment mismatch. coturn is
