@@ -105,7 +105,21 @@ Completed on connected devices:
   HTTP `reason=TIMEOUT`. The 45-second advertised-segment timeout build was
   assembled successfully, but the final two-device retest was interrupted when
   Device A disconnected from adb. A different unrecognized `TANK 3` device
-  appeared; it was not modified or used for testing.
+  appeared; it was not modified or used in that interrupted attempt.
+- The replacement pair was then used as the authoritative test pair:
+  `TANK 3` and `SM-S908E`. The new TANK device was installed, logged in with
+  the supplied test account, and opened on the same USA Entertainment stream.
+- A clean 60-second capture initially showed metadata delivery but no binary
+  chunks with the old 64 KiB payload. The framed message was larger than the
+  negotiated 65,536-byte WebRTC message limit.
+- After changing the media payload chunk to 60 KiB, the current pair completed
+  three verified P2P transfers in the capture/follow-up window: 4,720,680 bytes,
+  6,303,828 bytes, and 4,596,788 bytes. The receiver logged
+  `segment_received`, playback logged `source=P2P transport=srflx`, and the
+  sender logged matching validated `upload_ack` events. No immediate ICE or
+  DataChannel failure appeared in the follow-up. TURN was still absent
+  (`turn=0`), so this validates direct srflx operation only; relay/mobile-data
+  validation remains a server-TURN prerequisite.
 
 ## Required runtime capture
 

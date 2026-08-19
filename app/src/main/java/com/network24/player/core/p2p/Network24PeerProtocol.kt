@@ -5,7 +5,10 @@ import java.nio.ByteBuffer
 /** Bounded binary framing for media payloads; JSON remains control-only. */
 object Network24PeerProtocol {
     const val VERSION = 2
-    const val CHUNK_BYTES = 64 * 1024
+    // WebRTC commonly negotiates a 65,536-byte max message size. The binary
+    // frame also carries request ID, segment key, index, and length, so a
+    // 64-KiB media payload would exceed that limit and never reach the peer.
+    const val CHUNK_BYTES = 60 * 1024
     const val MAX_SEGMENT_BYTES = 8 * 1024 * 1024
     const val MAX_CHUNKS = MAX_SEGMENT_BYTES / CHUNK_BYTES
     private const val MAGIC = 0x4e323450 // N24P
