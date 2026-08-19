@@ -107,7 +107,7 @@ class Network24P2pSession(
     }
 
     fun mediaCache(): Network24SegmentCache = cache
-    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(500L, 20_000L)
+    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(500L, 45_000L)
     override fun currentStreamId(): String? = streamId
 
     fun close() {
@@ -133,7 +133,7 @@ class Network24P2pSession(
         // drain a multi-megabyte transfer. A non-advertised peer is only a
         // quick probe; fall back to HTTP promptly when it cannot serve it.
         val requestTimeoutMs = if (advertised.isNotEmpty()) {
-            timeoutMs.coerceIn(500L, 20_000L)
+            timeoutMs.coerceIn(500L, 45_000L)
         } else {
             timeoutMs.coerceIn(500L, 1_500L)
         }
@@ -151,7 +151,7 @@ class Network24P2pSession(
                 break
             }
             val requestId = UUID.randomUUID().toString()
-            val state = PendingRequest(request, requestGeneration, peerId)
+            val state = PendingRequest(request, requestGeneration, peerId, requestId)
             pending[requestId] = state
             val sent = sendControl(peerId, JsonObject().apply {
                 addProperty("protocol", Network24PeerProtocol.VERSION)
@@ -599,6 +599,7 @@ class Network24P2pSession(
         val request: Network24MediaRequest,
         val generation: Long,
         val peerId: String,
+        private val requestId: String,
     ) {
         val latch = CountDownLatch(1)
         @Volatile var bytes: ByteArray? = null
@@ -612,22 +613,39 @@ class Network24P2pSession(
             val size = message.int("total_size") ?: return fail(Network24PeerMissReason.INTEGRITY)
             val count = message.int("chunk_count") ?: return fail(Network24PeerMissReason.INTEGRITY)
             val hash = message.string("sha256")?.takeIf { it.matches(Regex("[0-9a-f]{64}")) } ?: return fail(Network24PeerMissReason.INTEGRITY)
-            if (!assembler.acceptMeta(request.segmentKey, size, count, hash)) fail(Network24PeerMissReason.INTEGRITY)
+            if (!assembler.acceptMeta(request.segmentKey, size, count, hash)) {
+                Log.w(TAG, "event=segment_meta_rejected peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                    "segment=${request.segmentKey.take(12)} size=$size chunks=$count")
+                fail(Network24PeerMissReason.INTEGRITY)
+            } else {
+                Log.i(TAG, "event=segment_meta_received peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                    "segment=${request.segmentKey.take(12)} size=$size chunks=$count")
+            }
         }
 
         @Synchronized
         fun acceptChunk(sender: String, chunk: Network24PeerProtocol.Chunk) {
             if (sender != peerId || completed) return
-            if (!assembler.acceptChunk(chunk)) fail(Network24PeerMissReason.INTEGRITY)
+            if (!assembler.acceptChunk(chunk)) {
+                Log.w(TAG, "event=segment_chunk_rejected peer=${peerId.takeLast(12)} request=${chunk.requestId.take(8)} " +
+                    "segment=${chunk.segmentKey.take(12)} index=${chunk.index}")
+                fail(Network24PeerMissReason.INTEGRITY)
+            }
         }
 
         @Synchronized
         fun complete(sender: String, message: JsonObject) {
             if (sender != peerId || completed || message.string("stream_id") != request.streamId || message.segmentKey() != request.segmentKey) return
-            val result = assembler.complete() ?: return fail(Network24PeerMissReason.INTEGRITY)
+            val result = assembler.complete() ?: run {
+                Log.w(TAG, "event=segment_complete_rejected peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                    "segment=${request.segmentKey.take(12)} reason=missing_chunk_or_checksum")
+                return fail(Network24PeerMissReason.INTEGRITY)
+            }
             bytes = result
             completed = true
             latch.countDown()
+            Log.i(TAG, "event=segment_received peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                "segment=${request.segmentKey.take(12)} bytes=${result.size}")
         }
 
         @Synchronized fun unavailable(sender: String) { if (sender == peerId) fail(Network24PeerMissReason.UNAVAILABLE) }
@@ -637,6 +655,8 @@ class Network24P2pSession(
             completed = true
             latch.countDown()
         }
+
+        private fun requestIdForLog(): String = requestId.take(8)
     }
 
     private data class OutboundTransfer(

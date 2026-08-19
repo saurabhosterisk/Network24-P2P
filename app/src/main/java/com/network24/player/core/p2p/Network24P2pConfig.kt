@@ -8,8 +8,12 @@ data class Network24P2pConfig(
     val heartbeatIntervalMs: Long = 15_000L,
     val reconnectInitialMs: Long = 1_000L,
     val reconnectMaxMs: Long = 30_000L,
-    val segmentRequestTimeoutMs: Long = 15_000L,
-    val uploadDeadlineMs: Long = 20_000L,
+    // A verified multi-megabyte ordered DataChannel transfer can take longer
+    // than one HLS segment interval on mobile links. This deadline is used
+    // only after the peer advertised the requested segment; unknown segments
+    // still use the short probe timeout in Network24P2pSession.
+    val segmentRequestTimeoutMs: Long = 45_000L,
+    val uploadDeadlineMs: Long = 45_000L,
     val maxDataChannelBufferedBytes: Long = 8L * 1024L * 1024L,
     // Binary frames include the request ID, segment key and framing header in
     // addition to the 64 KiB media chunk.

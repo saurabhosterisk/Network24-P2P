@@ -61,6 +61,13 @@ Android client only. No server source or deployment configuration was changed.
   TTL to 60 seconds so late valid ACKs are not discarded immediately.
 - Added focused TURN parser tests and preserved exact byte-range scoping in the
   segment key.
+- Limited the upload executor to the active transfer only; stale concurrent
+  requests are rejected so they take HTTP fallback instead of filling the
+  DataChannel queue.
+- Extended the advertised-segment transfer deadline to 45 seconds while
+  retaining the short 1.5-second probe for non-advertised segments.
+- Added receiver-side logs for accepted metadata, rejected chunks, completion
+  integrity failures, and verified segment assembly.
 
 ## Testing result
 
@@ -70,13 +77,35 @@ Completed locally:
 - `:app:testDebugUnitTest` — passed
 - `:app:assembleDebug` — passed in the latest Android SDK-enabled run
 
-Not completed in this workspace:
+Completed on connected devices:
 
-- `adb` is not installed or available on this host, so connected Android test
-  phones could not be enumerated or installed with `adb install`.
-- No two-device Logcat capture was available, so stable 10-minute P2P playback,
-  relay candidate selection, and the reported 40-second ICE transition remain
-  runtime verification tasks. The issue is not marked fixed on device evidence.
+- Used the Android SDK `platform-tools/adb.exe` to enumerate both phones.
+- Installed the debug APK on both devices after removing the incompatible
+  previously signed `com.network24.player` package; this reset app-local test
+  state and was limited to the test package.
+- Both devices authenticated successfully and reached the channel list.
+- Live Logcat showed signaling, SDP, ICE checking/connected, and DataChannel
+  OPEN on both sides. No TURN was returned: `event=ice_servers count=1
+  turn=0 source=token`.
+- The live capture did not show a completed P2P media transfer. Device A
+  reported `p2pRequests=5 p2pHits=0 p2pMisses=5 p2pTimeouts=5 bytesFromP2p=0`;
+  both devices used HTTP fallback, including `reason=NO_PEER` and
+  `reason=TIMEOUT`.
+- At capture time both devices were in `ChannelListActivity`, not
+  `PlayerActivity`. The old session logs also showed different segment
+  positions and `segment_request cache=miss`, so this is not valid evidence
+  of synchronized same-channel playback. A 10-minute playback result is
+  therefore still pending and the issue is not marked fixed.
+- After the upload-queue change, a clean live run produced one verified transfer:
+  Device A logged `source=P2P ... bytes=4044068` and Device B logged the
+  matching validated `upload_ack`. This proves the Android framing, assembly,
+  checksum path, and ACK path can complete end to end.
+- Follow-up captures still showed large 4–8 MiB transfers logging
+  `upload_complete_queued` without an ACK before the deadline, followed by
+  HTTP `reason=TIMEOUT`. The 45-second advertised-segment timeout build was
+  assembled successfully, but the final two-device retest was interrupted when
+  Device A disconnected from adb. A different unrecognized `TANK 3` device
+  appeared; it was not modified or used for testing.
 
 ## Required runtime capture
 

@@ -13,10 +13,10 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import java.nio.ByteBuffer
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -55,7 +55,11 @@ class Network24WebRtcPeerManager(
     private val closed = AtomicBoolean(false)
     private val signalingHandler = Handler(Looper.getMainLooper())
     private val uploadExecutor = ThreadPoolExecutor(
-        1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(16),
+        // Do not queue behind the active transfer. Media3 can open several
+        // adjacent HLS segments concurrently; a queued transfer starts after
+        // the receiver has already timed out and then only wastes DataChannel
+        // capacity. Rejected requests use the normal HTTP fallback instead.
+        1, 1, 0L, TimeUnit.MILLISECONDS, SynchronousQueue(),
         { runnable -> Thread(runnable, "network24-p2p-upload").apply { isDaemon = true } },
         ThreadPoolExecutor.AbortPolicy()
     )
@@ -349,6 +353,7 @@ class Network24WebRtcPeerManager(
             }
             true
         } catch (_: RejectedExecutionException) {
+            Log.w(TAG, "event=upload_rejected_queue_full peer=${shortPeer(peerId)} request=${requestId.take(8)}")
             false
         }
     }
