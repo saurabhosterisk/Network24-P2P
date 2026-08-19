@@ -120,6 +120,15 @@ Completed on connected devices:
   DataChannel failure appeared in the follow-up. TURN was still absent
   (`turn=0`), so this validates direct srflx operation only; relay/mobile-data
   validation remains a server-TURN prerequisite.
+- A subsequent approximately 10-minute current-pair observation ran from
+  15:39:44 to 15:49:38. The SM-S908E receiver recorded 30 media segments,
+  including 7 verified `source=P2P transport=srflx` segments and 23 HTTP
+  fallback segments. The TANK 3 side continued producing validated upload ACKs;
+  no ICE `FAILED`/`CLOSED` or `webrtc_error` event appeared. One P2P segment
+  took about 48 seconds, confirming that HTTP fallback remains necessary for
+  slow or unavailable transfers. The Android result is therefore: P2P works
+  opportunistically and survives the observed window, but it is not continuous
+  for every segment and is not TURN/mobile-network validated.
 
 ## Required runtime capture
 
