@@ -259,3 +259,43 @@ DataChannel OPEN, `segment_received`, `upload_ack`, increasing
 `source=P2P ... transport=relay` bytes, and bounded HTTP fallback/recovery.
 Do not report success unless the relay pair remains usable and verified P2P
 media bytes increase for the full window.
+
+## Android Studio Codex Handoff — execute after `git pull`
+
+Server TURN deployment is complete and live. Android Studio Codex must now
+perform the client-side forced-relay proof; do not redo server provisioning.
+
+1. Pull the latest `main` branch and confirm the checkout includes this
+   section and the current `ai/SERVER_LOG.md` deployment evidence.
+2. Run the focused validation:
+
+```bash
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+adb devices
+```
+
+3. Install the resulting debug APK on both test devices
+   `TANK300000041351` and `RZCT90MRXQM`. If either device is absent from
+   `adb devices`, stop and report that exact blocker; do not substitute an
+   unapproved device.
+4. Open the same channel on both devices and capture both for at least 10
+   minutes:
+
+```bash
+adb -s TANK300000041351 logcat -c
+adb -s RZCT90MRXQM logcat -c
+adb -s TANK300000041351 logcat -v threadtime -s N24-P2P:V WebRTC:V '*:S' > tank-relay.log
+adb -s RZCT90MRXQM logcat -v threadtime -s N24-P2P:V WebRTC:V '*:S' > sm-relay.log
+```
+
+5. Redact tokens, account credentials, IPTV URLs, device identifiers, and
+   raw candidates before adding evidence to `ai/ANDROID_LOG.md`. The evidence
+   must include `event=ice_servers` with `turn=3`, a `type=relay` candidate,
+   `event=ice_selected_pair ... transport=relay`, DataChannel OPEN,
+   `segment_received`, `upload_ack`, and increasing
+   `source=P2P ... transport=relay` bytes. Record bounded HTTP fallback and
+   recovery if they occur.
+6. Do not claim the issue is fixed unless the selected relay pair stays usable
+   for the full capture and verified P2P media bytes increase. Update
+   `ai/ANDROID_LOG.md` and `ai/STATUS.md`, then commit and push the redacted
+   evidence.
