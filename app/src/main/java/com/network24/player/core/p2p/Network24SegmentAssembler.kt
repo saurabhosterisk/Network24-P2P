@@ -40,6 +40,9 @@ class Network24SegmentAssembler(
     }
 
     @Synchronized
+    fun chunkCount(): Int = chunkCount
+
+    @Synchronized
     fun complete(): ByteArray? {
         if (chunkCount == 0 || chunks.size != chunkCount) return null
         val output = ByteArrayOutputStream(totalSize)

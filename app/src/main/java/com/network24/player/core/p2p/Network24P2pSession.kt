@@ -46,7 +46,7 @@ class Network24P2pSession(
     private val webrtc: Network24WebRtcPeerManager by lazy {
         Network24WebRtcPeerManager(
             appContext, signaling, webRtcListener, config.iceServers,
-            config.uploadDeadlineMs.coerceIn(500L, 30_000L),
+            config.uploadDeadlineMs.coerceIn(500L, 60_000L),
             config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
         )
     }
@@ -62,6 +62,7 @@ class Network24P2pSession(
     private val connectionStates = ConcurrentHashMap<String, String>()
     private val connectionRoles = ConcurrentHashMap<String, MutableSet<String>>()
     private val connectionTransports = ConcurrentHashMap<String, String>()
+    private val peerCooldownUntilMs = ConcurrentHashMap<String, Long>()
 
     fun start() {
         if (!config.enabled) return
@@ -93,6 +94,7 @@ class Network24P2pSession(
         connectionStates.clear()
         connectionRoles.clear()
         connectionTransports.clear()
+        peerCooldownUntilMs.clear()
         signaling.leaveStream()
 
         streamId = normalized
@@ -122,7 +124,19 @@ class Network24P2pSession(
         val room = streamId ?: return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_SESSION)
         val requestGeneration = generation.get()
         if (request.streamId != room) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.SWITCHED)
-        val openPeers = webrtc.openPeerIds().filter { peer -> discoveredPeers.any { it.peerId == peer } }
+        val nowMs = System.currentTimeMillis()
+        val openPeers = webrtc.openPeerIds()
+            .filter { peer -> discoveredPeers.any { it.peerId == peer } }
+            .filter { peer ->
+                val cooldownUntil = peerCooldownUntilMs[peer] ?: 0L
+                if (cooldownUntil > nowMs) {
+                    Log.i(TAG, "event=peer_skipped peer=${shortPeer(peer)} reason=cooldown remaining_ms=${cooldownUntil - nowMs}")
+                    false
+                } else {
+                    peerCooldownUntilMs.remove(peer, cooldownUntil)
+                    true
+                }
+            }
         if (openPeers.isEmpty()) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_PEER)
 
         val currentStats = stats.get()
@@ -162,6 +176,7 @@ class Network24P2pSession(
             })
             if (!sent) {
                 pending.remove(requestId)
+                markPeerFailure(peerId, Network24PeerMissReason.SEND_FAILED)
                 finalReason = Network24PeerMissReason.SEND_FAILED
                 continue
             }
@@ -182,10 +197,16 @@ class Network24P2pSession(
             }
             if (!state.completed) {
                 sendCancel(peerId, room, requestId, request.segmentKey)
+                markPeerFailure(peerId, Network24PeerMissReason.TIMEOUT)
                 finalReason = Network24PeerMissReason.TIMEOUT
                 break
             }
             finalReason = state.failure ?: Network24PeerMissReason.UNAVAILABLE
+            if (finalReason == Network24PeerMissReason.TIMEOUT || finalReason == Network24PeerMissReason.INTEGRITY ||
+                finalReason == Network24PeerMissReason.SEND_FAILED
+            ) {
+                markPeerFailure(peerId, finalReason)
+            }
         }
 
         if (finalReason == Network24PeerMissReason.TIMEOUT) currentStats.p2pTimeouts.incrementAndGet()
@@ -204,6 +225,7 @@ class Network24P2pSession(
         currentStats.segmentsFromP2p.incrementAndGet()
         currentStats.p2pHits.incrementAndGet()
         if (hit.transport == "relay") currentStats.turnBytes.addAndGet(bytes)
+        peerCooldownUntilMs.remove(hit.peerId)
         markRole(hit.peerId, "downloader")
         sendControl(hit.peerId, JsonObject().apply {
             addProperty("protocol", Network24PeerProtocol.VERSION)
@@ -298,6 +320,7 @@ class Network24P2pSession(
                 connectionRoles.remove(peer)
                 connectionTransports.remove(peer)
                 advertisedSegments.remove(peer)
+                peerCooldownUntilMs.remove(peer)
             }
             (current - old).forEach { Log.i(TAG, "event=peer_discovered stream=${safeLog(displayStreamId)} peer=${shortPeer(it)}") }
             current.forEach { connectionStates.putIfAbsent(it, "connecting") }
@@ -351,6 +374,9 @@ class Network24P2pSession(
         override fun onPeerClosed(peerId: String) {
             connectionStates[peerId] = "disconnected"
             cancelPendingForPeer(peerId)
+            // A closed DataChannel cannot be reused. Remove its PeerConnection
+            // so the next peer-list refresh creates a fresh offer/ICE attempt.
+            webrtc.drop(peerId)
             publishTelemetry()
             signaling.requestPeers()
         }
@@ -537,6 +563,15 @@ class Network24P2pSession(
         (connectionRoles.putIfAbsent(peerId, created) ?: created).add(role)
     }
 
+    private fun markPeerFailure(peerId: String, reason: Network24PeerMissReason) {
+        if (reason != Network24PeerMissReason.TIMEOUT && reason != Network24PeerMissReason.INTEGRITY &&
+            reason != Network24PeerMissReason.SEND_FAILED
+        ) return
+        val until = System.currentTimeMillis() + PEER_FAILURE_COOLDOWN_MS
+        peerCooldownUntilMs[peerId] = until
+        Log.w(TAG, "event=peer_cooldown peer=${shortPeer(peerId)} reason=$reason duration_ms=$PEER_FAILURE_COOLDOWN_MS")
+    }
+
     private fun publishTelemetry() {
         val room = streamId ?: return
         val values = stats.get()
@@ -625,11 +660,18 @@ class Network24P2pSession(
 
         @Synchronized
         fun acceptChunk(sender: String, chunk: Network24PeerProtocol.Chunk) {
-            if (sender != peerId || completed) return
+            if (sender != peerId || completed || chunk.requestId != requestId || chunk.segmentKey != request.segmentKey) {
+                Log.w(TAG, "event=segment_chunk_rejected peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                    "segment=${request.segmentKey.take(12)} reason=request_or_segment_mismatch")
+                return fail(Network24PeerMissReason.INTEGRITY)
+            }
             if (!assembler.acceptChunk(chunk)) {
                 Log.w(TAG, "event=segment_chunk_rejected peer=${peerId.takeLast(12)} request=${chunk.requestId.take(8)} " +
                     "segment=${chunk.segmentKey.take(12)} index=${chunk.index}")
                 fail(Network24PeerMissReason.INTEGRITY)
+            } else if (chunk.index == 0 || chunk.index == assembler.chunkCount() - 1 || chunk.index % 8 == 0) {
+                Log.i(TAG, "event=segment_chunk_received peer=${peerId.takeLast(12)} request=${requestIdForLog()} " +
+                    "segment=${request.segmentKey.take(12)} index=${chunk.index + 1}/${assembler.chunkCount()} bytes=${chunk.bytes.size}")
             }
         }
 
@@ -703,6 +745,7 @@ class Network24P2pSession(
         // Keep the transfer record until the receiver has consumed and verified
         // the segment. The old 5-second TTL discarded valid late ACKs.
         private const val OUTBOUND_TTL_MS = 60_000L
+        private const val PEER_FAILURE_COOLDOWN_MS = 30_000L
 
         private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString

@@ -186,4 +186,58 @@ returned to READY.
   and after reconnect, and no crash was logged.
 - TANK 3 continued to show valid P2P signaling/ICE transitions and HTTP
   fallback events. The current server still provided no TURN credentials, so
-  this test does not validate relay connectivity.
+this test does not validate relay connectivity.
+
+## Remaining transport stability pass (2026-08-19)
+
+### Evidence from current devices
+
+On `TANK300000041351` (TANK 3) and `RZCT90MRXQM` (SM-S908E), the failing
+direct transfer showed a 6.0 MiB upload queued almost immediately while the
+receiver only accepted metadata. The connection later reached
+`DISCONNECTED/FAILED` near the previously observed 40-second point. The
+selected pair was `srflx/srflx`; token logs continued to report
+`event=ice_servers count=1 turn=0`.
+
+After the transport changes, a 4.76 MiB transfer progressed in bounded batches
+with DataChannel `bufferedAmount` around 580 KiB instead of a 6 MiB burst. The
+direct path measured roughly 100–120 KiB/s and could not finish that segment in
+the 45-second media request window, so HTTP fallback was selected. During that
+window ICE stayed connected; this confirms the burst was reduced, while also
+confirming that the no-TURN direct path is throughput-limited.
+
+### Android changes
+
+- Reduced the default WebRTC send queue limit to 512 KiB so mobile SCTP does
+  not receive an unbounded multi-megabyte burst.
+- Corrected the session wiring so the configured 45-second upload deadline is
+  not silently capped at 30 seconds.
+- Added an 8-second bounded recovery action after prolonged ICE
+  `DISCONNECTED`; the dead PeerConnection is dropped and the existing
+  signaling peer refresh creates a new offer/ICE attempt.
+- Closed DataChannels now remove their PeerConnection and cancel uploads for
+  that peer, preventing stale connections from blocking reconnection.
+- Receiver chunk handling now validates both `request_id` and `segment_key`
+  before assembly and logs bounded chunk progress.
+- Added a 30-second per-peer failure cooldown after timeout, integrity, or send
+  failure. This keeps slow peers from blocking Media3 repeatedly while normal
+  HTTP fallback continues immediately.
+- Added receiver-side `segment_chunk_received` diagnostics; no media is
+  reported as P2P until complete size and SHA-256 validation succeeds.
+
+### Verification
+
+- `:app:testDebugUnitTest` — passed.
+- `:app:assembleDebug` — passed.
+- Final debug APK installed on both current devices; both launched without an
+  app crash.
+- The adaptive live run preserved HTTP playback and bounded fallback. It did
+  not prove a new completed P2P segment because the two live viewers were not
+  requesting the same cached segment at the same time.
+
+### Remaining external prerequisite
+
+This Android pass cannot make a direct `srflx` path equivalent to TURN. The
+server still returns no TURN credentials (`turn=0`), so Wi-Fi/mobile and
+mobile/mobile relay stability remain blocked on the server agent's approved
+coturn shared-secret/TLS deployment and a forced-relay test.

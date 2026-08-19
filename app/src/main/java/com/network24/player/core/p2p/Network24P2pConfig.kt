@@ -14,7 +14,10 @@ data class Network24P2pConfig(
     // still use the short probe timeout in Network24P2pSession.
     val segmentRequestTimeoutMs: Long = 45_000L,
     val uploadDeadlineMs: Long = 45_000L,
-    val maxDataChannelBufferedBytes: Long = 8L * 1024L * 1024L,
+    // Keep the native SCTP queue small enough for mobile peers to drain. A
+    // multi-megabyte burst can report OPEN while the receiver is already
+    // timing out or the ICE path is about to disappear.
+    val maxDataChannelBufferedBytes: Long = 512L * 1024L,
     // Binary frames include the request ID, segment key and framing header in
     // addition to the 64 KiB media chunk.
     val maxMessageBytes: Int = 128 * 1024,
