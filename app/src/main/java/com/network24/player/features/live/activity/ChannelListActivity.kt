@@ -287,6 +287,16 @@ class ChannelListActivity : BaseActivity() {
             }
         }
 
+        PlayerManager.setRecoveryRecoveredListener {
+            runOnUiThread {
+                binding.txtPlayerError.visibility =
+                    View.GONE
+
+                binding.btnReportChannel.visibility =
+                    View.GONE
+            }
+        }
+
 
 
 
@@ -1885,6 +1895,14 @@ class ChannelListActivity : BaseActivity() {
 
 
         PlayerManager.setRecoveryFailedListener(
+            null
+        )
+
+        PlayerManager.setRecoveryStatusListener(
+            null
+        )
+
+        PlayerManager.setRecoveryRecoveredListener(
             null
         )
 

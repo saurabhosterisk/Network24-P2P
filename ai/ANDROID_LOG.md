@@ -148,3 +148,42 @@ TURN once the server agent provisions TURN. Verify `event=ice_servers`,
 `event=ice_gathering`, `event=ice_connection`, `event=ice_selected_pair`,
 `event=datachannel`, `event=upload_ack`, `source=P2P`, and bounded
 `source=HTTP reason=...` fallback events.
+
+## Reconnect overlay fix (2026-08-19)
+
+### Files inspected
+
+- `app/src/main/java/com/network24/player/features/player/manager/PlayerManager.kt`
+- `app/src/main/java/com/network24/player/features/live/activity/ChannelListActivity.kt`
+
+### Finding and evidence
+
+TANK 3 showed `Network connection lost. Reconnecting... Attempt 1/5` while
+the player continued rendering and the hybrid data source continued using HTTP
+fallback. `ChannelListActivity` received a recovery-status callback but had no
+positive recovery callback. Its local player listener was also not attached to
+the shared player, so the stale overlay could remain visible after playback
+returned to READY.
+
+### Change made
+
+- `PlayerManager` now treats `Player.STATE_READY` as recovery success without
+  requiring `isPlaying == true`.
+- When a retry was active, it emits a recovered callback, clears the recovery
+  attempt state, and logs `Playback recovered; clearing retry state`.
+- `ChannelListActivity` hides the stale error/report UI on that callback and
+  unregisters all recovery callbacks in `onDestroy()`.
+- HTTP fallback and failure UI were preserved.
+
+### Testing result
+
+- `:app:compileDebugKotlin` — passed.
+- `:app:assembleDebug` — passed.
+- Installed the resulting APK on the current devices `TANK300000041351`
+  (TANK 3) and `RZCT90MRXQM` (SM-S908E).
+- Both devices opened `USA | ABC`; after a short TANK 3 Wi-Fi interruption,
+  the player remained on `USA | ABC`, `txtPlayerError` was absent both during
+  and after reconnect, and no crash was logged.
+- TANK 3 continued to show valid P2P signaling/ICE transitions and HTTP
+  fallback events. The current server still provided no TURN credentials, so
+  this test does not validate relay connectivity.

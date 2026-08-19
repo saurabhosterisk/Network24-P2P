@@ -146,6 +146,9 @@ object PlayerManager {
     private var recoveryStatusListener:
             ((Int) -> Unit)? = null
 
+    private var recoveryRecoveredListener:
+            (() -> Unit)? = null
+
 
 
     private val recoveryFailedListeners =
@@ -516,9 +519,13 @@ object PlayerManager {
 
 
                                     if (
-                                        playbackState == Player.STATE_READY &&
-                                        exoPlayer?.isPlaying == true
+                                        playbackState == Player.STATE_READY
                                     ) {
+
+                                        val wasRecovering =
+                                            liveRecoveryStartedAtMs != 0L ||
+                                                    liveRecoveryAttempt > 0 ||
+                                                    liveRecoveryJob?.isActive == true
 
                                         hasStartedPlaying = true
                                         playbackActuallyStarted = true
@@ -528,6 +535,15 @@ object PlayerManager {
                                         // showing an earlier error/retry state.
                                         lastError = null
                                         streamErrorType = StreamErrorType.NONE
+
+                                        if (wasRecovering) {
+                                            android.util.Log.d(
+                                                "N24_RECOVERY",
+                                                "Playback recovered; clearing retry state"
+                                            )
+                                            recoveryRecoveredListener?.invoke()
+                                        }
+
                                         cancelLiveRecovery()
                                     }
 
@@ -1311,6 +1327,12 @@ object PlayerManager {
         listener: ((Int) -> Unit)?
     ) {
         recoveryStatusListener = listener
+    }
+
+    fun setRecoveryRecoveredListener(
+        listener: (() -> Unit)?
+    ) {
+        recoveryRecoveredListener = listener
     }
 
 
