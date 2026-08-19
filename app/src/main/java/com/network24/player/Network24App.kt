@@ -19,6 +19,7 @@ import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.core.compat.Network24DeviceCompatibility
 import com.network24.player.core.p2p.Network24P2pConfig
 import com.network24.player.core.p2p.Network24P2pSession
 
@@ -111,11 +112,16 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     private lateinit var prefs: PreferenceManager
 
+    private val legacyTv: Boolean by lazy { Network24DeviceCompatibility.isLegacyTv(this) }
+
     /** P2P is available only after the existing IPTV account has logged in; HTTP remains fallback. */
     val p2pSession: Network24P2pSession by lazy {
         // TURN is delivered as a short-lived credential with the authenticated token.
         // Keep only the public STUN default here; HTTP playback remains fallback.
-        Network24P2pSession(this, Network24P2pConfig(enabled = true)).also { it.start() }
+        Network24P2pSession(
+            this,
+            Network24P2pConfig(enabled = Network24DeviceCompatibility.supportsP2p())
+        ).also { it.start() }
     }
 
     override fun onCreate() {
@@ -123,12 +129,16 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         prefs = PreferenceManager(this)
         registerActivityLifecycleCallbacks(this)
 
-        // Phones ke liye push notifications (topic) enable
-        FirebaseMessaging.getInstance().subscribeToTopic("channel_down_alerts")
-            .addOnSuccessListener { Log.d("FCM", "Subscribed: channel_down_alerts") }
-            .addOnFailureListener { e -> Log.e("FCM", "Subscribe failed", e) }
+        if (!legacyTv) {
+            // Phones ke liye push notifications (topic) enable
+            FirebaseMessaging.getInstance().subscribeToTopic("channel_down_alerts")
+                .addOnSuccessListener { Log.d("FCM", "Subscribed: channel_down_alerts") }
+                .addOnFailureListener { e -> Log.e("FCM", "Subscribe failed", e) }
+        } else {
+            Log.i("Network24App", "Legacy TV detected; using HTTP playback and skipping mobile push setup")
+        }
 
-        initializeApp()
+        if (!legacyTv) initializeApp()
     }
 
     private fun initializeApp() {

@@ -13,7 +13,9 @@ android {
     defaultConfig {
         applicationId = "com.network24.player"
 
-        minSdk = 23
+        // First-generation Fire TV/Stick devices run API 21/22. Keep the
+        // APK installable there; P2P is gated off at runtime on API < 23.
+        minSdk = 21
         targetSdk = 35
 
         versionCode = 25
@@ -145,7 +147,6 @@ dependencies {
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore.ktx)
-    implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.messaging.ktx)
 
 

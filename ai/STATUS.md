@@ -16,6 +16,7 @@ Android client + WebRTC P2P media sharing + signaling server.
 ✅ Runtime TURN delivery and relay-only ICE policy
 ✅ Sustained relay P2P media transfer baseline with bounded HTTP fallback
 ✅ Stale segment advertisements removed on unavailable/timeout; blind misses suppressed
+✅ Legacy TV install compatibility (API 21+) with HTTP-only fallback below API 23
 
 ## Pending
 

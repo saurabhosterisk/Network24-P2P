@@ -374,3 +374,14 @@ When a peer cannot serve an advertised segment, the exact advertisement is
 removed immediately. The client also avoids blind requests for segments that
 no peer advertised, preventing normal live-playback skew from inflating P2P
 failures and triggering unnecessary peer cooldowns.
+
+## Legacy TV compatibility (2026-08-19)
+
+The Samsung `com.n24player.server` comparison showed `minSdk=17` and
+`targetSdk=27`, while Network24 was advertising `minSdk=23`. First-generation
+Fire TV/Stick devices on API 21/22 could therefore reject the Network24 APK
+before runtime. The app install floor is now API 21, the unused API-23-only
+Firebase Auth dependency was removed, and P2P/WebRTC is gated off below API 23.
+Legacy TV playback uses the existing HTTP Media3 path; modern phones retain
+the current P2P session. Firebase mobile push/alert initialization is skipped
+on legacy TV to avoid assuming Google mobile services are present.
