@@ -234,7 +234,7 @@ confirming that the no-TURN direct path is throughput-limited.
   not prove a new completed P2P segment because the two live viewers were not
   requesting the same cached segment at the same time.
 
-### Remaining external prerequisite
+### Historical remaining external prerequisite
 
 This earlier Android pass could not make a direct `srflx` path equivalent to
 TURN. The server deployment is now active and returns TURN credentials, but
@@ -268,8 +268,56 @@ fresh filtered Logcat windows. Redacted unique evidence included:
   sender capture contained two `FAILED` matches during the window and also
   continued HTTP playback.
 
-This is not a forced-relay success. TURN credentials were delivered, but the
-current client/test network selected a direct pair. The required relay proof
-(`type=relay`, selected relay pair, and sustained `source=P2P transport=relay`)
-is still pending. No credentials, account names, raw candidates, URLs, or
-device identifiers were added to this evidence.
+This historical capture was not a forced-relay success. TURN credentials were
+delivered, but the then-current client/test network selected a direct pair.
+No credentials, account names, raw candidates, URLs, or device identifiers
+were added to this evidence.
+
+## Forced-relay policy fix and verification (2026-08-19)
+
+### Root cause fixed
+
+The Android peer manager supplied TURN servers to WebRTC but used the default
+ICE transport policy `ALL`. On a healthy direct path WebRTC therefore preferred
+`srflx`, leaving the session exposed to the previously observed NAT mapping
+expiry. The runtime TURN credentials were valid; the client simply did not
+require relay transport.
+
+### Android change
+
+- Added `forceRelayWhenTurnAvailable`, enabled by default.
+- When the authenticated token contains a `turn:` or `turns:` server, new
+  PeerConnections use `PeerConnection.IceTransportsType.RELAY`.
+- Existing peers are dropped and recreated if the active policy changes.
+- If the token has no TURN server, the manager retains `ALL` so HTTP playback
+  and opportunistic direct P2P remain available during a broker outage.
+- TURN credentials remain short-lived runtime values; none are embedded in the
+  APK or logs.
+
+### Verification
+
+Focused tests and build passed:
+
+```text
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+```
+
+On both approved devices playing the same `USA | ACCUWEATHER` channel, fresh
+redacted logs showed:
+
+```text
+event=ice_servers count=4 turn=3 source=token
+event=ice_servers_updated count=4 turn=3 ice_policy=RELAY
+event=peer_connection_create ... ice_policy=RELAY
+event=ice_candidate ... type=relay
+event=ice_selected_pair ... local_type=relay remote_type=relay transport=relay
+event=datachannel ... state=OPEN
+```
+
+The relay stability window ran for more than 10 minutes. The receiver logged
+40 verified `segment_received` and `source=P2P ... transport=relay` events;
+the sender logged 40 matching `upload_ack ... transport=relay` events. No ICE
+`FAILED`, `DISCONNECTED`, or `CLOSED` event appeared during the relay window.
+Slow or unavailable segments used bounded HTTP fallback as designed. This
+closes the reported direct-srflx 40-second failure path; broader mobile/mobile
+matrix testing remains normal follow-up validation.

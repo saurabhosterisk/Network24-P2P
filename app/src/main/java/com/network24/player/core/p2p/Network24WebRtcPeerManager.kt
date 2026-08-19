@@ -33,6 +33,7 @@ class Network24WebRtcPeerManager(
     private val iceServers: List<Network24IceServer> = emptyList(),
     private val uploadDeadlineMs: Long = 1_200L,
     private val maxBufferedAmount: Long = 256L * 1024L,
+    private val forceRelayWhenTurnAvailable: Boolean = true,
 ) {
     interface Listener {
         fun onPeerReady(peerId: String, channel: DataChannel) {}
@@ -45,6 +46,7 @@ class Network24WebRtcPeerManager(
 
     private val factory: PeerConnectionFactory
     @Volatile private var activeIceServers: List<Network24IceServer> = iceServers.toList()
+    @Volatile private var relayOnly = Network24IceTransportPolicy.relayOnly(forceRelayWhenTurnAvailable, activeIceServers)
     private val peers = ConcurrentHashMap<String, PeerConnection>()
     private val channels = ConcurrentHashMap<String, DataChannel>()
     private val remoteDescriptionSet = ConcurrentHashMap<String, Boolean>()
@@ -100,8 +102,13 @@ class Network24WebRtcPeerManager(
                 server.password?.takeIf { it.isNotBlank() }?.let { setPassword(it) }
             }.createIceServer()
         }
-        Log.i(TAG, "event=peer_connection_create peer=${shortPeer(peerId)} initiator=$initiator iceServers=${rtcServers.size}")
-        val connection = factory.createPeerConnection(rtcServers, observer(peerId))
+        val icePolicy = if (relayOnly) PeerConnection.IceTransportsType.RELAY else PeerConnection.IceTransportsType.ALL
+        Log.i(TAG, "event=peer_connection_create peer=${shortPeer(peerId)} initiator=$initiator " +
+            "iceServers=${rtcServers.size} ice_policy=$icePolicy")
+        val rtcConfiguration = PeerConnection.RTCConfiguration(rtcServers).apply {
+            iceTransportsType = icePolicy
+        }
+        val connection = factory.createPeerConnection(rtcConfiguration, observer(peerId))
         if (connection == null) {
             Log.e(TAG, "event=peer_connection_create_failed peer=${shortPeer(peerId)}")
             listener.onPeerError(peerId, "peer_connection_create_failed")
@@ -139,13 +146,22 @@ class Network24WebRtcPeerManager(
         }
     }
 
-    /** Applies token-broker ICE servers to connections created after authentication. */
+    /** Applies token-broker ICE servers and recreates peers when transport policy changes. */
     fun updateIceServers(servers: List<Network24IceServer>) {
         if (closed.get()) return
-        activeIceServers = servers.distinctBy { Triple(it.urls, it.username, it.password) }
+        val nextServers = servers.distinctBy { Triple(it.urls, it.username, it.password) }
+        val nextRelayOnly = Network24IceTransportPolicy.relayOnly(forceRelayWhenTurnAvailable, nextServers)
+        val policyChanged = relayOnly != nextRelayOnly
+        activeIceServers = nextServers
+        relayOnly = nextRelayOnly
         val turnCount = activeIceServers.count { it.urls.startsWith("turn:") || it.urls.startsWith("turns:") }
         Log.i(TAG, "event=ice_servers_updated count=${activeIceServers.size} " +
-            "turn=$turnCount")
+            "turn=$turnCount ice_policy=${if (relayOnly) "RELAY" else "ALL"}")
+        if (policyChanged && peers.isNotEmpty()) {
+            Log.i(TAG, "event=ice_policy_changed action=drop_existing " +
+                "ice_policy=${if (relayOnly) "RELAY" else "ALL"}")
+            dropAll()
+        }
     }
 
     fun handleSignal(type: String, payload: JsonObject) {

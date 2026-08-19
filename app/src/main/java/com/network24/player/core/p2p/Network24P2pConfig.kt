@@ -1,6 +1,6 @@
 package com.network24.player.core.p2p
 
-/** Runtime controls for the opportunistic P2P layer. P2P is disabled by default. */
+/** Runtime controls for the P2P layer. P2P is disabled by default. */
 data class Network24P2pConfig(
     val enabled: Boolean = false,
     val websocketUrl: String = "wss://p2p.web24.live/ws",
@@ -21,6 +21,10 @@ data class Network24P2pConfig(
     // Binary frames include the request ID, segment key and framing header in
     // addition to the 64 KiB media chunk.
     val maxMessageBytes: Int = 128 * 1024,
+    // Use TURN as the selected transport whenever the authenticated token
+    // provides TURN servers. If the broker has no TURN response, retain the
+    // STUN/direct fallback so playback remains available.
+    val forceRelayWhenTurnAvailable: Boolean = true,
     val iceServers: List<Network24IceServer> = listOf(Network24IceServer("stun:stun.l.google.com:19302"))
 )
 
@@ -29,6 +33,14 @@ data class Network24IceServer(
     val username: String? = null,
     val password: String? = null,
 )
+
+internal object Network24IceTransportPolicy {
+    fun relayOnly(forceRelayWhenTurnAvailable: Boolean, servers: List<Network24IceServer>): Boolean =
+        forceRelayWhenTurnAvailable && servers.any {
+            it.urls.startsWith("turn:", ignoreCase = true) ||
+                it.urls.startsWith("turns:", ignoreCase = true)
+        }
+}
 
 /** Short-lived authentication result returned by the P2P token broker. */
 data class Network24TokenResult(

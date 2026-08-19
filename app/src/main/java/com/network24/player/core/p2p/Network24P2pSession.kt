@@ -48,6 +48,7 @@ class Network24P2pSession(
             appContext, signaling, webRtcListener, config.iceServers,
             config.uploadDeadlineMs.coerceIn(500L, 60_000L),
             config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
+            config.forceRelayWhenTurnAvailable,
         )
     }
 
@@ -276,6 +277,7 @@ class Network24P2pSession(
             val merged = (config.iceServers + runtimeIceServers)
                 .distinctBy { Triple(it.urls, it.username, it.password) }
             Log.i(TAG, "event=ice_servers count=${merged.size} turn=${iceServers.size} source=token")
+            webrtc.updateIceServers(merged)
         }
 
         override fun onLocalPeerId(peerId: String) {
