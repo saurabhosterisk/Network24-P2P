@@ -15,6 +15,7 @@ Android client + WebRTC P2P media sharing + signaling server.
 ✅ Segment cache hit flow
 ✅ Runtime TURN delivery and relay-only ICE policy
 ✅ Sustained relay P2P media transfer baseline with bounded HTTP fallback
+✅ Stale segment advertisements removed on unavailable/timeout; blind misses suppressed
 
 ## Pending
 

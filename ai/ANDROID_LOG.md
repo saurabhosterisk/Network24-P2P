@@ -65,7 +65,7 @@ Android client only. No server source or deployment configuration was changed.
   requests are rejected so they take HTTP fallback instead of filling the
   DataChannel queue.
 - Extended the advertised-segment transfer deadline to 45 seconds while
-  retaining the short 1.5-second probe for non-advertised segments.
+  retaining bounded HTTP fallback for non-advertised segments.
 - Added receiver-side logs for accepted metadata, rejected chunks, completion
   integrity failures, and verified segment assembly.
 
@@ -218,7 +218,7 @@ confirming that the no-TURN direct path is throughput-limited.
   that peer, preventing stale connections from blocking reconnection.
 - Receiver chunk handling now validates both `request_id` and `segment_key`
   before assembly and logs bounded chunk progress.
-- Added a 30-second per-peer failure cooldown after timeout, integrity, or send
+- Added a short per-peer failure cooldown after timeout, integrity, or send
   failure. This keeps slow peers from blocking Media3 repeatedly while normal
   HTTP fallback continues immediately.
 - Added receiver-side `segment_chunk_received` diagnostics; no media is
@@ -366,3 +366,11 @@ failure/cooldown history. Equal unknown candidates use stable per-device
 affinity so all customers do not select the same first four room entries.
 Failed or disconnected peers are removed and can be replaced on the next peer
 refresh. The build and focused unit tests passed after this change.
+
+## Stale segment advertisements (2026-08-19)
+
+`segment_have` is now treated as a hint rather than a durable cache guarantee.
+When a peer cannot serve an advertised segment, the exact advertisement is
+removed immediately. The client also avoids blind requests for segments that
+no peer advertised, preventing normal live-playback skew from inflating P2P
+failures and triggering unnecessary peer cooldowns.

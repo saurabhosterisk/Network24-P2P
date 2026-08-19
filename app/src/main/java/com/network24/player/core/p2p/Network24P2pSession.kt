@@ -146,12 +146,15 @@ class Network24P2pSession(
         if (openPeers.isEmpty()) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_PEER)
 
         val currentStats = stats.get()
-        currentStats.p2pRequests.incrementAndGet()
         val advertised = openPeers.filter { advertisedSegments[it]?.contains(request.segmentKey) == true }
-        val orderedPeers = (advertised + openPeers).distinct().take(MAX_DOWNLOAD_PEERS)
+        // Do not blindly probe a peer that has not advertised this exact
+        // segment. On a live stream that turns normal playback skew into a
+        // large stream of guaranteed misses and can starve the real transfers.
+        if (advertised.isEmpty()) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.NO_PEER)
+        currentStats.p2pRequests.incrementAndGet()
+        val orderedPeers = advertised.distinct().take(MAX_DOWNLOAD_PEERS)
         // A peer that explicitly advertised this segment gets enough time to
-        // drain a multi-megabyte transfer. A non-advertised peer is only a
-        // quick probe; fall back to HTTP promptly when it cannot serve it.
+        // drain a multi-megabyte transfer; non-advertised peers are skipped.
         val requestTimeoutMs = if (advertised.isNotEmpty()) {
             timeoutMs.coerceIn(500L, 45_000L)
         } else {
@@ -208,6 +211,16 @@ class Network24P2pSession(
                 break
             }
             finalReason = state.failure ?: Network24PeerMissReason.UNAVAILABLE
+            if (finalReason == Network24PeerMissReason.UNAVAILABLE ||
+                finalReason == Network24PeerMissReason.TIMEOUT ||
+                finalReason == Network24PeerMissReason.INTEGRITY ||
+                finalReason == Network24PeerMissReason.SEND_FAILED
+            ) {
+                // A have message is only a hint. Remove it as soon as the
+                // peer cannot serve the segment so an expired/evicted cache
+                // entry cannot cause repeated long waits.
+                advertisedSegments[peerId]?.remove(request.segmentKey)
+            }
             if (finalReason == Network24PeerMissReason.TIMEOUT || finalReason == Network24PeerMissReason.INTEGRITY ||
                 finalReason == Network24PeerMissReason.SEND_FAILED
             ) {
@@ -770,6 +783,7 @@ class Network24P2pSession(
             while (values.size > MAX_ADVERTISED_SEGMENTS) values.remove(values.first())
         }
         @Synchronized fun contains(value: String): Boolean = values.contains(value)
+        @Synchronized fun remove(value: String): Boolean = values.remove(value)
     }
 
     private class SessionStats {
@@ -802,7 +816,9 @@ class Network24P2pSession(
         // Keep the transfer record until the receiver has consumed and verified
         // the segment. The old 5-second TTL discarded valid late ACKs.
         private const val OUTBOUND_TTL_MS = 60_000L
-        private const val PEER_FAILURE_COOLDOWN_MS = 30_000L
+        // A failed segment advertisement should not suppress an otherwise
+        // healthy peer for an entire live segment window.
+        private const val PEER_FAILURE_COOLDOWN_MS = 5_000L
 
         private fun JsonObject.string(name: String): String? = get(name)?.takeUnless { it.isJsonNull }
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
