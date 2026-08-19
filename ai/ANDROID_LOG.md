@@ -129,6 +129,13 @@ Completed on connected devices:
   slow or unavailable transfers. The Android result is therefore: P2P works
   opportunistically and survives the observed window, but it is not continuous
   for every segment and is not TURN/mobile-network validated.
+- An alternate-channel test was run on `USA | ABC` (stream `1116`). ICE stayed
+  connected and the sender accepted a 7,705,744-byte segment as 126 safe
+  60-KiB chunks, but the transfer did not complete within the advertised
+  45-second deadline. The receiver correctly used
+  `source=HTTP reason=TIMEOUT`; no false P2P success was reported. This
+  confirms the fallback path on a different channel and also shows that very
+  large segments remain throughput-sensitive on the direct srflx path.
 
 ## Required runtime capture
 
