@@ -50,3 +50,13 @@ Validation completed:
 2. Collect ICE candidate logs
 3. Verify media bytes coming from peer
 4. Run long duration tests
+
+## Server Agent execution update (2026-08-19)
+
+The required deployment pass remains blocked by the restricted execution
+namespace: systemd, the host firewall, network interfaces, external DNS, and
+the production API are not accessible. Current configuration remains
+unchanged (`NETWORK24_TURN_ENABLED=false`; coturn has no REST shared-secret
+or TLS 5349 directives). Configuration backups were created outside Git at
+`/root/network24-backups/`; see `ai/SERVER_LOG.md` for hashes and redacted
+evidence. No relay-based WebRTC transport has been proven.

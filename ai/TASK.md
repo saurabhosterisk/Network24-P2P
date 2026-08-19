@@ -242,3 +242,23 @@ fixed unless the selected pair is `relay`, P2P bytes increase, and the
 DataChannel remains usable for the full capture window. Report exact service
 restart times, firewall result, selected candidate types, and any remaining
 failure with timestamps.
+
+## Android Agent Next Action
+
+The Server Agent could not reach an unconfined production host from the
+current namespace, so TURN provisioning and forced-relay evidence are still
+pending. After the server operator enables the approved shared-secret/TLS
+deployment and confirms the token broker returns three TURN URLs with
+short-lived credentials, install the latest debug APK on
+`TANK300000041351` and `RZCT90MRXQM`. Capture both devices for 10 minutes on
+the same channel with:
+
+```text
+adb logcat -v threadtime -s N24-P2P:V WebRTC:V '*:S'
+```
+
+Record redacted `event=ice_servers`, relay candidates, the selected relay pair,
+DataChannel OPEN, `segment_received`, `upload_ack`, increasing
+`source=P2P ... transport=relay` bytes, and bounded HTTP fallback/recovery.
+Do not report success unless the relay pair remains usable and verified P2P
+media bytes increase for the full window.

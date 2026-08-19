@@ -2,6 +2,54 @@
 
 Last updated: 2026-08-19
 
+## Server Agent execution (2026-08-19)
+
+The requested production TURN deployment was not applied from this execution
+namespace. The checkout contains no server/API source, and the namespace has
+no usable network interface, systemd bus, or firewall control. No live service
+restart, firewall change, token-broker request, external TURN allocation, or
+Android device capture was possible. This is an environment boundary, not
+evidence that relay transport works.
+
+Initial pull completed at commit `c703b10`. `.tmp-webrtc/` was not present and
+was not touched.
+
+Redacted local evidence:
+
+- Hostname reported `s303466.wholesaleinternet.net`; network identity queries
+  were denied and DNS returned no address.
+- `/etc/turnserver.conf` has `listening-port=3478`,
+  `external-ip=204.12.206.90`, `realm=p2p.web24.live`, `fingerprint`,
+  `lt-cred-mech`, and relay bounds `49152-65535`.
+- The coturn file has no `tls-listening-port`, `cert`, `pkey`,
+  `use-auth-secret`, or `static-auth-secret` directives.
+- `/etc/network24/network24.env` has `NETWORK24_TURN_ENABLED=false` and no
+  configured TURN host or TURN auth secret. Secret-bearing values were
+  redacted and never printed.
+- The Let's Encrypt certificate symlinks exist; the resolved private key is
+  mode 600 and owned by root.
+- `systemctl` could not connect to the bus; `ss` showed no visible listeners;
+  `ufw`/`iptables` could not inspect the host firewall because netfilter is
+  unavailable in this namespace.
+
+Configuration backups were created before any possible edit, outside Git:
+
+- `/root/network24-backups/turnserver.conf.20260819-110326`, mode 600,
+  SHA-256 `e72227a547df565266d483997ed60e2d26cc6059edaefe23f7634f8b6a960450`
+- `/root/network24-backups/network24.env.20260819-110326`, mode 600,
+  SHA-256 `82ce33f610b2fdf0fba7b9256f0c4bc6cb4894966643a0a2f93d97032ae6df18`
+
+Validation result:
+
+- `./gradlew :app:testDebugUnitTest :app:assembleDebug` could not start:
+  Gradle reported no usable wildcard IP for this restricted machine. No
+  application test or build result is claimed from this run.
+- TURN shared-secret provisioning, TLS 5349, firewall policy, API token
+  verification, external allocation, and forced-relay two-device testing are
+  pending on an unconfined production host. There is no evidence here of
+  `relay` candidates, sustained relay DataChannel bytes, or a 10-minute
+  relay-based media session.
+
 ## Result
 
 The primary server-side finding is a TURN deployment mismatch. coturn is
