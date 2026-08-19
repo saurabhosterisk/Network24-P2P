@@ -26,16 +26,10 @@ Find why ICE connection becomes unstable after approximately 40 seconds and swit
 
 ## Server investigation result (2026-08-19)
 
-Primary deployment finding: coturn is running, but Network24 TURN issuance is
-disabled (`NETWORK24_TURN_ENABLED=false`) and the server has no configured
-TURN REST secret or TLS listener. Android therefore receives no TURN servers
-and uses STUN-only ICE. This is consistent with a direct path opening and
-later failing under carrier/symmetric NAT, but a two-device ICE candidate-pair
-Logcat capture is still required for final causal proof.
-
-No server configuration was changed because the approved TURN secret,
-certificate, relay range, and firewall policy are missing. See
-`ai/SERVER_LOG.md` for evidence and the safe deployment sequence.
+The approved coturn shared-secret/TLS deployment is now active and locally
+allocation-tested. The token broker returned three short-lived TURN servers to
+the Android client (`event=ice_servers count=4 turn=3`). See
+`ai/SERVER_LOG.md` for the redacted deployment evidence.
 
 Validation completed:
 
@@ -43,17 +37,23 @@ Validation completed:
 - Backend `npm run typecheck`: passed.
 - Backend `npm test`: 5 suites passed; signaling integration suite failed and
   needs follow-up before claiming the backend suite is green.
+- Both approved Android devices received the debug APK and opened the same
+  `USA | ACCUWEATHER` channel.
+- A fresh two-device capture ran for more than 10 minutes. It recorded
+  verified P2P media bytes, but every selected transport was direct `srflx`;
+  no relay candidate/pair or TURN media bytes were observed. HTTP fallback
+  remained bounded.
 
 ## Next Steps
 
-1. Verify TURN server and credentials
-2. Collect ICE candidate logs
-3. Verify media bytes coming from peer
-4. Run long duration tests
+1. Complete a true forced-relay test that selects `transport=relay`
+2. Repeat Wi-Fi/mobile and mobile/mobile captures with relay evidence
+3. Verify sustained `source=P2P transport=relay` bytes for 10 minutes
+4. Resolve any remaining direct-path fallback/ICE failures
 
 ## Server Agent execution update (2026-08-19)
 
-The production TURN deployment is now active and locally allocation-tested.
-The remaining proof is the two-device forced-relay capture; no Android
-devices are currently connected. See `ai/SERVER_LOG.md` for restart time,
-redacted logs, and backup paths.
+The production TURN deployment is active and locally allocation-tested. The
+Android capture confirmed runtime TURN delivery but selected direct `srflx`
+transport instead of relay, so the required forced-relay proof remains open.
+See `ai/ANDROID_LOG.md` and `ai/SERVER_LOG.md` for redacted evidence.

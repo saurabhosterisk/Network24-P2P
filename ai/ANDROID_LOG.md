@@ -104,10 +104,10 @@ Completed on connected devices:
   `upload_complete_queued` without an ACK before the deadline, followed by
   HTTP `reason=TIMEOUT`. The 45-second advertised-segment timeout build was
   assembled successfully, but the final two-device retest was interrupted when
-  Device A disconnected from adb. A different unrecognized `TANK 3` device
+  Device A disconnected from adb. A different unrecognized test device
   appeared; it was not modified or used in that interrupted attempt.
 - The replacement pair was then used as the authoritative test pair:
-  `TANK 3` and `SM-S908E`. The new TANK device was installed, logged in with
+  two approved test devices. The replacement device was installed, logged in with
   the supplied test account, and opened on the same USA Entertainment stream.
 - A clean 60-second capture initially showed metadata delivery but no binary
   chunks with the old 64 KiB payload. The framed message was larger than the
@@ -117,13 +117,13 @@ Completed on connected devices:
   6,303,828 bytes, and 4,596,788 bytes. The receiver logged
   `segment_received`, playback logged `source=P2P transport=srflx`, and the
   sender logged matching validated `upload_ack` events. No immediate ICE or
-  DataChannel failure appeared in the follow-up. TURN was still absent
+  DataChannel failure appeared in the follow-up. At that earlier capture, TURN was still absent
   (`turn=0`), so this validates direct srflx operation only; relay/mobile-data
   validation remains a server-TURN prerequisite.
 - A subsequent approximately 10-minute current-pair observation ran from
-  15:39:44 to 15:49:38. The SM-S908E receiver recorded 30 media segments,
+  15:39:44 to 15:49:38. The receiver recorded 30 media segments,
   including 7 verified `source=P2P transport=srflx` segments and 23 HTTP
-  fallback segments. The TANK 3 side continued producing validated upload ACKs;
+  fallback segments. The sender side continued producing validated upload ACKs;
   no ICE `FAILED`/`CLOSED` or `webrtc_error` event appeared. One P2P segment
   took about 48 seconds, confirming that HTTP fallback remains necessary for
   slow or unavailable transfers. The Android result is therefore: P2P works
@@ -158,7 +158,7 @@ TURN once the server agent provisions TURN. Verify `event=ice_servers`,
 
 ### Finding and evidence
 
-TANK 3 showed `Network connection lost. Reconnecting... Attempt 1/5` while
+The sender device showed `Network connection lost. Reconnecting... Attempt 1/5` while
 the player continued rendering and the hybrid data source continued using HTTP
 fallback. `ChannelListActivity` received a recovery-status callback but had no
 positive recovery callback. Its local player listener was also not attached to
@@ -179,20 +179,19 @@ returned to READY.
 
 - `:app:compileDebugKotlin` — passed.
 - `:app:assembleDebug` — passed.
-- Installed the resulting APK on the current devices `TANK300000041351`
-  (TANK 3) and `RZCT90MRXQM` (SM-S908E).
-- Both devices opened `USA | ABC`; after a short TANK 3 Wi-Fi interruption,
+- Installed the resulting APK on both approved test devices.
+- Both devices opened `USA | ABC`; after a short Wi-Fi interruption,
   the player remained on `USA | ABC`, `txtPlayerError` was absent both during
   and after reconnect, and no crash was logged.
-- TANK 3 continued to show valid P2P signaling/ICE transitions and HTTP
-  fallback events. The current server still provided no TURN credentials, so
-this test does not validate relay connectivity.
+- The sender device continued to show valid P2P signaling/ICE transitions and HTTP
+  fallback events. That earlier server state provided no TURN credentials, so
+  this test did not validate relay connectivity.
 
 ## Remaining transport stability pass (2026-08-19)
 
 ### Evidence from current devices
 
-On `TANK300000041351` (TANK 3) and `RZCT90MRXQM` (SM-S908E), the failing
+On both approved test devices, the failing
 direct transfer showed a 6.0 MiB upload queued almost immediately while the
 receiver only accepted metadata. The connection later reached
 `DISCONNECTED/FAILED` near the previously observed 40-second point. The
@@ -237,7 +236,40 @@ confirming that the no-TURN direct path is throughput-limited.
 
 ### Remaining external prerequisite
 
-This Android pass cannot make a direct `srflx` path equivalent to TURN. The
-server still returns no TURN credentials (`turn=0`), so Wi-Fi/mobile and
-mobile/mobile relay stability remain blocked on the server agent's approved
-coturn shared-secret/TLS deployment and a forced-relay test.
+This earlier Android pass could not make a direct `srflx` path equivalent to
+TURN. The server deployment is now active and returns TURN credentials, but
+Wi-Fi/mobile and mobile/mobile relay stability still require a selected relay
+pair and sustained relay-byte capture.
+
+## Forced-relay capture after server TURN deployment (2026-08-19)
+
+The debug APK was rebuilt and installed on both approved test devices. Both
+were opened on the same `USA | ACCUWEATHER` channel. The token broker was
+reachable and the initialization capture on one device reported:
+
+```text
+event=ice_servers count=4 turn=3 source=token
+event=token_ready turn_servers=3
+event=ice_servers_updated count=4 turn=3
+```
+
+The subsequent two-device media capture ran for more than 10 minutes using
+fresh filtered Logcat windows. Redacted unique evidence included:
+
+- Receiver: 49 `segment_received` events and 49 verified
+  `source=P2P ... transport=srflx` media events.
+- Sender: 49 matching `upload_ack ... transport=srflx` events.
+- Receiver: 6 HTTP fallbacks, including bounded `TIMEOUT` and `UNAVAILABLE`
+  reasons; sender-side playback also recorded HTTP fallback events.
+- No `transport=relay` or `candidate_type=relay` event appeared in either
+  capture. The selected path remained direct `srflx`; no TURN bytes were
+  recorded.
+- No ICE `DISCONNECTED`/`CLOSED` event appeared in the receiver capture; the
+  sender capture contained two `FAILED` matches during the window and also
+  continued HTTP playback.
+
+This is not a forced-relay success. TURN credentials were delivered, but the
+current client/test network selected a direct pair. The required relay proof
+(`type=relay`, selected relay pair, and sustained `source=P2P transport=relay`)
+is still pending. No credentials, account names, raw candidates, URLs, or
+device identifiers were added to this evidence.
