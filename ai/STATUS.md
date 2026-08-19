@@ -14,16 +14,19 @@ Android client + WebRTC P2P media sharing + signaling server.
 ✅ DataChannel connection
 ✅ Segment cache hit flow
 ✅ Runtime TURN delivery and relay-only ICE policy
-✅ Sustained relay P2P media transfer with bounded HTTP fallback
+✅ Sustained relay P2P media transfer baseline with bounded HTTP fallback
 
 ## Pending
 
 ⏳ Wi-Fi/mobile and mobile/mobile network-matrix validation
+⏳ Slow cellular relay transfer and ICE recovery validation on an available mobile path
 
 ## Current Debug Target
 
 The reported direct-srflx 40-second failure is fixed by selecting TURN relay
-transport whenever runtime TURN credentials are available.
+transport whenever runtime TURN credentials are available. A separate
+signaling-reconnect path now preserves healthy WebRTC peers, replaces stale
+closed peers, and gives slow mobile relay transfers longer bounded deadlines.
 
 ## Server investigation result (2026-08-19)
 
@@ -48,11 +51,23 @@ Validation completed:
   for more than 10 minutes with 40 verified relay P2P segments and matching
   upload acknowledgements. No ICE `FAILED`, `DISCONNECTED`, or `CLOSED` event
   occurred in that relay window.
+- The Wi-Fi/mobile matrix selected relay pairs, but the current cellular path
+  later produced transient ICE disconnect/failure during a slow transfer. The
+  latest client build no longer drops all healthy peers merely because the
+  signaling socket reconnects, but this topology is not yet a clean sustained
+  P2P pass.
+- The mobile/mobile matrix could not be exercised: the approved TANK device's
+  cellular network had no usable route or DNS, while the RZCT cellular path was
+  reachable. This is an external device/carrier blocker, not Android P2P
+  evidence.
 
 ## Next Steps
 
-1. Run the Wi-Fi/mobile and mobile/mobile validation matrix
-2. Monitor relay allocation capacity and fallback rates in production
+1. Repeat Wi-Fi/mobile on a stable cellular path and verify a completed
+   `source=P2P ... transport=relay` segment after the longer transfer deadline
+2. Repeat mobile/mobile when both approved devices have validated cellular
+   internet
+3. Monitor relay allocation capacity and fallback rates in production
 
 ## Server Agent execution update (2026-08-19)
 

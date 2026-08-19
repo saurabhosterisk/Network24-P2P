@@ -34,6 +34,7 @@ class Network24WebRtcPeerManager(
     private val uploadDeadlineMs: Long = 1_200L,
     private val maxBufferedAmount: Long = 256L * 1024L,
     private val forceRelayWhenTurnAvailable: Boolean = true,
+    private val disconnectedRecoveryDelayMs: Long = 30_000L,
 ) {
     interface Listener {
         fun onPeerReady(peerId: String, channel: DataChannel) {}
@@ -85,7 +86,21 @@ class Network24WebRtcPeerManager(
 
     private fun connectOnSignalingThread(peerId: String, initiator: Boolean) {
         synchronized(connectionLock) {
-            if (closed.get() || peers.containsKey(peerId)) return
+            if (closed.get()) return
+            val existing = peers[peerId]
+            if (existing != null) {
+                if (isStaleConnection(existing)) {
+                    Log.i(
+                        TAG,
+                        "event=stale_connection_replaced peer=${shortPeer(peerId)} type=connect " +
+                            "ice_state=${existing.iceConnectionState()} " +
+                            "connection_state=${existing.connectionState()}"
+                    )
+                    dropOnSignalingThread(peerId)
+                } else {
+                    return
+                }
+            }
             try {
                 createConnection(peerId, initiator)
             } catch (error: Throwable) {
@@ -186,6 +201,16 @@ class Network24WebRtcPeerManager(
         val peerId = payload.stringField("from_peer_id") ?: payload.stringField("peer_id") ?: run {
             rejectSignal("unknown", "missing_signal_sender")
             return
+        }
+        val existingConnection = peers[peerId]
+        if (existingConnection != null && isStaleConnection(existingConnection)) {
+            Log.i(
+                TAG,
+                "event=stale_connection_replaced peer=${shortPeer(peerId)} type=$type " +
+                    "ice_state=${existingConnection.iceConnectionState()} " +
+                    "connection_state=${existingConnection.connectionState()}"
+            )
+            dropOnSignalingThread(peerId)
         }
         val connection = peers[peerId] ?: run {
             Log.i(TAG, "event=peer_connection_from_signal peer=${shortPeer(peerId)} type=$type")
@@ -422,6 +447,15 @@ class Network24WebRtcPeerManager(
         peers.remove(peerId)?.close()
     }
 
+    private fun isStaleConnection(connection: PeerConnection): Boolean {
+        val connectionState = connection.connectionState()
+        val iceState = connection.iceConnectionState()
+        return connectionState == PeerConnection.PeerConnectionState.CLOSED ||
+            connectionState == PeerConnection.PeerConnectionState.FAILED ||
+            iceState == PeerConnection.IceConnectionState.CLOSED ||
+            iceState == PeerConnection.IceConnectionState.FAILED
+    }
+
     fun dropAll() {
         if (closed.get()) return
         try {
@@ -545,7 +579,7 @@ class Network24WebRtcPeerManager(
             }
         }
         disconnectRecoveryTasks[peerId] = task
-        signalingHandler.postDelayed(task, DISCONNECTED_RECOVERY_DELAY_MS)
+        signalingHandler.postDelayed(task, disconnectedRecoveryDelayMs)
     }
 
     private fun cancelDisconnectedRecovery(peerId: String) {
@@ -660,7 +694,6 @@ class Network24WebRtcPeerManager(
         private fun shortPeer(peerId: String): String = peerId.takeLast(12)
         private const val MAX_PENDING_ICE_CANDIDATES = 256
         private const val REMOTE_DESCRIPTION_POLL_MS = 2_000L
-        private const val DISCONNECTED_RECOVERY_DELAY_MS = 8_000L
         private const val BACKPRESSURE_POLL_MS = 5L
         private val initialized = AtomicBoolean(false)
 

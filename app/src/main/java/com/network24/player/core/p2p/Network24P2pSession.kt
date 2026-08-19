@@ -46,9 +46,10 @@ class Network24P2pSession(
     private val webrtc: Network24WebRtcPeerManager by lazy {
         Network24WebRtcPeerManager(
             appContext, signaling, webRtcListener, config.iceServers,
-            config.uploadDeadlineMs.coerceIn(500L, 60_000L),
+            config.uploadDeadlineMs.coerceIn(500L, 120_000L),
             config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
             config.forceRelayWhenTurnAvailable,
+            config.disconnectedRecoveryDelayMs.coerceIn(5_000L, 120_000L),
         )
     }
 
@@ -110,7 +111,7 @@ class Network24P2pSession(
     }
 
     fun mediaCache(): Network24SegmentCache = cache
-    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(500L, 45_000L)
+    fun mediaRequestTimeoutMs(): Long = config.segmentRequestTimeoutMs.coerceIn(500L, 120_000L)
     override fun currentStreamId(): String? = streamId
 
     fun close() {
@@ -282,8 +283,11 @@ class Network24P2pSession(
 
         override fun onLocalPeerId(peerId: String) {
             if (localPeerId != null && localPeerId != peerId) {
-                cancelPending(Network24PeerMissReason.NO_SESSION)
-                webrtc.dropAll()
+                // A signaling reconnect can assign a new server peer id while
+                // an already-established relay DataChannel is still healthy.
+                // Keep that direct path alive; the next peer list reconciles
+                // peers that are no longer present.
+                Log.i(TAG, "event=local_peer_id_changed action=keep_existing_connections")
             }
             localPeerId = peerId
             webrtc.updateIceServers(config.iceServers + runtimeIceServers)
@@ -299,10 +303,6 @@ class Network24P2pSession(
                     signaling.joinStream(it)
                     signaling.requestPeers()
                 }
-            } else if (state == Network24SignalingClient.State.IDLE) {
-                cancelPending(Network24PeerMissReason.NO_SESSION)
-                discoveredPeers = emptyList()
-                webrtc.dropAll()
             }
             publishTelemetry()
         }

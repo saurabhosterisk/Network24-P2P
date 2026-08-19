@@ -321,3 +321,38 @@ the sender logged 40 matching `upload_ack ... transport=relay` events. No ICE
 Slow or unavailable segments used bounded HTTP fallback as designed. This
 closes the reported direct-srflx 40-second failure path; broader mobile/mobile
 matrix testing remains normal follow-up validation.
+
+## Signaling reconnect and mobile relay follow-up (2026-08-19)
+
+The first Wi-Fi/mobile matrix capture showed that relay ICE could connect, but
+transient signaling `IDLE` caused the session to cancel pending work and drop
+all WebRTC peers. A second issue appeared on the cellular relay path: a
+1--1.3 MiB segment could take roughly 35--60 seconds to drain, while the
+previous 45-second transfer and 8-second ICE recovery limits could cancel it.
+
+The Android follow-up changes are:
+
+- Signaling reconnects now preserve existing WebRTC/DataChannel peers and let
+  the refreshed peer list reconcile only peers that disappeared.
+- `connect()` and incoming-signal paths replace stale `CLOSED`/`FAILED` peer
+  connections before creating a new offer/answer exchange.
+- Advertised-segment request/upload deadlines are now 90 seconds, and the
+  disconnected-ICE recovery grace is 30 seconds. These remain bounded and HTTP
+  fallback is unchanged.
+
+Verification:
+
+- `:app:testDebugUnitTest` and `:app:assembleDebug` passed after the changes;
+  the APK was installed on both approved devices.
+- The latest Wi-Fi/mobile run still selected `relay` and opened the
+  DataChannel, and it survived a signaling reconnect without an immediate
+  session-wide drop. The same run later reached ICE `FAILED` during a slow
+  cellular relay transfer before a completed `source=P2P` media event could be
+  recorded. It is therefore not a clean matrix pass.
+- Mobile/mobile could not be validated because the TANK device's cellular
+  network reported no route/DNS; RZCT cellular internet was reachable.
+
+The established same-channel forced-relay baseline remains valid: a separate
+10+ minute window recorded 40 verified relay P2P segments and matching upload
+acknowledgements without ICE failure. The broader Wi-Fi/mobile and
+mobile/mobile claim remains open pending a stable external cellular path.
