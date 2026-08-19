@@ -65,6 +65,8 @@ class Network24P2pSession(
     private val connectionRoles = ConcurrentHashMap<String, MutableSet<String>>()
     private val connectionTransports = ConcurrentHashMap<String, String>()
     private val peerCooldownUntilMs = ConcurrentHashMap<String, Long>()
+    private val peerHealthScores = ConcurrentHashMap<String, AtomicLong>()
+    private val peerRttMs = ConcurrentHashMap<String, Long>()
 
     fun start() {
         if (!config.enabled) return
@@ -97,6 +99,8 @@ class Network24P2pSession(
         connectionRoles.clear()
         connectionTransports.clear()
         peerCooldownUntilMs.clear()
+        peerHealthScores.clear()
+        peerRttMs.clear()
         signaling.leaveStream()
 
         streamId = normalized
@@ -226,6 +230,7 @@ class Network24P2pSession(
         currentStats.bytesFromP2p.addAndGet(bytes)
         currentStats.segmentsFromP2p.incrementAndGet()
         currentStats.p2pHits.incrementAndGet()
+        adjustPeerHealth(hit.peerId, PEER_HEALTH_TRANSFER_SUCCESS)
         if (hit.transport == "relay") currentStats.turnBytes.addAndGet(bytes)
         peerCooldownUntilMs.remove(hit.peerId)
         markRole(hit.peerId, "downloader")
@@ -309,12 +314,7 @@ class Network24P2pSession(
 
         override fun onPeerList(peers: List<Network24SignalingClient.Peer>) {
             val old = discoveredPeers.map { it.peerId }.toSet()
-            discoveredPeers = peers
-                .asSequence()
-                .filter { it.peerId != localPeerId }
-                .distinctBy { it.peerId }
-                .take(MAX_CONNECTED_PEERS)
-                .toList()
+            discoveredPeers = selectBestPeers(peers)
             val current = discoveredPeers.map { it.peerId }.toSet()
             (old - current).forEach { peer ->
                 webrtc.drop(peer)
@@ -323,6 +323,7 @@ class Network24P2pSession(
                 connectionTransports.remove(peer)
                 advertisedSegments.remove(peer)
                 peerCooldownUntilMs.remove(peer)
+                peerRttMs.remove(peer)
             }
             (current - old).forEach { Log.i(TAG, "event=peer_discovered stream=${safeLog(displayStreamId)} peer=${shortPeer(it)}") }
             current.forEach { connectionStates.putIfAbsent(it, "connecting") }
@@ -364,8 +365,50 @@ class Network24P2pSession(
         }
     }
 
+    private fun selectBestPeers(peers: List<Network24SignalingClient.Peer>): List<Network24SignalingClient.Peer> {
+        val ownId = localPeerId ?: return emptyList()
+        val eligible = peers
+            .asSequence()
+            .filter { it.peerId != ownId }
+            .distinctBy { it.peerId }
+            .toList()
+        val retained = eligible.filter { peer ->
+            connectionStates[peer.peerId] == "connected" || connectionStates[peer.peerId] == "connecting"
+        }
+        val ranked = eligible.sortedByDescending { peerSelectionScore(ownId, it.peerId) }
+        val selected = (retained + ranked).distinctBy { it.peerId }.take(MAX_CONNECTED_PEERS)
+        Log.i(
+            TAG,
+            "event=peer_selection candidates=${eligible.size} selected=${selected.size} " +
+                "active_limit=$MAX_CONNECTED_PEERS"
+        )
+        return selected
+    }
+
+    private fun peerSelectionScore(ownId: String, peerId: String): Long {
+        val stateScore = when (connectionStates[peerId]) {
+            "connected" -> 1_000_000L
+            "connecting" -> 500_000L
+            "failed", "disconnected" -> -1_000_000L
+            else -> 0L
+        }
+        val healthScore = peerHealthScores[peerId]?.get() ?: 0L
+        val rttScore = peerRttMs[peerId]
+            ?.let { (100_000L - it.coerceAtMost(100_000L)).coerceAtLeast(0L) }
+            ?: 0L
+        // Stable per-device affinity spreads otherwise equal unknown peers
+        // across the room instead of making every client choose list index 0.
+        val affinityScore = ("$ownId:$peerId".hashCode().toLong() and 0x7fffffffL) % 10_000L
+        return stateScore + healthScore * 1_000L + rttScore + affinityScore
+    }
+
+    private fun adjustPeerHealth(peerId: String, delta: Long) {
+        peerHealthScores.computeIfAbsent(peerId) { AtomicLong() }.addAndGet(delta)
+    }
+
     private val webRtcListener = object : Network24WebRtcPeerManager.Listener {
         override fun onPeerReady(peerId: String, channel: org.webrtc.DataChannel) {
+            adjustPeerHealth(peerId, PEER_HEALTH_SUCCESS)
             connectionStates[peerId] = "connected"
             stats.get().peerConnectionsSuccessful.incrementAndGet()
             Log.i(TAG, "event=datachannel state=OPEN peer=${shortPeer(peerId)}")
@@ -374,6 +417,7 @@ class Network24P2pSession(
         }
 
         override fun onPeerClosed(peerId: String) {
+            adjustPeerHealth(peerId, PEER_HEALTH_CLOSED)
             connectionStates[peerId] = "disconnected"
             cancelPendingForPeer(peerId)
             // A closed DataChannel cannot be reused. Remove its PeerConnection
@@ -395,7 +439,13 @@ class Network24P2pSession(
             publishTelemetry()
         }
 
+        override fun onPeerRtt(peerId: String, rttMs: Long) {
+            peerRttMs[peerId] = rttMs
+            Log.i(TAG, "event=peer_quality peer=${shortPeer(peerId)} rtt_ms=$rttMs")
+        }
+
         override fun onPeerError(peerId: String, code: String) {
+            adjustPeerHealth(peerId, PEER_HEALTH_FAILURE)
             Log.w(TAG, "event=webrtc_error peer=${shortPeer(peerId)} code=$code")
             if (code.startsWith("invalid_") || code == "ice_candidate_after_end" || code == "too_many_pending_ice_candidates") return
             connectionStates[peerId] = "failed"
@@ -507,6 +557,7 @@ class Network24P2pSession(
         val currentStats = stats.get()
         currentStats.bytesUploadedToPeers.addAndGet(transfer.bytes.toLong())
         currentStats.segmentsUploaded.incrementAndGet()
+        adjustPeerHealth(peerId, PEER_HEALTH_TRANSFER_SUCCESS)
         markRole(peerId, "uploader")
         Log.i(TAG, "event=upload_ack stream=${safeLog(displayStreamId)} request=${requestId.take(8)} segment=${transfer.segmentKey.take(12)} peer=${shortPeer(peerId)} transport=${connectionTransports[peerId] ?: "unknown"} bytes=${transfer.bytes}")
         publishTelemetry()
@@ -743,6 +794,10 @@ class Network24P2pSession(
         private const val MAX_DOWNLOAD_PEERS = 4
         private const val MAX_UPLOAD_PEERS = 3
         private const val MAX_ADVERTISED_SEGMENTS = 64
+        private const val PEER_HEALTH_SUCCESS = 100L
+        private const val PEER_HEALTH_FAILURE = -150L
+        private const val PEER_HEALTH_CLOSED = -50L
+        private const val PEER_HEALTH_TRANSFER_SUCCESS = 25L
         private const val PEER_REFRESH_MS = 3_000L
         // Keep the transfer record until the receiver has consumed and verified
         // the segment. The old 5-second TTL discarded valid late ACKs.

@@ -356,3 +356,13 @@ The established same-channel forced-relay baseline remains valid: a separate
 10+ minute window recorded 40 verified relay P2P segments and matching upload
 acknowledgements without ICE failure. The broader Wi-Fi/mobile and
 mobile/mobile claim remains open pending a stable external cellular path.
+
+## Bounded best-peer selection (2026-08-19)
+
+The client does not create a full-room mesh. The active connection cap remains
+four peers per client. Peer-list handling now ranks candidates using retained
+connected/connecting state, completed transfer health, selected ICE RTT, and
+failure/cooldown history. Equal unknown candidates use stable per-device
+affinity so all customers do not select the same first four room entries.
+Failed or disconnected peers are removed and can be replaced on the next peer
+refresh. The build and focused unit tests passed after this change.

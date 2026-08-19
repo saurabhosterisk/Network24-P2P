@@ -42,6 +42,7 @@ class Network24WebRtcPeerManager(
         fun onPeerClosed(peerId: String) {}
         fun onPeerState(peerId: String, state: String) {}
         fun onPeerTransport(peerId: String, candidateType: String) {}
+        fun onPeerRtt(peerId: String, rttMs: Long) {}
         fun onPeerError(peerId: String, code: String) {}
     }
 
@@ -600,6 +601,12 @@ class Network24WebRtcPeerManager(
                 candidate.members["candidateType"] as? String
             }
             val selected = if (types.any { it == "relay" }) "relay" else types.firstOrNull { it in setOf("host", "srflx", "prflx") } ?: "unknown"
+            val rttMs = (pair.members["currentRoundTripTime"] as? Number)
+                ?.toDouble()
+                ?.takeIf { it.isFinite() && it >= 0.0 }
+                ?.times(1_000.0)
+                ?.toLong()
+            if (rttMs != null) listener.onPeerRtt(peerId, rttMs)
             Log.i(TAG, "event=ice_selected_pair peer=${shortPeer(peerId)} local_type=${types.getOrNull(0) ?: "unknown"} remote_type=${types.getOrNull(1) ?: "unknown"} transport=$selected")
             listener.onPeerTransport(peerId, selected)
         }

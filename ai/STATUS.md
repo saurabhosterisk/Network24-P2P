@@ -26,7 +26,9 @@ Android client + WebRTC P2P media sharing + signaling server.
 The reported direct-srflx 40-second failure is fixed by selecting TURN relay
 transport whenever runtime TURN credentials are available. A separate
 signaling-reconnect path now preserves healthy WebRTC peers, replaces stale
-closed peers, and gives slow mobile relay transfers longer bounded deadlines.
+closed peers, gives slow mobile relay transfers longer bounded deadlines, and
+keeps each client limited to a ranked set of four peers instead of connecting
+to every customer in the room.
 
 ## Server investigation result (2026-08-19)
 
