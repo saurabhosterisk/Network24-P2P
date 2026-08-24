@@ -47,16 +47,21 @@ class SyncManager(private val context: Context) {
         private val fullEpgSyncMutex = Mutex()
         private var activeFullEpgSync: Deferred<SyncResult>? = null
 
-        private val xmltvOffsetDateFormatter = ThreadLocal.withInitial {
-            SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US).apply {
-                isLenient = false
-            }
+        // Do not use ThreadLocal.withInitial here: that Java 8 API was added
+        // to Android only in API 26, while Fire TV Stick 4K (1st Gen) runs
+        // API 25. The explicit initialValue implementation is API 1 safe.
+        private val xmltvOffsetDateFormatter = object : ThreadLocal<SimpleDateFormat>() {
+            override fun initialValue(): SimpleDateFormat =
+                SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US).apply {
+                    isLenient = false
+                }
         }
-        private val xmltvUtcDateFormatter = ThreadLocal.withInitial {
-            SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
-                isLenient = false
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
+        private val xmltvUtcDateFormatter = object : ThreadLocal<SimpleDateFormat>() {
+            override fun initialValue(): SimpleDateFormat =
+                SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
+                    isLenient = false
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
         }
     }
 

@@ -86,7 +86,7 @@
                 android:layout_height="40dp"
                 android:layout_marginEnd="18dp"
                 android:src="@drawable/ic_more_vert"
-                android:tint="@android:color/white"
+                app:tint="@android:color/white"
                 android:focusable="true"
                 android:clickable="true"
                 android:padding="6dp"
@@ -190,16 +190,13 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Right side menu drawer -->
-    <com.google.android.material.navigation.NavigationView
-        android:id="@+id/rightNav"
+    <!-- Inflate the Material menu only when the user opens the drawer. -->
+    <ViewStub
+        android:id="@+id/rightNavStub"
         android:layout_width="340dp"
         android:layout_height="match_parent"
         android:layout_gravity="end"
-        android:background="@android:color/white"
-        app:itemBackground="@drawable/bg_navigation_item"
-        app:itemIconTint="@color/navigation_item_content"
-        app:itemTextColor="@color/navigation_item_content"
-        app:menu="@menu/menu_live_right_drawer" />
+        android:inflatedId="@+id/rightNav"
+        android:layout="@layout/view_live_category_right_drawer" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

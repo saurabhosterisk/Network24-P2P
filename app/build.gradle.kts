@@ -1,7 +1,10 @@
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
     alias(libs.plugins.ksp)
 }
 
@@ -14,11 +17,12 @@ android {
         applicationId = "com.network24.player"
 
         // First-generation Fire TV/Stick devices run API 21/22. Keep the
-        // APK installable there; P2P is gated off at runtime on API < 23.
+        // APK installable there; P2P is gated off at
+        // runtime on API < 23.
         minSdk = 21
         targetSdk = 35
 
-        versionCode = 25
+        versionCode = 30
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -101,6 +105,38 @@ android {
     }
 }
 
+// WebRTC exposes the same native filename from its AAR. Fail the build if a
+// second runtime dependency contributes another copy instead of letting the
+// APK merger silently choose one.
+val verifyUniqueWebRtcNativeLibraries = tasks.register("verifyUniqueWebRtcNativeLibraries") {
+    doLast {
+        val owners = mutableMapOf<String, MutableList<String>>()
+        configurations.getByName("debugRuntimeClasspath").resolvedConfiguration.resolvedArtifacts
+            .filter { it.file.extension.equals("aar", ignoreCase = true) }
+            .forEach { artifact ->
+                ZipFile(artifact.file).use { aar ->
+                    aar.entries().asSequence()
+                        .filter { !it.isDirectory && it.name.startsWith("jni/") && it.name.endsWith("/libjingle_peerconnection_so.so") }
+                        .forEach { entry ->
+                            owners.getOrPut(entry.name) { mutableListOf() }
+                                .add("${artifact.moduleVersion.id.group}:${artifact.name}:${artifact.moduleVersion.id.version}")
+                        }
+                }
+            }
+
+        val duplicates = owners.filterValues { it.size > 1 }
+        check(duplicates.isEmpty()) {
+            "Duplicate WebRTC native libraries detected: ${duplicates.entries.joinToString { (path, modules) -> "$path <- ${modules.joinToString()}" }}"
+        }
+        check(owners.isNotEmpty()) { "No libjingle_peerconnection_so.so was found in the debug runtime AARs" }
+        logger.lifecycle("Verified unique WebRTC native owners: ${owners.entries.joinToString { (path, modules) -> "$path <- ${modules.single()}" }}")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(verifyUniqueWebRtcNativeLibraries)
+}
+
 
 
 dependencies {
@@ -146,6 +182,7 @@ dependencies {
 
     // Firebase
     implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.messaging.ktx)
 

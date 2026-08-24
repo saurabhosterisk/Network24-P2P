@@ -2,8 +2,11 @@ package com.network24.player.features.live.activity
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
+import android.os.Trace
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.drawerlayout.widget.DrawerLayout
@@ -12,7 +15,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSnapHelper
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.internal.NavigationMenuView
+import com.google.android.material.navigation.NavigationView
 import com.google.firebase.firestore.FirebaseFirestore
 import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
@@ -49,39 +52,96 @@ class LiveCategoryActivity : BaseActivity() {
 
     private lateinit var categoryAdapter: CategoryAdapter
     private lateinit var favoriteAdapter: FavoriteCategoryAdapter
+    private var rightNav: NavigationView? = null
+    private var dataInitializationStarted = false
+    private var initialLoadStarted = false
+    private var initialLoadCompleted = false
+    private var categoryLoadInFlight = false
+    private var activityStartMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        binding = ActivityLiveCategoryBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        activityStartMs = SystemClock.elapsedRealtime()
+        tracePerf("LiveCategory.superOnCreate") { super.onCreate(savedInstanceState) }
+        tracePerf("LiveCategory.bindingInflate") {
+            binding = ActivityLiveCategoryBinding.inflate(layoutInflater)
+        }
+        tracePerf("LiveCategory.setContentView") { setContentView(binding.root) }
         registerDrawerBackHandler(binding.drawerLayout)
-
-        prefs = PreferenceManager(this)
-        repository = LiveRepository(this)
-        favRepo = FavoritesRepository(DatabaseProvider.get(this).favoritesDao(), FirebaseFirestore.getInstance())
-        categorySettingsRepository = CategorySettingsRepository(FirebaseFirestore.getInstance())
 
         if (epgMode) {
             binding.txtTitle.text = "LIVE WITH EPG"
             binding.searchLayout.hint = "Search EPG Categories"
         }
 
-        setupDrawerAndMenu()
-        setupRecyclerViews()
-        setupSearch()
-        ensureInitialSyncThenLoad()
+        tracePerf("LiveCategory.setupDrawer") { setupDrawerAndMenu() }
+        tracePerf("LiveCategory.setupRecyclerViews") { setupRecyclerViews() }
+        tracePerf("LiveCategory.setupSearch") { setupSearch() }
+
+        // Repository construction reaches Room/SharedPreferences/Firebase
+        // setup. Defer that work until after the first UI traversal and do the
+        // actual construction on IO; View creation remains on the main thread.
+        binding.root.post { initializeDataAndLoad() }
+        logPerf("LiveCategory.onCreateScheduled", SystemClock.elapsedRealtime() - activityStartMs)
     }
 
     override fun onResume() {
         super.onResume()
-        if (::categoryAdapter.isInitialized) loadCategoriesFromDB()
+        if (dataInitializationStarted && initialLoadCompleted) loadCategoriesFromDB()
+    }
+
+    private inline fun <T> tracePerf(name: String, block: () -> T): T {
+        val startMs = SystemClock.elapsedRealtime()
+        Trace.beginSection("N24:$name")
+        return try {
+            block()
+        } finally {
+            Trace.endSection()
+            logPerf(name, SystemClock.elapsedRealtime() - startMs)
+        }
+    }
+
+    private fun logPerf(name: String, durationMs: Long) {
+        Log.i(PERF_TAG, "phase=$name duration_ms=$durationMs")
+    }
+
+    private fun initializeDataAndLoad() {
+        if (dataInitializationStarted || isFinishing || isDestroyed) return
+        dataInitializationStarted = true
+        val startMs = SystemClock.elapsedRealtime()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val localPrefs = PreferenceManager(applicationContext)
+                val localRepository = LiveRepository(applicationContext)
+                val localDb = DatabaseProvider.get(applicationContext)
+                val firestore = FirebaseFirestore.getInstance()
+                val localFavRepo = FavoritesRepository(localDb.favoritesDao(), firestore)
+                val localSettingsRepo = CategorySettingsRepository(firestore, localPrefs)
+                withContext(Dispatchers.Main) {
+                    prefs = localPrefs
+                    repository = localRepository
+                    favRepo = localFavRepo
+                    categorySettingsRepository = localSettingsRepo
+                    logPerf("LiveCategory.dataInitialization", SystemClock.elapsedRealtime() - startMs)
+                    ensureInitialSyncThenLoad()
+                }
+            } catch (error: Exception) {
+                withContext(Dispatchers.Main) {
+                    Log.e(PERF_TAG, "phase=LiveCategory.dataInitialization failed", error)
+                    Toast.makeText(this@LiveCategoryActivity, error.message ?: "Initial load failed", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun ensureInitialSyncThenLoad() {
+        if (initialLoadStarted) return
+        initialLoadStarted = true
+        val startMs = SystemClock.elapsedRealtime()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val categories = repository.getCategories(server = prefs.getServer(), username = prefs.getUsername(), password = prefs.getPassword(), forceRefresh = false)
                 withContext(Dispatchers.Main) {
+                    logPerf("LiveCategory.initialCategoryRead", SystemClock.elapsedRealtime() - startMs)
                     if (categories.isNotEmpty()) loadCategoriesFromDB() else forceRefreshData(isInitialSync = true)
                 }
             } catch (e: Exception) {
@@ -91,7 +151,10 @@ class LiveCategoryActivity : BaseActivity() {
     }
 
     private fun loadCategoriesFromDB() {
+        if (categoryLoadInFlight) return
+        categoryLoadInFlight = true
         binding.edtSearch.clearFocus()
+        val startMs = SystemClock.elapsedRealtime()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val categories = repository.getCategories(server = prefs.getServer(), username = prefs.getUsername(), password = prefs.getPassword(), forceRefresh = false)
@@ -99,15 +162,21 @@ class LiveCategoryActivity : BaseActivity() {
                 val favoriteIds = favRepo.getFavoriteItemIds("LIVE_CATEGORY")
                 withContext(Dispatchers.Main) {
                     disabledCategoryIds = disabled
+                    logPerf("LiveCategory.categoryLoad", SystemClock.elapsedRealtime() - startMs)
                     updateUIWithCategories(categories, favoriteIds)
+                    categoryLoadInFlight = false
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { Toast.makeText(this@LiveCategoryActivity, e.message ?: "Unknown Error", Toast.LENGTH_LONG).show() }
+                withContext(Dispatchers.Main) {
+                    categoryLoadInFlight = false
+                    Toast.makeText(this@LiveCategoryActivity, e.message ?: "Unknown Error", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
 
     private fun updateUIWithCategories(categories: List<LiveCategory>, favoriteIds: Set<String>) {
+        val startMs = SystemClock.elapsedRealtime()
         allCategories.clear()
         allCategories.addAll(categories.filterNot { disabledCategoryIds.contains(it.category_id) })
         categoryAdapter.updateList(allCategories)
@@ -116,6 +185,8 @@ class LiveCategoryActivity : BaseActivity() {
         binding.txtCategoryCount.text = "${allCategories.size} Categories"
         favoriteAdapter.updateList(favoriteCategories)
         updateFavoritesSectionVisibility()
+        initialLoadCompleted = true
+        logPerf("LiveCategory.adapterPopulation", SystemClock.elapsedRealtime() - startMs)
         binding.rvCategories.post { binding.rvCategories.postDelayed({ binding.rvCategories.layoutManager?.findViewByPosition(0)?.requestFocus() }, 50) }
     }
 
@@ -143,8 +214,19 @@ class LiveCategoryActivity : BaseActivity() {
     }
 
     private fun setupDrawerAndMenu() {
-        binding.btnMore.setOnClickListener { openRightDrawer(binding.drawerLayout) }
-        setupOptionalRightDrawerMenu(binding.drawerLayout, binding.rightNav) { itemId ->
+        binding.btnMore.setOnClickListener {
+            ensureRightDrawerInflated()
+            openRightDrawer(binding.drawerLayout)
+        }
+    }
+
+    private fun ensureRightDrawerInflated(): NavigationView {
+        rightNav?.let { return it }
+        val nav = tracePerf("LiveCategory.rightDrawerInflate") {
+            binding.rightNavStub.inflate() as NavigationView
+        }
+        rightNav = nav
+        setupOptionalRightDrawerMenu(binding.drawerLayout, nav) { itemId ->
             when (itemId) {
                 R.id.action_home -> { startActivity(Intent(this, DashboardActivity::class.java)); finish(); true }
             R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
@@ -159,11 +241,12 @@ class LiveCategoryActivity : BaseActivity() {
         }
         binding.drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: View) {
-                if (drawerView.id == binding.rightNav.id) binding.rightNav.post {
-                    focusFirstFocusableDescendant(binding.rightNav)
+                if (drawerView.id == nav.id) nav.post {
+                    focusFirstFocusableDescendant(nav)
                 }
             }
         })
+        return nav
     }
 
     private fun setupRecyclerViews() {
@@ -245,5 +328,9 @@ class LiveCategoryActivity : BaseActivity() {
         val hasFav = favoriteCategories.isNotEmpty()
         binding.favoritesSection.visibility = if (hasFav) View.VISIBLE else View.GONE
         binding.txtFavoriteCount.text = "${favoriteCategories.size} Favorites"
+    }
+
+    companion object {
+        private const val PERF_TAG = "N24-PERF"
     }
 }

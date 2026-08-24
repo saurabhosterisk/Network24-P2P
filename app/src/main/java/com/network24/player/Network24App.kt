@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.StrictMode
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -20,6 +21,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.compat.Network24DeviceCompatibility
+import com.network24.player.core.diagnostics.Network24CrashReporter
 import com.network24.player.core.p2p.Network24P2pConfig
 import com.network24.player.core.p2p.Network24P2pSession
 
@@ -126,16 +128,41 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedRegistrationObjects()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         prefs = PreferenceManager(this)
         registerActivityLifecycleCallbacks(this)
+        Network24CrashReporter.initialize(this, legacyTv)
 
         if (!legacyTv) {
             // Phones ke liye push notifications (topic) enable
-            FirebaseMessaging.getInstance().subscribeToTopic("channel_down_alerts")
-                .addOnSuccessListener { Log.d("FCM", "Subscribed: channel_down_alerts") }
-                .addOnFailureListener { e -> Log.e("FCM", "Subscribe failed", e) }
+            // FCM requires Google Play services. Keep this guarded as a
+            // second line of defense for devices with incomplete/quirky
+            // feature declarations.
+            try {
+                FirebaseMessaging.getInstance().subscribeToTopic("channel_down_alerts")
+                    .addOnSuccessListener { Log.d("FCM", "Subscribed: channel_down_alerts") }
+                    .addOnFailureListener { e -> Log.e("FCM", "Subscribe failed", e) }
+            } catch (error: Throwable) {
+                Log.w("FCM", "Push notifications unavailable on this device", error)
+            }
         } else {
-            Log.i("Network24App", "Legacy TV detected; using HTTP playback and skipping mobile push setup")
+            Log.i("Network24App", "TV device detected; using TV-safe startup and skipping mobile push setup")
         }
 
         if (!legacyTv) initializeApp()

@@ -2,6 +2,8 @@ package com.network24.player.features.live.adapter
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.network24.player.databinding.ItemFavoriteCategoryBinding
 import com.network24.player.features.live.models.LiveCategory
@@ -10,9 +12,7 @@ class FavoriteCategoryAdapter(
     private val columns: Int,
     private val listener: (LiveCategory) -> Unit,
     private val onLongClick: (LiveCategory) -> Unit
-) : RecyclerView.Adapter<FavoriteCategoryAdapter.ViewHolder>() {
-
-    private val list = mutableListOf<LiveCategory>()
+) : ListAdapter<LiveCategory, FavoriteCategoryAdapter.ViewHolder>(DIFF_CALLBACK) {
 
     inner class ViewHolder(val binding: ItemFavoriteCategoryBinding) :
         RecyclerView.ViewHolder(binding.root)
@@ -44,10 +44,8 @@ class FavoriteCategoryAdapter(
         return ViewHolder(binding)
     }
 
-    override fun getItemCount(): Int = list.size
-
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = list[position]
+        val item = getItem(position)
 
         holder.binding.txtCategoryName.text = item.category_name
 
@@ -66,12 +64,20 @@ class FavoriteCategoryAdapter(
     }
 
     fun updateList(newList: List<LiveCategory>) {
-        list.clear()
-        list.addAll(newList)
-        notifyDataSetChanged()
+        submitList(newList.toList())
     }
 
     private fun dp(holder: ViewHolder, value: Int): Int {
         return (value * holder.itemView.resources.displayMetrics.density).toInt()
+    }
+
+    companion object {
+        private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<LiveCategory>() {
+            override fun areItemsTheSame(oldItem: LiveCategory, newItem: LiveCategory): Boolean =
+                oldItem.category_id == newItem.category_id
+
+            override fun areContentsTheSame(oldItem: LiveCategory, newItem: LiveCategory): Boolean =
+                oldItem == newItem
+        }
     }
 }

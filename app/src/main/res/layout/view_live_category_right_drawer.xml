@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<com.google.android.material.navigation.NavigationView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@id/rightNav"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white"
+    app:itemBackground="@drawable/bg_navigation_item"
+    app:itemIconTint="@color/navigation_item_content"
+    app:itemTextColor="@color/navigation_item_content"
+    app:menu="@menu/menu_live_right_drawer" />

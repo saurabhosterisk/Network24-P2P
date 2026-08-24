@@ -23,12 +23,14 @@ import com.google.android.material.navigation.NavigationView
 import com.network24.player.R
 import com.network24.player.core.sync.SyncManager
 import com.network24.player.core.sync.SyncResult
+import com.network24.player.core.diagnostics.Network24CrashReporter
 import kotlinx.coroutines.launch
 
 open class BaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Network24CrashReporter.activityStarted(this)
         enableFullscreen()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }

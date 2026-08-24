@@ -23,7 +23,9 @@ class Network24P2pSession(
     context: Context,
     private val config: Network24P2pConfig = Network24P2pConfig(),
 ) : Network24MediaBridge {
-    val enabled: Boolean get() = config.enabled
+    private val p2pOperational = AtomicReference(config.enabled)
+    val enabled: Boolean
+        get() = config.enabled && p2pOperational.get() && webrtc != null
     private val appContext = context.applicationContext
     private val gson = Gson()
     private val cache = Network24SegmentCache(appContext)
@@ -43,14 +45,26 @@ class Network24P2pSession(
             listener = signalingListener,
         )
     }
-    private val webrtc: Network24WebRtcPeerManager by lazy {
-        Network24WebRtcPeerManager(
-            appContext, signaling, webRtcListener, config.iceServers,
-            config.uploadDeadlineMs.coerceIn(500L, 120_000L),
-            config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
-            config.forceRelayWhenTurnAvailable,
-            config.disconnectedRecoveryDelayMs.coerceIn(5_000L, 120_000L),
-        )
+    private val webrtc: Network24WebRtcPeerManager? by lazy {
+        if (!config.enabled || !p2pOperational.get()) {
+            null
+        } else {
+            try {
+                Network24WebRtcPeerManager(
+                    appContext, signaling, webRtcListener, config.iceServers,
+                    config.uploadDeadlineMs.coerceIn(500L, 120_000L),
+                    config.maxDataChannelBufferedBytes.coerceIn(64L * 1024L, 8L * 1024L * 1024L),
+                    config.forceRelayWhenTurnAvailable,
+                    config.disconnectedRecoveryDelayMs.coerceIn(5_000L, 120_000L),
+                )
+            } catch (error: Throwable) {
+                // This includes UnsatisfiedLinkError from an incompatible
+                // device linker. HTTP/HLS remains the supported fallback.
+                p2pOperational.set(false)
+                Log.e(TAG, "event=webrtc_unavailable action=disable_p2p_fallback=http_hls", error)
+                null
+            }
+        }
     }
 
     @Volatile private var streamId: String? = null
@@ -69,7 +83,7 @@ class Network24P2pSession(
     private val peerRttMs = ConcurrentHashMap<String, Long>()
 
     fun start() {
-        if (!config.enabled) return
+        if (!enabled) return
         signaling.connect()
         scheduler.scheduleWithFixedDelay({
             if (streamId != null) {
@@ -81,6 +95,7 @@ class Network24P2pSession(
     }
 
     fun joinStream(newStreamId: String?, streamUri: String? = null) {
+        if (!enabled) return
         val raw = newStreamId?.trim()?.takeIf { it.isNotEmpty() && it.length <= 256 }
         val normalized = if (raw != null && !streamUri.isNullOrBlank()) {
             Network24MediaRequest.streamIdentity(raw, streamUri)
@@ -90,9 +105,9 @@ class Network24P2pSession(
         logSessionSummary("stream_switch")
         generation.incrementAndGet()
         cancelPending(Network24PeerMissReason.SWITCHED)
-        outbound.keys.forEach(webrtc::cancelUpload)
+        outbound.keys.forEach { webrtc?.cancelUpload(it) }
         outbound.clear()
-        webrtc.dropAll()
+        webrtc?.dropAll()
         discoveredPeers = emptyList()
         advertisedSegments.clear()
         connectionStates.clear()
@@ -122,7 +137,7 @@ class Network24P2pSession(
         logSessionSummary("close")
         cancelPending(Network24PeerMissReason.NO_SESSION)
         scheduler.shutdownNow()
-        webrtc.close()
+        webrtc?.close()
         signaling.close()
     }
 
@@ -131,7 +146,7 @@ class Network24P2pSession(
         val requestGeneration = generation.get()
         if (request.streamId != room) return Network24PeerFetchOutcome.Miss(Network24PeerMissReason.SWITCHED)
         val nowMs = System.currentTimeMillis()
-        val openPeers = webrtc.openPeerIds()
+        val openPeers = webrtc?.openPeerIds().orEmpty()
             .filter { peer -> discoveredPeers.any { it.peerId == peer } }
             .filter { peer ->
                 val cooldownUntil = peerCooldownUntilMs[peer] ?: 0L
@@ -296,7 +311,7 @@ class Network24P2pSession(
             val merged = (config.iceServers + runtimeIceServers)
                 .distinctBy { Triple(it.urls, it.username, it.password) }
             Log.i(TAG, "event=ice_servers count=${merged.size} turn=${iceServers.size} source=token")
-            webrtc.updateIceServers(merged)
+            webrtc?.updateIceServers(merged)
         }
 
         override fun onLocalPeerId(peerId: String) {
@@ -308,7 +323,7 @@ class Network24P2pSession(
                 Log.i(TAG, "event=local_peer_id_changed action=keep_existing_connections")
             }
             localPeerId = peerId
-            webrtc.updateIceServers(config.iceServers + runtimeIceServers)
+            webrtc?.updateIceServers(config.iceServers + runtimeIceServers)
             Log.i(TAG, "event=registered peer=${shortPeer(peerId)}")
             if (streamId != null) signaling.requestPeers()
             connectToDiscoveredPeers()
@@ -330,7 +345,7 @@ class Network24P2pSession(
             discoveredPeers = selectBestPeers(peers)
             val current = discoveredPeers.map { it.peerId }.toSet()
             (old - current).forEach { peer ->
-                webrtc.drop(peer)
+                webrtc?.drop(peer)
                 connectionStates.remove(peer)
                 connectionRoles.remove(peer)
                 connectionTransports.remove(peer)
@@ -349,7 +364,7 @@ class Network24P2pSession(
                 ?: payload.get("peer_id")?.takeIf { it.isJsonPrimitive }?.asString
                 ?: "unknown"
             Log.i(TAG, "event=signal_received type=$type peer=${shortPeer(from)}")
-            runCatching { webrtc.handleSignal(type, payload) }
+                    runCatching { webrtc?.handleSignal(type, payload) }
                 .onFailure { error ->
                     Log.e(TAG, "event=signal_exception type=$type peer=${shortPeer(from)}", error)
                     webRtcListener.onPeerError(from, "signal_exception")
@@ -367,7 +382,7 @@ class Network24P2pSession(
             val initiator = ownId < peer.peerId
             Log.i(TAG, "event=connect_attempt peer=${shortPeer(peer.peerId)} initiator=$initiator")
             if (initiator) {
-                runCatching { webrtc.connect(peer.peerId, initiator = true) }
+                runCatching { webrtc?.connect(peer.peerId, initiator = true) }
                     .onFailure { error ->
                         Log.e(TAG, "event=connect_exception peer=${shortPeer(peer.peerId)}", error)
                         webRtcListener.onPeerError(peer.peerId, "connect_exception")
@@ -435,7 +450,7 @@ class Network24P2pSession(
             cancelPendingForPeer(peerId)
             // A closed DataChannel cannot be reused. Remove its PeerConnection
             // so the next peer-list refresh creates a fresh offer/ICE attempt.
-            webrtc.drop(peerId)
+                    webrtc?.drop(peerId)
             publishTelemetry()
             signaling.requestPeers()
         }
@@ -464,7 +479,7 @@ class Network24P2pSession(
             connectionStates[peerId] = "failed"
             stats.get().peerConnectionsFailed.incrementAndGet()
             cancelPendingForPeer(peerId)
-            webrtc.drop(peerId)
+            webrtc?.drop(peerId)
             publishTelemetry()
             signaling.requestPeers()
         }
@@ -506,7 +521,7 @@ class Network24P2pSession(
                     pending[id]?.unavailable(peerId)
                 }
                 "segment_cancel" -> message.requestId()?.let {
-                    webrtc.cancelUpload(it)
+                    webrtc?.cancelUpload(it)
                     outbound.remove(it)
                 }
                 "segment_ack" -> acceptUploadAck(peerId, message)
@@ -535,7 +550,7 @@ class Network24P2pSession(
         val chunks = (bytes.size + Network24PeerProtocol.CHUNK_BYTES - 1) / Network24PeerProtocol.CHUNK_BYTES
         val transfer = OutboundTransfer(peerId, room, segmentKey, bytes.size, hash, System.currentTimeMillis())
         outbound[requestId] = transfer
-        val accepted = webrtc.sendSegment(
+        val accepted = webrtc?.sendSegment(
             peerId, requestId, segmentKey, bytes,
             sendControl = { stage ->
                 val control = responseControl(if (stage == "meta") "segment_meta" else "segment_complete", room, requestId, segmentKey).apply {
@@ -553,7 +568,7 @@ class Network24P2pSession(
                     Log.w(TAG, "event=upload_failed peer=${shortPeer(peerId)} segment=${segmentKey.take(12)}")
                 }
             },
-        )
+        ) == true
         if (!accepted) {
             outbound.remove(requestId)
             sendControl(peerId, responseControl("segment_unavailable", room, requestId, segmentKey))
@@ -577,7 +592,7 @@ class Network24P2pSession(
     }
 
     private fun announceSegment(segmentKey: String) {
-        webrtc.openPeerIds().take(MAX_UPLOAD_PEERS).forEach { announceSegmentToPeer(it, segmentKey) }
+        webrtc?.openPeerIds().orEmpty().take(MAX_UPLOAD_PEERS).forEach { announceSegmentToPeer(it, segmentKey) }
     }
 
     private fun announceSegmentToPeer(peerId: String, segmentKey: String) {
@@ -595,7 +610,7 @@ class Network24P2pSession(
     }
 
     private fun sendControl(peerId: String, message: JsonObject): Boolean =
-        webrtc.sendControl(peerId, gson.toJson(message).toByteArray(Charsets.UTF_8))
+        webrtc?.sendControl(peerId, gson.toJson(message).toByteArray(Charsets.UTF_8)) ?: false
 
     private fun responseControl(type: String, room: String, requestId: String, segmentKey: String) = JsonObject().apply {
         addProperty("protocol", Network24PeerProtocol.VERSION)
@@ -618,7 +633,7 @@ class Network24P2pSession(
         val cutoff = System.currentTimeMillis() - OUTBOUND_TTL_MS
         outbound.entries.toList().forEach { entry ->
             if (entry.value.createdAtMs < cutoff) {
-                webrtc.cancelUpload(entry.key)
+                webrtc?.cancelUpload(entry.key)
                 outbound.remove(entry.key)
             }
         }
