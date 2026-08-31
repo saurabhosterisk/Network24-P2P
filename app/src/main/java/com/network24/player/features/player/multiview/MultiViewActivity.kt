@@ -43,7 +43,7 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMultiviewBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(setupGlobalRightDrawer(binding.root, binding.btnMore))
         prefs = PreferenceManager(this)
         multiPlayer = MultiPlayerManager(this, this)
 

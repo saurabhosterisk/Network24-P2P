@@ -91,6 +91,15 @@ class PlayerActivity : BaseActivity() {
             }
             .start()
 
+        binding.btnMore
+            .animate()
+            .alpha(0f)
+            .setDuration(d)
+            .withEndAction {
+                binding.btnMore.visibility = View.GONE
+            }
+            .start()
+
 
 
         binding.txtChannelTitle
@@ -257,7 +266,7 @@ class PlayerActivity : BaseActivity() {
             ActivityPlayerBinding.inflate(layoutInflater)
 
 
-        setContentView(binding.root)
+        setContentView(setupGlobalRightDrawer(binding.root, binding.btnMore))
 
 
         prefs =
@@ -992,6 +1001,13 @@ class PlayerActivity : BaseActivity() {
             binding.btnBack.alpha = 0f
             binding.btnBack.visibility = View.VISIBLE
             binding.btnBack.animate()
+                .alpha(1f)
+                .setDuration(d)
+                .start()
+
+            binding.btnMore.alpha = 0f
+            binding.btnMore.visibility = View.VISIBLE
+            binding.btnMore.animate()
                 .alpha(1f)
                 .setDuration(d)
                 .start()

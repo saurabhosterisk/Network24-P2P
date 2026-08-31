@@ -58,7 +58,7 @@ class ChatHubActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityChatHubBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(setupGlobalRightDrawer(binding.root, binding.btnMore))
         prefs = PreferenceManager(this)
         senderName = (prefs.getUsername() ?: "guest").trim().ifEmpty { "guest" }
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "device"

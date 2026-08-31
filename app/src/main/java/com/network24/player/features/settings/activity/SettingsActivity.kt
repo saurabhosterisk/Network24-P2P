@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewGroup
 import android.widget.Toast
 import com.network24.player.BuildConfig
 import com.network24.player.R
@@ -22,7 +23,17 @@ class SettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         prefs = PreferenceManager(this)
 
-        setContentView(R.layout.activity_settings)
+        val contentRoot = layoutInflater.inflate(
+            R.layout.activity_settings,
+            null,
+            false
+        ) as ViewGroup
+        setContentView(
+            setupGlobalRightDrawer(
+                contentRoot,
+                contentRoot.findViewById(R.id.btnMore)
+            )
+        )
 
         findViewById<android.view.View>(R.id.settingsBack).setOnClickListener {
             finish()

@@ -27,6 +27,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toStartOf="@id/guidelineRooms"/>
 
+    <ImageButton
+        android:id="@+id/btnMore"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_more_focus"
+        android:contentDescription="Open menu"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:padding="8dp"
+        android:src="@drawable/ic_more_vert"
+        android:tint="@android:color/white"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvRooms"
         android:layout_width="0dp"

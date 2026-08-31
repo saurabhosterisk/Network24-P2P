@@ -1090,7 +1090,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                             DashboardActivity::class.java
 
-                        )
+                        ).putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true)
 
                     )
 

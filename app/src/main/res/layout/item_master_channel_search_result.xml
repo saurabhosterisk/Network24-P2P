@@ -48,6 +48,7 @@
             android:textColor="@android:color/white"
             android:textSize="17sp"
             android:textStyle="bold"
+            app:layout_constraintVertical_chainStyle="packed"
             app:layout_constraintEnd_toStartOf="@id/programStartGuide"
             app:layout_constraintStart_toEndOf="@id/imgChannelLogo"
             app:layout_constraintTop_toTopOf="parent"

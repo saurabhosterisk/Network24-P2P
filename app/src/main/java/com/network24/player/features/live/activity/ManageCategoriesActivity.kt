@@ -2,6 +2,7 @@ package com.network24.player.features.live.activity
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -31,7 +32,17 @@ class ManageCategoriesActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_manage_categories)
+        val contentRoot = layoutInflater.inflate(
+            R.layout.activity_manage_categories,
+            null,
+            false
+        ) as ViewGroup
+        setContentView(
+            setupGlobalRightDrawer(
+                contentRoot,
+                contentRoot.findViewById(R.id.btnMore)
+            )
+        )
 
         prefs = PreferenceManager(this)
         repository = LiveRepository(this)

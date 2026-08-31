@@ -6,6 +6,23 @@
     android:background="#000000"
     android:padding="6dp">
 
+    <ImageButton
+        android:id="@+id/btnMore"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="@drawable/bg_more_focus"
+        android:contentDescription="Open menu"
+        android:elevation="20dp"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:padding="9dp"
+        android:src="@drawable/ic_more_vert"
+        android:tint="@android:color/white"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <FrameLayout android:id="@+id/slot1" android:layout_width="0dp" android:layout_height="0dp" android:layout_margin="3dp" android:background="@drawable/bg_multiview_slot" android:clickable="true" android:focusable="true" android:nextFocusRight="@id/slot2" android:nextFocusDown="@id/slot3" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/guidelineVertical" app:layout_constraintBottom_toTopOf="@id/guidelineHorizontal">
         <androidx.media3.ui.PlayerView android:id="@+id/playerView1" android:layout_width="match_parent" android:layout_height="match_parent" app:use_controller="false" app:show_buffering="always" app:resize_mode="fit" app:surface_type="surface_view" />
         <ProgressBar android:id="@+id/progress1" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:visibility="gone" />

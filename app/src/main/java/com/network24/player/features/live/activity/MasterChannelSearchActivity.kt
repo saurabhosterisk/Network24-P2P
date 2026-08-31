@@ -42,7 +42,7 @@ class MasterChannelSearchActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMasterChannelSearchBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(setupGlobalRightDrawer(binding.root, binding.btnMore))
 
         repository = LiveRepository(this)
         favoritesRepository = FavoritesRepository(

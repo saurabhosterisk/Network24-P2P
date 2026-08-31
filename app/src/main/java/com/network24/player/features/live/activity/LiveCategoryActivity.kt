@@ -231,7 +231,7 @@ class LiveCategoryActivity : BaseActivity() {
         rightNav = nav
         setupOptionalRightDrawerMenu(binding.drawerLayout, nav) { itemId ->
             when (itemId) {
-                R.id.action_home -> { startActivity(Intent(this, DashboardActivity::class.java)); finish(); true }
+                R.id.action_home -> { startActivity(Intent(this, DashboardActivity::class.java).putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true)); finish(); true }
             R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
                 R.id.action_refresh_all -> { forceRefreshData(); true }
                 R.id.action_refresh_guide -> { refreshTvGuide(); true }

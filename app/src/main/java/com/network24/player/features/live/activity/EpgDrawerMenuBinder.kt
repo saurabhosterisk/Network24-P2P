@@ -45,7 +45,7 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
             drawer.closeDrawer(GravityCompat.END)
             when (item.itemId) {
                 R.id.action_home -> {
-                    activity.startActivity(Intent(activity, DashboardActivity::class.java))
+                    activity.startActivity(Intent(activity, DashboardActivity::class.java).putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true))
                     activity.finish()
                     true
                 }

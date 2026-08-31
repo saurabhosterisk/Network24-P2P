@@ -6,7 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
@@ -24,6 +27,13 @@ import com.network24.player.R
 import com.network24.player.core.sync.SyncManager
 import com.network24.player.core.sync.SyncResult
 import com.network24.player.core.diagnostics.Network24CrashReporter
+import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.features.dashboard.activity.DashboardActivity
+import com.network24.player.features.live.activity.MasterChannelSearchActivity
+import com.network24.player.features.live.activity.RecentlyWatchedActivity
+import com.network24.player.features.live.repository.LiveRepository
+import com.network24.player.features.live.repository.SyncCallback
+import com.network24.player.features.settings.activity.SettingsActivity
 import kotlinx.coroutines.launch
 
 open class BaseActivity : AppCompatActivity() {
@@ -72,6 +82,119 @@ open class BaseActivity : AppCompatActivity() {
 
     protected fun closeRightDrawer(drawerLayout: DrawerLayout?) {
         drawerLayout?.closeDrawer(GravityCompat.END)
+    }
+
+    /**
+     * Adds the same right-side menu used by the dashboard to activities whose
+     * layout does not need a permanent DrawerLayout of its own.
+     */
+    protected fun setupGlobalRightDrawer(
+        contentRoot: ViewGroup,
+        moreButton: View
+    ): DrawerLayout {
+        val drawerLayout = DrawerLayout(this).apply {
+            id = View.generateViewId()
+        }
+        drawerLayout.addView(
+            contentRoot,
+            DrawerLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ).apply { gravity = Gravity.NO_GRAVITY }
+        )
+
+        val navView = NavigationView(this).apply {
+            id = View.generateViewId()
+            setBackgroundColor(ContextCompat.getColor(context, android.R.color.white))
+            itemBackground = ContextCompat.getDrawable(context, R.drawable.bg_navigation_item)
+            itemIconTintList = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
+            itemTextColor = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
+            inflateMenu(R.menu.menu_live_right_drawer)
+        }
+        drawerLayout.addView(
+            navView,
+            DrawerLayout.LayoutParams(dp(340), ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                gravity = Gravity.END
+            }
+        )
+
+        moreButton.isFocusable = true
+        moreButton.isClickable = true
+        moreButton.setOnClickListener { openRightDrawer(drawerLayout) }
+        setupOptionalRightDrawerMenu(drawerLayout, navView, ::handleGlobalMenuAction)
+        drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+            override fun onDrawerOpened(drawerView: View) {
+                if (drawerView === navView) {
+                    navView.post { focusFirstFocusableDescendant(navView) }
+                }
+            }
+        })
+        registerDrawerBackHandler(drawerLayout)
+        return drawerLayout
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private fun handleGlobalMenuAction(itemId: Int): Boolean {
+        return when (itemId) {
+            R.id.action_home -> {
+                startActivity(
+                    Intent(this, DashboardActivity::class.java)
+                        .putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true)
+                )
+                finish()
+                true
+            }
+            R.id.action_recently_watched -> {
+                startActivity(Intent(this, RecentlyWatchedActivity::class.java))
+                true
+            }
+            R.id.action_refresh_all -> refreshAllCatalogData()
+            R.id.action_refresh_guide -> {
+                refreshTvGuide()
+                true
+            }
+            R.id.action_master_search -> {
+                startActivity(Intent(this, MasterChannelSearchActivity::class.java))
+                true
+            }
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            R.id.action_exit_app -> {
+                confirmExitApp()
+                true
+            }
+            else -> false
+        }
+    }
+
+    private fun refreshAllCatalogData(): Boolean {
+        val prefs = PreferenceManager(this)
+        if (prefs.getServer().isBlank() || prefs.getUsername().isBlank() || prefs.getPassword().isBlank()) {
+            return true
+        }
+
+        runCallbackSyncWithLoader(
+            loadingMessage = "Refreshing categories & channels…",
+            successMessage = "Channels Updated Successfully!"
+        ) { ok, fail ->
+            LiveRepository(this).syncAllData(
+                server = prefs.getServer(),
+                username = prefs.getUsername(),
+                password = prefs.getPassword(),
+                callback = object : SyncCallback {
+                    override fun onSuccess() = ok()
+                    override fun onError(message: String) = fail("Failed to update: $message")
+                    override fun onProgress(percent: Int) {
+                        showLoader("Refreshing categories & channels… $percent%")
+                    }
+                }
+            )
+        }
+        return true
     }
 
     fun confirmExitApp() {

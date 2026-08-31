@@ -38,6 +38,7 @@ import com.network24.player.features.live.activity.RecentlyWatchedActivity
 import com.network24.player.features.live.repository.LiveRepository
 import com.network24.player.features.live.repository.SyncCallback
 import com.network24.player.features.login.activity.LoginActivity
+import com.network24.player.features.login.repository.LoginRepository
 import com.network24.player.features.settings.activity.SettingsActivity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
@@ -49,23 +50,68 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 
 class DashboardActivity : BaseActivity() {
-    private companion object { private const val REQ_POST_NOTIFICATIONS = 9001; private const val PAYMENT_URL = "https://osterisktechnology.com/makepayment.html"; private const val CINEMA_PRO_3_PACKAGE = "com.infahash.fvision.cpro3" }
+    companion object {
+        const val EXTRA_REFRESH_ACCOUNT = "refresh_account_on_dashboard"
+        private const val REQ_POST_NOTIFICATIONS = 9001
+        private const val PAYMENT_URL = "https://osterisktechnology.com/makepayment.html"
+        private const val CINEMA_PRO_3_PACKAGE = "com.infahash.fvision.cpro3"
+    }
     private lateinit var binding: ActivityDashboardBinding
     private lateinit var prefs: PreferenceManager
     private lateinit var repository: LiveRepository
     private val handler = Handler(Looper.getMainLooper())
+    private val loginRepository = LoginRepository()
+    private var isAccountRefreshRunning = false
     private var isInitialSyncRunning = false
     private val clockRunnable = object : Runnable { override fun run() { val now = Date(); binding.txtClock.text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(now); binding.txtDate.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(now); handler.postDelayed(this, 1000) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); binding = ActivityDashboardBinding.inflate(layoutInflater); setContentView(binding.root); registerDrawerBackHandler(binding.drawerLayout); askNotificationPermissionIfNeeded(); prefs = PreferenceManager(this); repository = LiveRepository(this)
         if (!hasCredentials()) { startActivity(Intent(this, LoginActivity::class.java)); finishAffinity(); return }
-        loadDashboard(); binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
+        loadDashboard()
+        if (intent.getBooleanExtra(EXTRA_REFRESH_ACCOUNT, false)) refreshAccountInfo()
+        binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
     }
+
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults) }
     private fun hasCredentials() = prefs.getServer().isNotBlank() && prefs.getUsername().isNotBlank() && prefs.getPassword().isNotBlank()
     private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val remainingDays = TimeUnit.MILLISECONDS.toDays(expiryDate.time - System.currentTimeMillis()); binding.txtRemaining.text = if (remainingDays > 0) "$remainingDays Days" else "Expired"; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE } }
+
+    private fun refreshAccountInfo() {
+        if (isAccountRefreshRunning || !hasCredentials()) return
+
+        isAccountRefreshRunning = true
+        lifecycleScope.launch {
+            try {
+                val response = loginRepository.login(
+                    server = prefs.getServer(),
+                    username = prefs.getUsername(),
+                    password = prefs.getPassword()
+                )
+                val userInfo = response.body()?.user_info
+                if (response.isSuccessful && userInfo?.auth == 1) {
+                    prefs.saveUserInfo(
+                        username = userInfo.username ?: prefs.getUsername(),
+                        status = userInfo.status ?: prefs.getStatus(),
+                        expiry = userInfo.exp_date?.toLongOrNull() ?: prefs.getExpiry(),
+                        activeConnections = userInfo.active_cons?.toIntOrNull() ?: prefs.getActiveConnections(),
+                        maxConnections = userInfo.max_connections?.toIntOrNull() ?: prefs.getMaxConnections(),
+                        isTrial = userInfo.is_trial == "1"
+                    )
+                    loadDashboard()
+                    binding.txtAccountUpdated.text = "Live • Updated just now"
+                } else {
+                    binding.txtAccountUpdated.text = "Live • Update unavailable"
+                }
+            } catch (_: Exception) {
+                // Keep the last known account values when the provider is temporarily unreachable.
+                binding.txtAccountUpdated.text = "Live • Update unavailable"
+            } finally {
+                isAccountRefreshRunning = false
+            }
+        }
+    }
 
     private fun setupDashboardCardInteractions() {
         val cards = listOf(binding.cardLiveTv, binding.cardFavorites, binding.cardNotification, binding.cardSupport, binding.cardSettings, binding.cardLiveEvents)
@@ -80,7 +126,7 @@ class DashboardActivity : BaseActivity() {
         binding.btnMore.setOnClickListener { openRightDrawer(binding.drawerLayout) }
         setupOptionalRightDrawerMenu(binding.drawerLayout, binding.rightNav) { itemId ->
             when (itemId) {
-                R.id.action_home -> { closeRightDrawer(binding.drawerLayout); true }
+                R.id.action_home -> { refreshAccountInfo(); closeRightDrawer(binding.drawerLayout); true }
                 R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
                 R.id.action_refresh_all -> { syncInitialData(true); true }
                 R.id.action_refresh_guide -> { refreshTvGuide(); true }

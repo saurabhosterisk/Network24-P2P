@@ -699,7 +699,7 @@ class ChannelListActivity : BaseActivity() {
                         Intent(
                             this,
                             DashboardActivity::class.java
-                        )
+                        ).putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true)
                     )
 
 
