@@ -6,8 +6,6 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Contains the plaintext Xtream login password (PreferenceManager); never back it up. -->
+    <exclude domain="sharedpref" path="network24.xml" />
 </full-backup-content>

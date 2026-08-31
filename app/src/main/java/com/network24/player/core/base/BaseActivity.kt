@@ -117,7 +117,7 @@ open class BaseActivity : AppCompatActivity() {
 
     private var loadingDialog: AlertDialog? = null
 
-    protected fun showLoader(message: String = "Loading...") {
+    internal fun showLoader(message: String = "Loading...") {
         if (loadingDialog == null) {
             val view = LayoutInflater.from(this).inflate(R.layout.dialog_loading, null)
             loadingDialog = AlertDialog.Builder(this)
@@ -132,7 +132,7 @@ open class BaseActivity : AppCompatActivity() {
         loadingDialog?.findViewById<TextView>(R.id.txtLoadingMessage)?.text = message
     }
 
-    protected fun hideLoader() {
+    internal fun hideLoader() {
         if (loadingDialog != null && loadingDialog!!.isShowing) {
             loadingDialog?.dismiss()
         }
@@ -192,7 +192,9 @@ open class BaseActivity : AppCompatActivity() {
     ) {
         showLoader(loadingMessage)
         lifecycleScope.launch {
-            val result = SyncManager(this@BaseActivity).syncFullEpg(force = true)
+            val result = SyncManager(this@BaseActivity).syncFullEpg(force = true) { percent ->
+                showLoader("$loadingMessage $percent%")
+            }
             hideLoader()
 
             when (result) {

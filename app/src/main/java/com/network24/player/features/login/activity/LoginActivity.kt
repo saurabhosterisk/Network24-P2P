@@ -88,19 +88,11 @@ class LoginActivity : BaseActivity() {
                 val response =
                     repository.login(server, username, password)
 
-                android.util.Log.d("LOGIN", "HTTP Code = ${response.code()}")
-                android.util.Log.d("LOGIN", "Successful = ${response.isSuccessful}")
+                if (com.network24.player.BuildConfig.DEBUG) {
+                    android.util.Log.d("LOGIN", "HTTP Code = ${response.code()}, Successful = ${response.isSuccessful}")
+                }
 
                 val body = response.body()
-
-                android.util.Log.d("LOGIN", "Body = $body")
-                android.util.Log.d("LOGIN", "UserInfo = ${body?.user_info}")
-                android.util.Log.d("LOGIN", "Auth = ${body?.user_info?.auth}")
-                android.util.Log.d("LOGIN", "Message = ${body?.user_info?.message}")
-
-                if (!response.isSuccessful) {
-                    android.util.Log.d("LOGIN", "Error = ${response.errorBody()?.string()}")
-                }
 
 
                 if (response.isSuccessful &&
@@ -165,10 +157,11 @@ class LoginActivity : BaseActivity() {
                         Toast.LENGTH_LONG
                     ).show()
 
-                    androidx.appcompat.app.AlertDialog.Builder(this@LoginActivity)
-                        .setTitle("Login Debug")
-                        .setMessage(
-                            """
+                    if (com.network24.player.BuildConfig.DEBUG) {
+                        androidx.appcompat.app.AlertDialog.Builder(this@LoginActivity)
+                            .setTitle("Login Debug")
+                            .setMessage(
+                                """
 HTTP: ${response.code()}
 Success: ${response.isSuccessful}
 Auth: ${body?.user_info?.auth}
@@ -176,9 +169,10 @@ Status: ${body?.user_info?.status}
 Message: ${body?.user_info?.message}
 Body: $body
         """.trimIndent()
-                        )
-                        .setPositiveButton("OK", null)
-                        .show()
+                            )
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
                 }
 
             } catch (e: IOException) {

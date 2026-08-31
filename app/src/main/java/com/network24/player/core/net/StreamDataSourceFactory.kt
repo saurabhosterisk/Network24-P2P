@@ -5,9 +5,6 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import com.network24.player.core.p2p.Network24HybridDataSource
-import com.network24.player.core.p2p.Network24MediaBridge
-import com.network24.player.core.p2p.Network24SegmentCache
 
 /**
  * Single source of truth for stream HTTP/media-source configuration.
@@ -25,32 +22,9 @@ object StreamDataSourceFactory {
             .setConnectTimeoutMs(30_000)
             .setReadTimeoutMs(30_000)
             .setAllowCrossProtocolRedirects(true)
-            .setDefaultRequestProperties(
-                mapOf("Connection" to "close")
-            )
 
         return DataSource.Factory {
             CountingDataSource(httpFactory.createDataSource())
-        }
-    }
-
-    /**
-     * Opt-in factory for P2P playback. Existing callers must continue using
-     * createMediaSourceFactory() until the server feature flag is enabled.
-     */
-    fun createHybridDataSourceFactory(
-        mediaBridge: Network24MediaBridge?,
-        cache: Network24SegmentCache,
-        p2pTimeoutMs: Long = 750L
-    ): DataSource.Factory {
-        val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(USER_AGENT)
-            .setConnectTimeoutMs(30_000)
-            .setReadTimeoutMs(30_000)
-            .setAllowCrossProtocolRedirects(true)
-            .setDefaultRequestProperties(mapOf("Connection" to "close"))
-        return DataSource.Factory {
-            CountingDataSource(Network24HybridDataSource(httpFactory.createDataSource(), cache, mediaBridge, p2pTimeoutMs))
         }
     }
 

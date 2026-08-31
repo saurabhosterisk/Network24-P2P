@@ -1,14 +1,9 @@
 package com.network24.player.core.compat
 
 import android.content.Context
-import android.os.Build
 
 /** Device gates for legacy TV playback and optional modern transports. */
 object Network24DeviceCompatibility {
-    private const val FIRST_MODERN_P2P_API = 23
-
-    fun supportsP2p(): Boolean = Build.VERSION.SDK_INT >= FIRST_MODERN_P2P_API
-
     /**
      * Fire TV devices can run newer Android API levels while still having no
      * Google Play services. Detect the TV form factor independently of API

@@ -16,9 +16,7 @@ retrofit = "2.11.0"
 okhttp = "4.12.0"
 gson = "2.13.1"
 media3 = "1.8.0"
-webrtc = "1.0.0035529"
 recyclerview = "1.4.0"
-glide = "4.16.0"
 coroutines = "1.8.1"
 coil = "2.7.0"
 
@@ -50,13 +48,11 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 
 coil = { module = "io.coil-kt:coil", version.ref = "coil" }
-glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
 
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media3" }
-webrtc-android = { group = "com.infobip", name = "google-webrtc", version.ref = "webrtc" }
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }

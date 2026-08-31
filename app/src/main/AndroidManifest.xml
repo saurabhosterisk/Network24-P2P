@@ -109,11 +109,6 @@
             android:screenOrientation="landscape" />
 
 
-        <activity
-            android:name=".features.live.activity.ProgramSearchActivity"
-            android:exported="false"
-            android:screenOrientation="landscape" />
-
 
         <activity
             android:name=".features.live.activity.MasterChannelSearchActivity"

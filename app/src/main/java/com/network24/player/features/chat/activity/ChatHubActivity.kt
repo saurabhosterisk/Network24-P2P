@@ -74,7 +74,6 @@ class ChatHubActivity : BaseActivity() {
             mySenderId = senderId,
             onReply = { beginReply(it) },
             onMessageMenu = { showMessageActions(it) },
-            onReaction = { message, emoji -> if (emoji == "__picker__") showReactionPicker(message) else toggleReaction(message, emoji) },
             onReportedChannelClick = { message -> openReportedChannel(message) }
         )
         binding.rvMessages.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
@@ -94,30 +93,18 @@ class ChatHubActivity : BaseActivity() {
         focusRoom(initial)
     }
 
-    private fun showReactionPicker(message: ChatMessage) {
-        val emojis = arrayOf("👍", "❤️", "😂", "😮", "😢", "😡")
-        AlertDialog.Builder(this).setTitle("React to message").setItems(emojis) { _, which -> toggleReaction(message, emojis[which]) }.show()
-    }
-
-    private fun toggleReaction(message: ChatMessage, emoji: String) {
-        val room = selectedRoom ?: return
-        repo.toggleReaction(room.id, message.id, emoji, senderId, {}, { Toast.makeText(this, "Reaction failed: ${it.message}", Toast.LENGTH_SHORT).show() })
-    }
-
     private fun showMessageActions(message: ChatMessage) {
         val room = selectedRoom ?: return
         val mine = message.senderId == senderId && !message.deleted
         val actions = mutableListOf<String>()
         if (!message.deleted && canSendToRoom(room.id, room.readOnly)) actions += "Reply"
         actions += "Copy"
-        if (!message.deleted) actions += "React"
         if (mine) { actions += "Edit"; actions += "Delete" }
         if (!message.deleted) actions += "Report"
         AlertDialog.Builder(this).setTitle(message.senderName.ifBlank { "Message" }).setItems(actions.toTypedArray()) { _, which ->
             when (actions[which]) {
                 "Reply" -> beginReply(message)
                 "Copy" -> copyMessage(message)
-                "React" -> showReactionPicker(message)
                 "Edit" -> editMessage(message)
                 "Delete" -> confirmDeleteMessage(message)
                 "Report" -> reportMessage(room, message)
@@ -307,7 +294,7 @@ class ChatHubActivity : BaseActivity() {
     }
 
     private fun extractMentions(text: String): List<String> = Regex("(?<![A-Za-z0-9_])@([A-Za-z0-9_.-]{2,32})").findAll(text).map { it.groupValues[1].lowercase() }.distinct().toList()
-    private fun canSendToRoom(roomId: String, isReadOnly: Boolean): Boolean = !isReadOnly || setOf("network24").contains(senderName.lowercase())
+    private fun canSendToRoom(roomId: String, isReadOnly: Boolean): Boolean = !isReadOnly
 
     private fun startRoomUnreadWatchers(rooms: List<ChatRoom>) {
         roomLastMsgListeners.values.forEach { it.remove() }; roomLastMsgListeners.clear(); val db = FirebaseFirestore.getInstance()

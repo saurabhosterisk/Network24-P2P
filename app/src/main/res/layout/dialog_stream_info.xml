@@ -1,71 +1,420 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#E6000000" android:padding="16dp">
-    <TextView android:id="@+id/tvTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:text="STREAM INFORMATION &amp; DIAGNOSTICS" android:textColor="@android:color/white" android:textSize="20sp" android:textStyle="bold" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
-    <androidx.constraintlayout.widget.Guideline android:id="@+id/guidelineMid" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" app:layout_constraintGuide_percent="0.5" />
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#10141D"
+    android:padding="16dp">
 
-    <com.google.android.material.card.MaterialCardView android:id="@+id/cardStream" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginTop="10dp" android:layout_marginEnd="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#1A1F2C" app:cardCornerRadius="12dp" app:strokeColor="#2A3245" app:strokeWidth="1dp" app:layout_constraintTop_toBottomOf="@id/tvTitle" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/guidelineMid" app:layout_constraintBottom_toTopOf="@id/cardVideoAudio">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HEALTH &amp; DIAGNOSIS" android:textColor="#7FB3FF" android:textSize="15sp" android:textStyle="bold" />
-            <TableLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:stretchColumns="1">
-                <TableRow><TextView android:text="Health Score :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvHealthScore" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Quality :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvHealthLabel" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Rebuffers :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvRebufferCount" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Buffering Time :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvBufferingTime" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-            </TableLayout>
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="STREAM INFORMATION &amp; DIAGNOSTICS"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardSummary"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        app:cardBackgroundColor="#1A2230"
+        app:cardCornerRadius="14dp"
+        app:strokeColor="#33425A"
+        app:strokeWidth="1dp"
+        app:layout_constraintBottom_toTopOf="@id/detailButtonsScroll"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="CURRENT ASSESSMENT"
+                        android:textColor="#8BB8FF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvDiagnosisCause"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Checking stream health"
+                        android:textColor="#FFFFFF"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                    android:gravity="end"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="HEALTH SCORE"
+                        android:textColor="#8B98AC"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvHealthScore"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="- / 100"
+                        android:textColor="#FFFFFF"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvHealthLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="-"
+                        android:textColor="#FFD166"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvDiagnosis"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Run AUTO CHECK to collect evidence."
+                android:textColor="#E7ECF5"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/tvDiagnosisEvidence"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Evidence: -"
+                android:textColor="#9BA8BB"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvDiagnosisAction"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Action: -"
+                android:textColor="#FFD166"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="REBUFFERS"
+                    android:textColor="#8B98AC"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvRebufferCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="-"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:text="BUFFERING TIME"
+                    android:textColor="#8B98AC"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvBufferingTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="-"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.card.MaterialCardView android:id="@+id/cardPlayback" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginStart="6dp" android:layout_marginTop="10dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#1A1F2C" app:cardCornerRadius="12dp" app:strokeColor="#2A3245" app:strokeWidth="1dp" app:layout_constraintTop_toBottomOf="@id/tvTitle" app:layout_constraintStart_toEndOf="@id/guidelineMid" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintBottom_toTopOf="@id/cardNetwork">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PLAYBACK" android:textColor="#7FB3FF" android:textSize="15sp" android:textStyle="bold" />
-            <TableLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:stretchColumns="1">
-                <TableRow><TextView android:text="State :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvPlayerState" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Buffer :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvBufferedPercent" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Buffer Duration :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvBufferDuration" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Position"/><TextView android:id="@+id/tvPosition" android:text="—"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Load State"/><TextView android:id="@+id/tvLoading" android:text="—"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Speed"/><TextView android:id="@+id/tvPlaybackSpeed" android:text="—"/></TableRow>
-            </TableLayout>
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardDetails"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="#151C28"
+        app:cardCornerRadius="14dp"
+        app:strokeColor="#2E3B51"
+        app:strokeWidth="1dp"
+        app:layout_constraintBottom_toTopOf="@id/detailButtonsScroll"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvTitle">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/tvDetailSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="OVERVIEW"
+                android:textColor="#8BB8FF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <ScrollView
+                android:id="@+id/detailScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="7dp"
+                android:layout_weight="1"
+                android:fadeScrollbars="true"
+                android:fillViewport="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:descendantFocusability="blocksDescendants"
+                android:nextFocusDown="@id/btnRunDiagnosis">
+
+                <TextView
+                    android:id="@+id/tvDetailBody"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Select a category below."
+                    android:textColor="#E7ECF5"
+                    android:textIsSelectable="true"
+                    android:textSize="15sp" />
+            </ScrollView>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.card.MaterialCardView android:id="@+id/cardVideoAudio" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginEnd="6dp" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#1A1F2C" app:cardCornerRadius="12dp" app:strokeColor="#2A3245" app:strokeWidth="1dp" app:layout_constraintTop_toBottomOf="@id/cardStream" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/guidelineMid" app:layout_constraintBottom_toTopOf="@id/cardDiagnosis">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VIDEO / AUDIO" android:textColor="#7FB3FF" android:textSize="15sp" android:textStyle="bold" />
-            <TableLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:stretchColumns="1">
-                <TableRow><TextView android:text="Resolution :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvResolution" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Video Codec :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvVideoCodec" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Audio Codec :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvAudioCodec" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Audio :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvAudioDetails" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Video Bitrate"/><TextView android:id="@+id/tvVideoBitrate" android:text="—"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Frame Rate"/><TextView android:id="@+id/tvFrameRate" android:text="—"/></TableRow>
-            </TableLayout>
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+    <HorizontalScrollView
+        android:id="@+id/detailButtonsScroll"
+        android:layout_width="0dp"
+                android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:overScrollMode="never"
+        android:focusable="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
-    <com.google.android.material.card.MaterialCardView android:id="@+id/cardNetwork" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginStart="6dp" android:layout_marginTop="6dp" android:layout_marginBottom="6dp" app:cardBackgroundColor="#1A1F2C" app:cardCornerRadius="12dp" app:strokeColor="#2A3245" app:strokeWidth="1dp" app:layout_constraintTop_toBottomOf="@id/cardPlayback" app:layout_constraintStart_toEndOf="@id/guidelineMid" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintBottom_toTopOf="@id/cardDiagnosis">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="NETWORK / SOURCE" android:textColor="#7FB3FF" android:textSize="15sp" android:textStyle="bold" />
-            <TableLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:stretchColumns="1">
-                <TableRow><TextView android:text="Download :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvDownloadSpeed" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Required :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvRequiredSpeed" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow><TextView android:text="Network :" android:textColor="#A7B0C0" android:textStyle="bold"/><TextView android:id="@+id/tvNetworkType" android:layout_marginStart="18dp" android:text="—" android:textColor="@android:color/white"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Live Latency"/><TextView android:id="@+id/tvLiveLatency" android:text="—"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Last Error"/><TextView android:id="@+id/tvLastError" android:text="None"/></TableRow>
-                <TableRow android:visibility="gone"><TextView android:text="Server"/><TextView android:id="@+id/tvServerHost" android:text="—"/></TableRow>
-            </TableLayout>
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-    <com.google.android.material.card.MaterialCardView android:id="@+id/cardDiagnosis" android:layout_width="0dp" android:layout_height="72dp" android:layout_marginTop="6dp" android:layout_marginBottom="8dp" app:cardBackgroundColor="#1A1F2C" app:cardCornerRadius="12dp" app:strokeColor="#2A3245" app:strokeWidth="1dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toBottomOf="@id/cardVideoAudio" app:layout_constraintBottom_toTopOf="@id/bottomButtonsLayout">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="9dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DIAGNOSIS" android:textColor="#7FB3FF" android:textSize="14sp" android:textStyle="bold" />
-            <TextView android:id="@+id/tvDiagnosis" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Checking stream health…" android:textColor="@android:color/white" android:textSize="13sp" android:maxLines="2" android:ellipsize="end" />
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+            <Button
+                android:id="@+id/btnRunDiagnosis"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:text="RUN AUTO CHECK"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusRight="@id/btnOverview"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
 
-    <LinearLayout android:id="@+id/bottomButtonsLayout" android:layout_width="0dp" android:layout_height="wrap_content" android:gravity="end" android:orientation="horizontal" android:paddingTop="8dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintBottom_toBottomOf="parent">
-        <Button android:id="@+id/btnCopy" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="COPY DIAGNOSTICS" android:focusable="true" />
-        <Button android:id="@+id/btnClose" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10dp" android:text="CLOSE" android:focusable="true" />
-    </LinearLayout>
+            <Button
+                android:id="@+id/btnOverview"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="OVERVIEW"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnRunDiagnosis"
+                android:nextFocusRight="@id/btnStreamDetails"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnStreamDetails"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="STREAM"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnOverview"
+                android:nextFocusRight="@id/btnNetworkDetails"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnNetworkDetails"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="NETWORK"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnStreamDetails"
+                android:nextFocusRight="@id/btnDeviceDetails"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnDeviceDetails"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="DEVICE"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnNetworkDetails"
+                android:nextFocusRight="@id/btnEventsDetails"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnEventsDetails"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="EVENTS"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnDeviceDetails"
+                android:nextFocusRight="@id/btnClose"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btnClose"
+                android:layout_width="116dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="CLOSE"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bg_diagnostics_button"
+                android:backgroundTint="@null"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusLeft="@id/btnEventsDetails"
+                android:nextFocusUp="@id/detailScrollView"
+                android:minHeight="44dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:gravity="center" />
+        </LinearLayout>
+    </HorizontalScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

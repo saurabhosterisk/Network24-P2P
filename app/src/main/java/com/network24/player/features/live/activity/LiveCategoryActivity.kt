@@ -209,6 +209,9 @@ class LiveCategoryActivity : BaseActivity() {
                 override fun onError(message: String) {
                     lifecycleScope.launch(Dispatchers.Main) { isRefreshing = false; onError("Failed to refresh: $message") }
                 }
+                override fun onProgress(percent: Int) {
+                    showLoader("$msg $percent%")
+                }
             })
         }
     }
@@ -232,7 +235,6 @@ class LiveCategoryActivity : BaseActivity() {
             R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
                 R.id.action_refresh_all -> { forceRefreshData(); true }
                 R.id.action_refresh_guide -> { refreshTvGuide(); true }
-                R.id.action_search_guide -> { startActivity(Intent(this, ProgramSearchActivity::class.java)); true }
                 R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }

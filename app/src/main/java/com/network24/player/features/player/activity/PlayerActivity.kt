@@ -82,6 +82,15 @@ class PlayerActivity : BaseActivity() {
             }
             .start()
 
+        binding.btnBack
+            .animate()
+            .alpha(0f)
+            .setDuration(d)
+            .withEndAction {
+                binding.btnBack.visibility = View.GONE
+            }
+            .start()
+
 
 
         binding.txtChannelTitle
@@ -374,6 +383,10 @@ class PlayerActivity : BaseActivity() {
 
 
     private fun setupClickListeners() {
+
+        binding.btnBack.setOnClickListener {
+            finish()
+        }
 
 
         binding.root.setOnClickListener {
@@ -976,6 +989,13 @@ class PlayerActivity : BaseActivity() {
                 .setDuration(d)
                 .start()
 
+            binding.btnBack.alpha = 0f
+            binding.btnBack.visibility = View.VISIBLE
+            binding.btnBack.animate()
+                .alpha(1f)
+                .setDuration(d)
+                .start()
+
 
 
 
@@ -1350,8 +1370,8 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        val num =
-            channel.num?.let {
+        val streamId =
+            channel.stream_id?.let {
 
                 "$it - "
 
@@ -1361,7 +1381,7 @@ class PlayerActivity : BaseActivity() {
 
 
         binding.txtChannelTitle.text =
-            "$num${channel.name ?: "Unknown Channel"}"
+            "$streamId${channel.name ?: "Unknown Channel"}"
 
 
 

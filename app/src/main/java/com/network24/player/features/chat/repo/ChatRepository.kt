@@ -17,7 +17,6 @@ data class ChatMessage(
     val replyToSenderName: String? = null,
     val replyToText: String? = null,
     val mentions: List<String> = emptyList(),
-    val reactions: Map<String, List<String>> = emptyMap(),
     val edited: Boolean = false,
     val editedAt: Timestamp? = null,
     val deleted: Boolean = false,
@@ -54,19 +53,6 @@ class ChatRepository(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             .addOnSuccessListener { onOk() }.addOnFailureListener { onError(it) }
     }
 
-    fun toggleReaction(roomId: String, messageId: String, emoji: String, userId: String, onOk: () -> Unit, onError: (Exception) -> Unit) {
-        val ref = db.collection("rooms").document(roomId).collection("messages").document(messageId)
-        db.runTransaction { transaction ->
-            val snap = transaction.get(ref)
-            val raw = snap.get("reactions") as? Map<*, *> ?: emptyMap<Any, Any>()
-            val reactions = raw.mapValues { (_, value) -> (value as? List<*>)?.mapNotNull { it as? String }?.toMutableList() ?: mutableListOf() }.toMutableMap()
-            val users = reactions[emoji] ?: mutableListOf()
-            if (users.contains(userId)) users.remove(userId) else users.add(userId)
-            if (users.isEmpty()) reactions.remove(emoji) else reactions[emoji] = users
-            transaction.update(ref, "reactions", reactions)
-        }.addOnSuccessListener { onOk() }.addOnFailureListener { onError(it) }
-    }
-
     fun reportMessage(roomId: String, message: ChatMessage, reporterId: String, reporterName: String, onOk: () -> Unit, onError: (Exception) -> Unit) {
         val payload = hashMapOf<String, Any>("roomId" to roomId, "messageId" to message.id, "messageText" to message.text.take(1000), "messageSenderId" to message.senderId, "messageSenderName" to message.senderName, "reporterId" to reporterId, "reporterName" to reporterName, "ts" to FieldValue.serverTimestamp(), "status" to "open")
         db.collection("chat_reports").add(payload).addOnSuccessListener { onOk() }.addOnFailureListener { onError(it) }
@@ -77,11 +63,6 @@ class ChatRepository(private val db: FirebaseFirestore = FirebaseFirestore.getIn
             return ChatMessage(id = id, text = "", senderId = getString("senderId") ?: "", senderName = getString("senderName") ?: "", ts = getTimestamp("ts"), deleted = true, deletedAt = getTimestamp("deletedAt"))
         }
         val text = getString("text") ?: return null
-        val rawReactions = get("reactions") as? Map<*, *> ?: emptyMap<Any, Any>()
-        val reactions = rawReactions.mapNotNull { (key, value) ->
-            val emoji = key as? String ?: return@mapNotNull null
-            emoji to ((value as? List<*>)?.mapNotNull { it as? String } ?: emptyList())
-        }.toMap()
-        return ChatMessage(id = id, text = text, senderId = getString("senderId") ?: "", senderName = getString("senderName") ?: "", ts = getTimestamp("ts"), replyToMessageId = getString("replyToMessageId"), replyToSenderName = getString("replyToSenderName"), replyToText = getString("replyToText"), mentions = (get("mentions") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(), reactions = reactions, edited = getBoolean("edited") == true, editedAt = getTimestamp("editedAt"), deleted = false, reportedChannelStreamId = getLong("channelStreamId")?.toInt(), reportedChannelName = getString("channelName"))
+        return ChatMessage(id = id, text = text, senderId = getString("senderId") ?: "", senderName = getString("senderName") ?: "", ts = getTimestamp("ts"), replyToMessageId = getString("replyToMessageId"), replyToSenderName = getString("replyToSenderName"), replyToText = getString("replyToText"), mentions = (get("mentions") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(), edited = getBoolean("edited") == true, editedAt = getTimestamp("editedAt"), deleted = false, reportedChannelStreamId = getLong("channelStreamId")?.toInt(), reportedChannelName = getString("channelName"))
     }
 }

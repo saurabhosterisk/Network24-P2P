@@ -34,7 +34,6 @@ import com.network24.player.features.chat.activity.ChatHubActivity
 import com.network24.player.features.live.activity.FavoriteChannelsActivity
 import com.network24.player.features.live.activity.LiveCategoryActivity
 import com.network24.player.features.live.activity.MasterChannelSearchActivity
-import com.network24.player.features.live.activity.ProgramSearchActivity
 import com.network24.player.features.live.activity.RecentlyWatchedActivity
 import com.network24.player.features.live.repository.LiveRepository
 import com.network24.player.features.live.repository.SyncCallback
@@ -85,7 +84,6 @@ class DashboardActivity : BaseActivity() {
                 R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
                 R.id.action_refresh_all -> { syncInitialData(true); true }
                 R.id.action_refresh_guide -> { refreshTvGuide(); true }
-                R.id.action_search_guide -> { startActivity(Intent(this, ProgramSearchActivity::class.java)); true }
                 R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }
@@ -129,9 +127,10 @@ class DashboardActivity : BaseActivity() {
 
         isInitialSyncRunning = true
         val refreshFullEpg = isScheduledSyncDue
+        val loadingMessage = "Refreshing categories & channels…"
 
         runCallbackSyncWithLoader(
-            loadingMessage = "Refreshing categories & channels…",
+            loadingMessage = loadingMessage,
             successMessage = "Channels Updated Successfully!"
         ) { ok, fail ->
             repository.syncAllData(
@@ -152,6 +151,10 @@ class DashboardActivity : BaseActivity() {
                     override fun onError(message: String) {
                         isInitialSyncRunning = false
                         fail("Failed to update: $message")
+                    }
+
+                    override fun onProgress(percent: Int) {
+                        showLoader("$loadingMessage $percent%")
                     }
                 }
             )

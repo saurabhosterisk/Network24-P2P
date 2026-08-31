@@ -134,6 +134,8 @@
                 android:id="@+id/btnLogin"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                app:strokeColor="@color/btn_focus_stroke_selector"
+                app:strokeWidth="3dp"
                 android:text="LOGIN"/>
 
             <LinearLayout

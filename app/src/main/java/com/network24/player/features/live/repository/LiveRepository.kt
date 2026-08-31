@@ -40,7 +40,9 @@ class LiveRepository(private val context: Context) {
                 val r1 = sync.syncLiveCategories(force = true, credentials = credentials)
                 if (r1 is SyncResult.Error) throw Exception(r1.message)
 
-                val r2 = sync.syncLiveChannelsAll(force = true, credentials = credentials)
+                val r2 = sync.syncLiveChannelsAll(force = true, credentials = credentials) { percent ->
+                    callback.onProgress(percent)
+                }
                 if (r2 is SyncResult.Error) throw Exception(r2.message)
 
                 MemoryCache.clearAll()
@@ -168,6 +170,9 @@ class LiveRepository(private val context: Context) {
         val anyWordsClause = tokens.joinToString(" OR ") {
             "$normalizedName LIKE ?"
         }
+        val anyEpgWordsClause = tokens.joinToString(" OR ") {
+            "LOWER(COALESCE(e.title, '')) LIKE ?"
+        }
 
         val sql = """
             SELECT
@@ -194,7 +199,16 @@ class LiveRepository(private val context: Context) {
                 AND cat.type = 'LIVE'
             WHERE c.name IS NOT NULL
               AND TRIM(c.name) != ''
-              AND ($anyWordsClause)
+              AND (
+                ($anyWordsClause)
+                OR EXISTS(
+                    SELECT 1 FROM epg e
+                    WHERE e.epgChannelId = c.epgChannelId
+                      AND e.title IS NOT NULL
+                      AND TRIM(e.title) != ''
+                      AND ($anyEpgWordsClause)
+                )
+              )
             ORDER BY
                 CASE
                     WHEN $normalizedName = ? THEN 1
@@ -208,6 +222,7 @@ class LiveRepository(private val context: Context) {
         """.trimIndent()
 
         val args = mutableListOf<Any>()
+        args.addAll(tokens.map { "%$it%" })
         args.addAll(tokens.map { "%$it%" })
         args.add(compactQuery)
         args.add("$compactQuery%")

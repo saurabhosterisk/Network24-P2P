@@ -73,6 +73,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_back_focus"
+        android:contentDescription="Back"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:padding="12dp"
+        android:src="@drawable/ic_back"
+        app:tint="@android:color/white"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/topTint"
+        app:layout_constraintBottom_toBottomOf="@id/topTint" />
+
     <TextView
         android:id="@+id/txtChannelTitle"
         android:layout_width="0dp"
@@ -85,7 +101,7 @@
         android:textStyle="bold"
         app:layout_constraintTop_toTopOf="@id/topTint"
         app:layout_constraintBottom_toBottomOf="@id/topTint"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintStart_toEndOf="@id/btnBack"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- Bottom overlay container (EPG + controls) -->

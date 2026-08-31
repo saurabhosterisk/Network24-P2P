@@ -25,6 +25,8 @@ import coil.load
 import com.google.firebase.firestore.FirebaseFirestore
 
 import com.network24.player.R
+import com.network24.player.common.models.FavoriteItemType
+import com.network24.player.common.utils.LiveStreamUrlBuilder
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.entity.EpgEntity
@@ -115,7 +117,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-    private val minuteWidthDp =
+    internal val minuteWidthDp =
         9.0f
 
 
@@ -130,12 +132,12 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-    private var timelineStart =
+    internal var timelineStart =
         0L
 
 
 
-    private var timelineEnd =
+    internal var timelineEnd =
         0L
 
 
@@ -222,6 +224,17 @@ class EpgChannelListActivity : BaseActivity() {
                 )
             }
         }
+
+    /**
+     * Full grid rebuilds are expensive on low-RAM devices, so this must only
+     * ever have one pending tick scheduled at a time. removeCallbacks() first
+     * is required: without it, calling this from both the initial-load path
+     * and onResume would leave two independent tick chains running forever.
+     */
+    private fun scheduleNowLineTick() {
+        nowHandler.removeCallbacks(nowLineRunnable)
+        nowHandler.postDelayed(nowLineRunnable, 60_000L)
+    }
 
 
 
@@ -976,7 +989,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-    private fun loadChannels() {
+    internal fun loadChannels() {
 
 
         binding.txtEpgStatus.text =
@@ -1081,10 +1094,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-                nowHandler.postDelayed(
-                    nowLineRunnable,
-                    60_000L
-                )
+                scheduleNowLineTick()
 
 
 
@@ -1103,7 +1113,7 @@ class EpgChannelListActivity : BaseActivity() {
     }
 
 
-    private fun loadGuideData() {
+    internal fun loadGuideData() {
 
 
         binding.txtEpgStatus.text =
@@ -2763,25 +2773,9 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-                    val parts =
-                        programView.tag
-                            ?.toString()
-                            ?.split("|")
-                            ?: emptyList()
-
-
-
-                    val start =
-                        parts.getOrNull(1)
-                            ?.toLongOrNull()
-                            ?: 0L
-
-
-
-                    val stop =
-                        parts.getOrNull(2)
-                            ?.toLongOrNull()
-                            ?: start
+                    val (start, stop) =
+                        parseProgramTagWindow(programView.tag)
+                            ?: (0L to 0L)
 
 
 
@@ -2880,6 +2874,14 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
+    /** Parses the "streamId|start|stop" tag set on program cell views. */
+    private fun parseProgramTagWindow(tag: Any?): Pair<Long, Long>? {
+        val parts = tag?.toString()?.split("|") ?: return null
+        val start = parts.getOrNull(1)?.toLongOrNull() ?: return null
+        val stop = parts.getOrNull(2)?.toLongOrNull() ?: start
+        return start to stop
+    }
+
     private fun nearestProgramInRow(
         rowIndex: Int,
         targetCenter: Long
@@ -2898,25 +2900,9 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-            val parts =
-                view.tag
-                    ?.toString()
-                    ?.split("|")
+            val (start, stop) =
+                parseProgramTagWindow(view.tag)
                     ?: return@minByOrNull Long.MAX_VALUE
-
-
-
-            val start =
-                parts.getOrNull(1)
-                    ?.toLongOrNull()
-                    ?: return@minByOrNull Long.MAX_VALUE
-
-
-
-            val stop =
-                parts.getOrNull(2)
-                    ?.toLongOrNull()
-                    ?: start
 
 
 
@@ -3236,7 +3222,7 @@ class EpgChannelListActivity : BaseActivity() {
                     .get(this@EpgChannelListActivity)
                     .favoritesDao()
                     .getAll()
-                    .any { it.key == "LIVE_CHANNEL:$streamId" }
+                    .any { it.key == "${FavoriteItemType.LIVE_CHANNEL}:$streamId" }
             }
 
             val channelName = channel.name ?: "this channel"
@@ -3265,14 +3251,14 @@ class EpgChannelListActivity : BaseActivity() {
                     .get(this@EpgChannelListActivity)
                     .favoritesDao()
                     .getAll()
-                    .any { it.key == "LIVE_CHANNEL:$streamId" }
+                    .any { it.key == "${FavoriteItemType.LIVE_CHANNEL}:$streamId" }
             }
 
             try {
                 if (isFavorite) {
                     favoritesRepository.removeFavorite(
                         prefs.getUsername(),
-                        "LIVE_CHANNEL",
+                        FavoriteItemType.LIVE_CHANNEL,
                         streamId
                     )
                     Toast.makeText(
@@ -3283,7 +3269,7 @@ class EpgChannelListActivity : BaseActivity() {
                 } else {
                     favoritesRepository.addFavorite(
                         prefs.getUsername(),
-                        "LIVE_CHANNEL",
+                        FavoriteItemType.LIVE_CHANNEL,
                         streamId
                     )
                     Toast.makeText(
@@ -3313,16 +3299,7 @@ class EpgChannelListActivity : BaseActivity() {
     private fun buildStreamUrl(
         channel: LiveChannel
     ): String {
-
-
-        val server =
-            prefs.getServer()
-                .trim()
-                .trimEnd('/')
-
-
-
-        return "$server/live/${prefs.getUsername()}/${prefs.getPassword()}/${channel.stream_id}.m3u8"
+        return LiveStreamUrlBuilder.build(prefs, channel.stream_id)
     }
 
 
@@ -3666,14 +3643,16 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-    private fun dp(
+    private val density by lazy { resources.displayMetrics.density }
+
+    internal fun dp(
         value: Int
     ): Int {
 
 
         return (
                 value *
-                        resources.displayMetrics.density
+                        density
                 )
             .toInt()
     }
@@ -3732,6 +3711,8 @@ class EpgChannelListActivity : BaseActivity() {
             if (playingChannel != null) {
                 PlayerManager.resume()
             }
+
+            scheduleNowLineTick()
         }
     }
 
@@ -3746,6 +3727,8 @@ class EpgChannelListActivity : BaseActivity() {
     override fun onPause() {
         binding.playerView.player
             ?.removeListener(playerListener)
+
+        nowHandler.removeCallbacks(nowLineRunnable)
 
         super.onPause()
     }

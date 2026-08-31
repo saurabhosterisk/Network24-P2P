@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.network24.player.R
+import com.network24.player.common.utils.EpgTimeFormatter
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.databinding.ItemChannelBinding
 import com.network24.player.features.live.models.LiveChannel
@@ -17,8 +18,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class ChannelAdapter(
     private val channels: MutableList<LiveChannel>,
@@ -138,7 +137,7 @@ class ChannelAdapter(
 
                 if (current != null) {
                     nowTitle.text = current.title ?: "No Program Info"
-                    nowTime.text = "${formatTime(current.startTimestamp)} - ${formatTime(current.stopTimestamp)}"
+                    nowTime.text = "${EpgTimeFormatter.format(current.startTimestamp)} - ${EpgTimeFormatter.format(current.stopTimestamp)}"
                 } else {
                     nowTitle.text = "No EPG"
                     nowTime.text = ""
@@ -146,7 +145,7 @@ class ChannelAdapter(
 
                 if (next != null) {
                     nextTitle.text = next.title ?: ""
-                    nextTime.text = "${formatTime(next.startTimestamp)} - ${formatTime(next.stopTimestamp)}"
+                    nextTime.text = "${EpgTimeFormatter.format(next.startTimestamp)} - ${EpgTimeFormatter.format(next.stopTimestamp)}"
                 } else {
                     nextTitle.text = ""
                     nextTime.text = ""
@@ -154,15 +153,6 @@ class ChannelAdapter(
             } catch (_: Exception) {
                 // Keep the current EPG content if loading fails.
             }
-        }
-    }
-
-    private fun formatTime(timeMs: Long?): String {
-        if (timeMs == null || timeMs == 0L) return ""
-        return try {
-            SimpleDateFormat("hh:mm a", Locale.getDefault()).format(timeMs)
-        } catch (_: Exception) {
-            ""
         }
     }
 

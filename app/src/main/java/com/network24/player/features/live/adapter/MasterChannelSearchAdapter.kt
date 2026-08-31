@@ -10,10 +10,12 @@ import com.network24.player.core.database.entity.MasterChannelSearchResult
 import com.network24.player.databinding.ItemMasterChannelSearchResultBinding
 
 class MasterChannelSearchAdapter(
-    private val onSelected: (MasterChannelSearchResult) -> Unit
+    private val onSelected: (MasterChannelSearchResult) -> Unit,
+    private val onLongClicked: (MasterChannelSearchResult) -> Unit
 ) : RecyclerView.Adapter<MasterChannelSearchAdapter.ResultViewHolder>() {
 
     private val results = mutableListOf<MasterChannelSearchResult>()
+    private var currentProgramByEpgChannelId: Map<String, String> = emptyMap()
 
     inner class ResultViewHolder(
         val binding: ItemMasterChannelSearchResultBinding
@@ -41,6 +43,11 @@ class MasterChannelSearchAdapter(
 
         holder.binding.txtChannelName.text = result.channelName ?: "Unknown channel"
         holder.binding.txtCategoryName.text = result.categoryName ?: "Uncategorized"
+        holder.binding.txtCurrentlyPlaying.text = result.epgChannelId
+            ?.let { currentProgramByEpgChannelId[it] }
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "Currently Playing: $it" }
+            ?: "No EPG Data"
         holder.binding.imgFavorite.visibility = if (result.isFavorite) {
             android.view.View.VISIBLE
         } else {
@@ -55,6 +62,12 @@ class MasterChannelSearchAdapter(
                 .takeIf { it != RecyclerView.NO_POSITION }
                 ?.let { onSelected(results[it]) }
         }
+        holder.binding.root.setOnLongClickListener {
+            holder.bindingAdapterPosition
+                .takeIf { it != RecyclerView.NO_POSITION }
+                ?.let { onLongClicked(results[it]) }
+            true
+        }
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -62,6 +75,11 @@ class MasterChannelSearchAdapter(
         results.clear()
         results.addAll(newResults)
         notifyDataSetChanged()
+    }
+
+    fun updateCurrentPrograms(programs: Map<String, String>) {
+        currentProgramByEpgChannelId = programs
+        notifyItemRangeChanged(0, results.size)
     }
 
     private fun dp(holder: ResultViewHolder, value: Int): Int {

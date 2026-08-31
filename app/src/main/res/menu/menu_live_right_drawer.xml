@@ -22,11 +22,6 @@
         android:icon="@drawable/ic_info" />
 
     <item
-        android:id="@+id/action_search_guide"
-        android:title="Search TV Guide"
-        android:icon="@android:drawable/ic_menu_search" />
-
-    <item
         android:id="@+id/action_master_search"
         android:title="Master Search"
         android:icon="@android:drawable/ic_menu_search" />

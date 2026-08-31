@@ -72,6 +72,14 @@ object UpdateManager {
             }
 
         thread {
+            // The download runs on a background thread with no lifecycle owner, so every
+            // hop back to the UI must confirm the activity is still alive first.
+            fun postToUi(action: () -> Unit) {
+                activity.runOnUiThread {
+                    if (!activity.isFinishing && !activity.isDestroyed) action()
+                }
+            }
+
             try {
                 val client = OkHttpClient()
                 val request = Request.Builder()
@@ -84,13 +92,15 @@ object UpdateManager {
                 Log.d(TAG, "HTTP Code = ${response.code}")
 
                 if (!response.isSuccessful) {
-                    activity.runOnUiThread { onProgress(-1) } // 🔥 FIX: Notify UI on failure
+                    response.close()
+                    postToUi { onProgress(-1) } // 🔥 FIX: Notify UI on failure
                     return@thread
                 }
 
                 val body = response.body
                 if (body == null) {
-                    activity.runOnUiThread { onProgress(-1) } // 🔥 FIX: Notify UI on failure
+                    response.close()
+                    postToUi { onProgress(-1) } // 🔥 FIX: Notify UI on failure
                     return@thread
                 }
 
@@ -104,40 +114,40 @@ object UpdateManager {
                     activity.getExternalFilesDir(null),
                     "Network24_Update.apk"
                 )
-                val input = body.byteStream()
-                val output = FileOutputStream(apkFile)
-                val buffer = ByteArray(8192)
 
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read == -1) break
-                    output.write(buffer, 0, read)
-                    downloadedBytes += read
+                response.use {
+                    body.byteStream().use { input ->
+                        FileOutputStream(apkFile).use { output ->
+                            val buffer = ByteArray(8192)
 
-                    if (totalBytes > 0) {
-                        val progress = ((downloadedBytes * 100) / totalBytes).toInt()
-                        if (progress != lastProgress) {
-                            lastProgress = progress
-                            activity.runOnUiThread {
-                                onProgress(progress)
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read == -1) break
+                                output.write(buffer, 0, read)
+                                downloadedBytes += read
+
+                                if (totalBytes > 0) {
+                                    val progress = ((downloadedBytes * 100) / totalBytes).toInt()
+                                    if (progress != lastProgress) {
+                                        lastProgress = progress
+                                        postToUi { onProgress(progress) }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                output.flush()
-                output.close()
-                input.close()
                 Log.d(TAG, "APK Download Complete")
 
-                activity.runOnUiThread {
+                postToUi {
                     onProgress(101)
                     installApk(activity, apkFile)
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Download Failed", e)
-                activity.runOnUiThread { onProgress(-1) } // 🔥 FIX: Notify UI on exception
+                postToUi { onProgress(-1) } // 🔥 FIX: Notify UI on exception
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.network24.player.core.api
 
+import com.network24.player.core.network.DownloadProgressListener
 import com.network24.player.features.live.models.LiveCategory
 import com.network24.player.features.live.models.LiveChannel
 import com.network24.player.common.models.LoginResponse
@@ -9,6 +10,7 @@ import retrofit2.Response
 import retrofit2.http.GET
 import retrofit2.http.Query
 import retrofit2.http.Streaming
+import retrofit2.http.Tag
 
 interface ApiService {
 
@@ -22,7 +24,8 @@ interface ApiService {
     suspend fun getLiveCategories(
         @Query("username") username: String,
         @Query("password") password: String,
-        @Query("action") action: String = "get_live_categories"
+        @Query("action") action: String = "get_live_categories",
+        @Tag progress: DownloadProgressListener? = null
     ): Response<List<LiveCategory>>
 
     @GET("player_api.php")
@@ -30,7 +33,8 @@ interface ApiService {
         @Query("username") username: String,
         @Query("password") password: String,
         @Query("action") action: String = "get_live_streams",
-        @Query("category_id") categoryId: String
+        @Query("category_id") categoryId: String,
+        @Tag progress: DownloadProgressListener? = null
     ): Response<List<LiveChannel>>
 
     @GET("player_api.php")

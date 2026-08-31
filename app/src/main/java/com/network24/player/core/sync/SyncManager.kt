@@ -13,6 +13,8 @@ import com.network24.player.core.database.mapper.toChannelEntity
 import com.network24.player.core.database.mapper.toEpgEntity
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.cache.memory.MemoryCache
+import com.network24.player.core.network.DownloadProgressListener
+import com.network24.player.core.network.ProgressResponseBody
 import com.network24.player.common.models.LoginCredentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +49,23 @@ class SyncManager(private val context: Context) {
         private val fullEpgSyncMutex = Mutex()
         private var activeFullEpgSync: Deferred<SyncResult>? = null
 
+        // Dashboard and every Live/Favorites/Category screen each call
+        // syncAllData() independently on their own first load. Without this,
+        // two concurrent full-catalogue downloads compete for the same slow
+        // connection (seen on Fire TV Stick) until one read stalls past the
+        // OkHttp timeout and the socket gets torn down mid-parse for both.
+        private val categoriesSyncScope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO
+        )
+        private val categoriesSyncMutex = Mutex()
+        private var activeCategoriesSync: Deferred<SyncResult>? = null
+
+        private val channelsSyncScope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO
+        )
+        private val channelsSyncMutex = Mutex()
+        private var activeChannelsSync: Deferred<SyncResult>? = null
+
         // Do not use ThreadLocal.withInitial here: that Java 8 API was added
         // to Android only in API 26, while Fire TV Stick 4K (1st Gen) runs
         // API 25. The explicit initialValue implementation is API 1 safe.
@@ -80,6 +99,32 @@ class SyncManager(private val context: Context) {
     suspend fun syncLiveCategories(
         force: Boolean = false,
         credentials: LoginCredentials? = null
+    ): SyncResult {
+        val runningSync = categoriesSyncMutex.withLock {
+            activeCategoriesSync?.takeIf { it.isActive } ?: run {
+                val newSync = categoriesSyncScope.async {
+                    syncLiveCategoriesInternal(force, credentials)
+                }
+                activeCategoriesSync = newSync
+                newSync.invokeOnCompletion {
+                    categoriesSyncScope.launch {
+                        categoriesSyncMutex.withLock {
+                            if (activeCategoriesSync === newSync) {
+                                activeCategoriesSync = null
+                            }
+                        }
+                    }
+                }
+                newSync
+            }
+        }
+
+        return runningSync.await()
+    }
+
+    private suspend fun syncLiveCategoriesInternal(
+        force: Boolean,
+        credentials: LoginCredentials?
     ): SyncResult = withContext(Dispatchers.IO) {
         try {
             val creds = resolveCredentials(credentials)
@@ -131,7 +176,35 @@ class SyncManager(private val context: Context) {
 
     suspend fun syncLiveChannelsAll(
         force: Boolean = false,
-        credentials: LoginCredentials? = null
+        credentials: LoginCredentials? = null,
+        onProgress: (Int) -> Unit = {}
+    ): SyncResult {
+        val runningSync = channelsSyncMutex.withLock {
+            activeChannelsSync?.takeIf { it.isActive } ?: run {
+                val newSync = channelsSyncScope.async {
+                    syncLiveChannelsAllInternal(force, credentials, onProgress)
+                }
+                activeChannelsSync = newSync
+                newSync.invokeOnCompletion {
+                    channelsSyncScope.launch {
+                        channelsSyncMutex.withLock {
+                            if (activeChannelsSync === newSync) {
+                                activeChannelsSync = null
+                            }
+                        }
+                    }
+                }
+                newSync
+            }
+        }
+
+        return runningSync.await()
+    }
+
+    private suspend fun syncLiveChannelsAllInternal(
+        force: Boolean,
+        credentials: LoginCredentials?,
+        onProgress: (Int) -> Unit
     ): SyncResult = withContext(Dispatchers.IO) {
         try {
             val creds = resolveCredentials(credentials)
@@ -151,7 +224,8 @@ class SyncManager(private val context: Context) {
             val response = service.getLiveStreams(
                 username = creds.username,
                 password = creds.password,
-                categoryId = ""
+                categoryId = "",
+                progress = DownloadProgressListener { percent -> onProgress(percent) }
             )
 
             if (!response.isSuccessful) {
@@ -233,7 +307,7 @@ class SyncManager(private val context: Context) {
      * opening Live With EPG while the dashboard is syncing cannot download and
      * parse the same guide twice.
      */
-    suspend fun syncFullEpg(force: Boolean = false): SyncResult {
+    suspend fun syncFullEpg(force: Boolean = false, onProgress: (Int) -> Unit = {}): SyncResult {
         if (!force && isFullEpgFresh()) {
             return SyncResult.Success
         }
@@ -241,7 +315,7 @@ class SyncManager(private val context: Context) {
         val runningSync = fullEpgSyncMutex.withLock {
             activeFullEpgSync?.takeIf { it.isActive } ?: run {
                 val newSync = fullEpgSyncScope.async {
-                    syncFullEpgInternal()
+                    syncFullEpgInternal(onProgress)
                 }
                 activeFullEpgSync = newSync
                 newSync.invokeOnCompletion {
@@ -269,7 +343,7 @@ class SyncManager(private val context: Context) {
         return System.currentTimeMillis() - lastSync < FULL_EPG_FRESH_MS
     }
 
-    private suspend fun syncFullEpgInternal(): SyncResult = withContext(Dispatchers.IO) {
+    private suspend fun syncFullEpgInternal(onProgress: (Int) -> Unit): SyncResult = withContext(Dispatchers.IO) {
         try {
             val creds = PreferenceManager(context).getLoginCredentials()
                 ?: return@withContext SyncResult.Error("Missing login credentials")
@@ -283,11 +357,19 @@ class SyncManager(private val context: Context) {
             }
 
             val body: ResponseBody = response.body() ?: return@withContext SyncResult.Error("XMLTV empty body")
+            val advertisedContentLength = response.headers()
+                .get(ProgressResponseBody.UNCOMPRESSED_LENGTH_HEADER)
+                ?.toLongOrNull()
+            val trackedBody = ProgressResponseBody(
+                body,
+                DownloadProgressListener { percent -> onProgress(percent) },
+                advertisedContentLength
+            )
 
             // Insert in sizeable batches. Streaming avoids holding the XMLTV
             // document in memory while reused formatters keep parsing cheap.
             db.epgDao().deleteAll()
-            body.byteStream().use { input ->
+            trackedBody.byteStream().use { input ->
                 parseAndInsertXmlTv(input)
             }
             db.syncMetaDao().upsert(SyncMetaEntity(SyncKeys.FULL_EPG, System.currentTimeMillis()))

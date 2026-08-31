@@ -5,15 +5,10 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <!-- Contains the plaintext Xtream login password (PreferenceManager); never back it up. -->
+        <exclude domain="sharedpref" path="network24.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="network24.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

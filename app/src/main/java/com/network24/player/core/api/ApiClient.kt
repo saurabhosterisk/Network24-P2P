@@ -1,6 +1,8 @@
 package com.network24.player.core.api
 
 import com.network24.player.core.api.ApiService
+import com.network24.player.core.network.DownloadProgressListener
+import com.network24.player.core.network.ProgressResponseBody
 import okhttp3.OkHttpClient
 import okhttp3.ConnectionSpec
 import okhttp3.Dns
@@ -25,10 +27,14 @@ object ApiClient {
             }
 
             val client = OkHttpClient.Builder()
-                // 🔥 Timeout ko 20 seconds se badha kar 90 seconds kar diya hai
-                .connectTimeout(90, TimeUnit.SECONDS)
-                .readTimeout(90, TimeUnit.SECONDS)
-                .writeTimeout(90, TimeUnit.SECONDS)
+                // Accounts with very large channel catalogues (8000+ streams)
+                // can legitimately take over 90s to download on a shared/slow
+                // connection - measured 78s for 8631 channels on a congested
+                // home WiFi. 90s left almost no margin and could time out a
+                // sync that was still genuinely in progress, not actually stuck.
+                .connectTimeout(150, TimeUnit.SECONDS)
+                .readTimeout(150, TimeUnit.SECONDS)
+                .writeTimeout(150, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
                 // Fire OS 6 devices can prefer a broken IPv6 route even when
                 // the IPTV host is reachable over IPv4.
@@ -52,6 +58,31 @@ object ApiClient {
                             .header("User-Agent", "Mozilla/5.0 (Linux; Android) N24Player")
                             .build()
                     )
+                }
+                // Only wraps the response when a caller tagged its request with a
+                // DownloadProgressListener (e.g. category/channel sync); every other
+                // call passes through untouched.
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    val response = chain.proceed(request)
+                    val progressListener = request.tag(DownloadProgressListener::class.java)
+                    val body = response.body
+                    if (progressListener != null && body != null) {
+                        val advertisedContentLength = response.header(
+                            ProgressResponseBody.UNCOMPRESSED_LENGTH_HEADER
+                        )?.toLongOrNull()
+                        response.newBuilder()
+                            .body(
+                                ProgressResponseBody(
+                                    body,
+                                    progressListener,
+                                    advertisedContentLength
+                                )
+                            )
+                            .build()
+                    } else {
+                        response
+                    }
                 }
                 .addInterceptor(logging)
                 .build()

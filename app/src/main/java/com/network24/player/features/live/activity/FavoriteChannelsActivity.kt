@@ -17,6 +17,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.firebase.firestore.FirebaseFirestore
 
 import com.network24.player.R
+import com.network24.player.common.models.FavoriteItemType
+import com.network24.player.common.utils.EpgTimeFormatter
+import com.network24.player.common.utils.LiveStreamUrlBuilder
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.repository.FavoritesRepository
@@ -25,6 +28,7 @@ import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.databinding.ActivityFavoriteChannelsBinding
 
 import com.network24.player.features.dashboard.activity.DashboardActivity
+import com.network24.player.features.live.ChannelDownReporter
 import com.network24.player.features.live.adapter.ChannelAdapter
 import com.network24.player.features.live.history.LiveWatchHistory
 import com.network24.player.features.live.models.LiveChannel
@@ -38,9 +42,6 @@ import com.network24.player.features.player.manager.PlayerManager
 import com.network24.player.features.player.state.PlayerState
 
 import kotlinx.coroutines.launch
-
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 
 
@@ -405,7 +406,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                 .observeByType(
 
-                    "LIVE_CHANNEL"
+                    FavoriteItemType.LIVE_CHANNEL
 
                 )
 
@@ -448,7 +449,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-        ensureInitialSyncThenLoadFavorites()
+        loadAllChannelsToMemory(forceRefresh = false)
 
     }
 
@@ -461,228 +462,30 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     private fun setupReportButton() {
-
-
-        binding.btnReportChannel.visibility =
-            View.GONE
-
-
-
-
+        binding.btnReportChannel.visibility = View.GONE
 
         binding.btnReportChannel.setOnClickListener {
-
-
-
-            if (
-
-                previewPosition == -1
-
-                ||
-
-                channelList.isEmpty()
-
-            ) return@setOnClickListener
-
-
-
-
-
-            val channel =
-
-                channelList[previewPosition]
-
-
-
-
-
-            val username =
-
-                prefs.getUsername()
-
-
-
-
-
-            val message =
-
-                "🚨 System Alert: $username reported that the channel '${channel.name}' is currently down."
-
-
-
-
-
-
-
-            val data =
-
-                hashMapOf(
-
-                    "senderId" to "system_bot",
-
-                    "senderName" to "System",
-
-                    "text" to message,
-
-                    "ts" to
-                            com.google.firebase.firestore.FieldValue.serverTimestamp()
-
-                )
-
-
-
-
-
-
-
-            binding.btnReportChannel.visibility =
-                View.GONE
-
-
-
-
-            binding.txtPlayerError.text =
-                "Sending report..."
-
-
-
-
-
-
-
-            FirebaseFirestore
-                .getInstance()
-
-                .collection("rooms")
-
-                .document("channel_down")
-
-                .collection("messages")
-
-                .add(data)
-
-                .addOnSuccessListener {
-
-
-                    binding.txtPlayerError.text =
-
-                        "Channel reported. Our team will look into it."
-
+            if (previewPosition == -1 || channelList.isEmpty()) return@setOnClickListener
+
+            val channel = channelList[previewPosition]
+            val username = prefs.getUsername()
+
+            binding.btnReportChannel.visibility = View.GONE
+            binding.txtPlayerError.text = "Sending report..."
+
+            ChannelDownReporter.report(
+                username = username,
+                channelName = channel.name ?: "Unknown Channel",
+                onSuccess = {
+                    binding.txtPlayerError.text = "Channel reported. Our team will look into it."
+                },
+                onFailure = {
+                    binding.btnReportChannel.visibility = View.VISIBLE
+                    binding.txtPlayerError.text = "Failed to send report."
                 }
-
-
-                .addOnFailureListener {
-
-
-                    binding.btnReportChannel.visibility =
-                        View.VISIBLE
-
-
-
-                    binding.txtPlayerError.text =
-
-                        "Failed to send report."
-
-                }
-
+            )
         }
-
     }
-
-
-
-    private fun ensureInitialSyncThenLoadFavorites() {
-
-
-        lifecycleScope.launch {
-
-
-            try {
-
-
-
-                val channels =
-
-                    repository.getChannels(
-
-                        server =
-                            prefs.getServer(),
-
-                        username =
-                            prefs.getUsername(),
-
-                        password =
-                            prefs.getPassword(),
-
-                        categoryId =
-                            "",
-
-                        forceRefresh =
-                            false
-
-                    )
-
-
-
-
-
-                if (
-                    channels.isNotEmpty()
-                ) {
-
-
-
-                    allChannels.clear()
-
-
-
-                    allChannels.addAll(
-                        channels
-                    )
-
-
-
-                    refreshFavoriteListFromDb(
-                        currentFavIds
-                    )
-
-
-
-                }
-                else {
-
-
-
-                    forceRefreshData()
-
-                }
-
-
-
-            }
-            catch(
-                e: Exception
-            ) {
-
-
-                Toast.makeText(
-
-                    this@FavoriteChannelsActivity,
-
-                    e.message
-                        ?: "Load failed",
-
-                    Toast.LENGTH_LONG
-
-                ).show()
-
-            }
-
-        }
-
-    }
-
-
 
 
 
@@ -723,6 +526,14 @@ class FavoriteChannelsActivity : BaseActivity() {
                     )
 
 
+
+                if (
+                    channels.isEmpty() &&
+                    !forceRefresh
+                ) {
+                    forceRefreshData()
+                    return@launch
+                }
 
 
 
@@ -1346,26 +1157,6 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-                R.id.action_search_guide -> {
-
-
-
-                    startActivity(
-                        Intent(
-                            this@FavoriteChannelsActivity,
-                            ProgramSearchActivity::class.java
-                        )
-                    )
-
-
-
-                    true
-
-                }
-
-
-
-
                 R.id.action_master_search -> {
 
 
@@ -1639,7 +1430,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                 prefs.getUsername(),
 
-                "LIVE_CHANNEL",
+                FavoriteItemType.LIVE_CHANNEL,
 
                 streamId
 
@@ -1657,25 +1448,9 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-    private fun buildStreamUrl(
-        channel: LiveChannel
-    ): String {
-
-
-        val server =
-
-            prefs.getServer()
-                .trim()
-                .trimEnd('/')
-
-
-
-
-
-        return "$server/live/${prefs.getUsername()}/${prefs.getPassword()}/${channel.stream_id}.m3u8"
-
+    private fun buildStreamUrl(channel: LiveChannel): String {
+        return LiveStreamUrlBuilder.build(prefs, channel.stream_id)
     }
-
 
 
     private fun loadProgramGuide(
@@ -1730,7 +1505,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                     binding.txtNowTime.text =
 
-                        "${formatTime(nowEpg.startTimestamp)} - ${formatTime(nowEpg.stopTimestamp)}"
+                        "${EpgTimeFormatter.format(nowEpg.startTimestamp)} - ${EpgTimeFormatter.format(nowEpg.stopTimestamp)}"
 
 
 
@@ -1786,7 +1561,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                     binding.txtNextTime.text =
 
-                        "${formatTime(nextEpg.startTimestamp)} - ${formatTime(nextEpg.stopTimestamp)}"
+                        "${EpgTimeFormatter.format(nextEpg.startTimestamp)} - ${EpgTimeFormatter.format(nextEpg.stopTimestamp)}"
 
 
 
@@ -1848,53 +1623,6 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-
-    private fun formatTime(
-        timeMs: Long?
-    ): String {
-
-
-        if (
-
-            timeMs == null
-
-            ||
-
-            timeMs == 0L
-
-        )
-
-            return ""
-
-
-
-
-        return try {
-
-
-            SimpleDateFormat(
-
-                "hh:mm a",
-
-                Locale.getDefault()
-
-            ).format(
-
-                timeMs
-
-            )
-
-        }
-        catch(
-            e: Exception
-        ) {
-
-
-            ""
-
-        }
-
-    }
 
 
 

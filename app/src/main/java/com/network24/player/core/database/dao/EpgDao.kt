@@ -46,6 +46,20 @@ interface EpgDao {
 
     @Query("""
         SELECT * FROM epg
+        WHERE epgChannelId IN (:epgChannelIds)
+          AND startTimestamp IS NOT NULL
+          AND stopTimestamp IS NOT NULL
+          AND startTimestamp <= :nowTs
+          AND stopTimestamp > :nowTs
+        ORDER BY epgChannelId ASC, startTimestamp DESC
+    """)
+    suspend fun getNowByEpgChannelIds(
+        epgChannelIds: List<String>,
+        nowTs: Long
+    ): List<EpgEntity>
+
+    @Query("""
+        SELECT * FROM epg
         WHERE epgChannelId = :epgChannelId
           AND startTimestamp IS NOT NULL
           AND startTimestamp > :nowTs

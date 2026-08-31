@@ -11,7 +11,6 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
 import com.network24.player.R
 import com.network24.player.core.base.DrawerFocusStyler
-import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.sync.SyncManager
 import com.network24.player.features.dashboard.activity.DashboardActivity
 import com.network24.player.features.login.activity.LoginActivity
@@ -55,15 +54,11 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
                     true
                 }
                 R.id.action_refresh_all -> {
-                    invokePrivate(activity, "loadChannels")
+                    activity.loadChannels()
                     true
                 }
                 R.id.action_refresh_guide -> {
                     refreshGuide(activity)
-                    true
-                }
-                R.id.action_search_guide -> {
-                    activity.startActivity(Intent(activity, ProgramSearchActivity::class.java))
                     true
                 }
                 R.id.action_master_search -> {
@@ -108,47 +103,30 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun invokePrivate(activity: EpgChannelListActivity, methodName: String) {
-        try {
-            activity.javaClass.getDeclaredMethod(methodName).apply { isAccessible = true }.invoke(activity)
-        } catch (e: Exception) {
-            Toast.makeText(activity, e.message ?: "Unable to refresh channels", Toast.LENGTH_LONG).show()
-        }
-    }
-
     private fun refreshGuide(activity: EpgChannelListActivity) {
-        showLoader(activity, "Updating TV Guide…")
+        val loadingMessage = "Updating TV Guide…"
+        activity.showLoader(loadingMessage)
         activity.lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val result = SyncManager(activity).syncFullEpg(force = true)
+                val result = SyncManager(activity).syncFullEpg(force = true) { percent ->
+                    activity.showLoader("$loadingMessage $percent%")
+                }
                 withContext(Dispatchers.Main) {
-                    hideLoader(activity)
+                    activity.hideLoader()
                     if (result is com.network24.player.core.sync.SyncResult.Error) {
                         Toast.makeText(activity, result.message, Toast.LENGTH_LONG).show()
                     } else {
                         Toast.makeText(activity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
-                        invokePrivate(activity, "loadGuideData")
+                        activity.loadGuideData()
                     }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    hideLoader(activity)
+                    activity.hideLoader()
                     Toast.makeText(activity, e.message ?: "TV Guide update failed", Toast.LENGTH_LONG).show()
                 }
             }
         }
-    }
-
-    private fun showLoader(activity: EpgChannelListActivity, message: String) {
-        try {
-            activity.javaClass.superclass?.getDeclaredMethod("showLoader", String::class.java)?.apply { isAccessible = true }?.invoke(activity, message)
-        } catch (_: Exception) { }
-    }
-
-    private fun hideLoader(activity: EpgChannelListActivity) {
-        try {
-            activity.javaClass.superclass?.getDeclaredMethod("hideLoader")?.apply { isAccessible = true }?.invoke(activity)
-        } catch (_: Exception) { }
     }
 }
 
