@@ -4,20 +4,13 @@ import android.content.Context
 import android.content.Intent
 import android.util.AttributeSet
 import android.view.View
-import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.lifecycle.lifecycleScope
 import com.network24.player.R
 import com.network24.player.core.base.DrawerFocusStyler
-import com.network24.player.core.sync.SyncManager
 import com.network24.player.features.dashboard.activity.DashboardActivity
-import com.network24.player.features.login.activity.LoginActivity
 import com.network24.player.features.settings.activity.SettingsActivity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** Binds the existing Live right-side drawer menu to the Live With EPG screen. */
 class EpgDrawerMenuBinder @JvmOverloads constructor(
@@ -58,7 +51,7 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
                     true
                 }
                 R.id.action_refresh_guide -> {
-                    refreshGuide(activity)
+                    activity.refreshGuideFromMenu()
                     true
                 }
                 R.id.action_master_search -> {
@@ -103,31 +96,6 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun refreshGuide(activity: EpgChannelListActivity) {
-        val loadingMessage = "Updating TV Guide…"
-        activity.showLoader(loadingMessage)
-        activity.lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val result = SyncManager(activity).syncFullEpg(force = true) { percent ->
-                    activity.showLoader("$loadingMessage $percent%")
-                }
-                withContext(Dispatchers.Main) {
-                    activity.hideLoader()
-                    if (result is com.network24.player.core.sync.SyncResult.Error) {
-                        Toast.makeText(activity, result.message, Toast.LENGTH_LONG).show()
-                    } else {
-                        Toast.makeText(activity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
-                        activity.loadGuideData()
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    activity.hideLoader()
-                    Toast.makeText(activity, e.message ?: "TV Guide update failed", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
 }
 
 private fun View.focusFirstFocusableDescendant(): Boolean {

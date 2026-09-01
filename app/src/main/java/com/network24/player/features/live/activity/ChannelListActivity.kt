@@ -47,6 +47,18 @@ import kotlinx.coroutines.launch
 
 class ChannelListActivity : BaseActivity() {
 
+    override fun onTvGuideUpdated() {
+        if (::binding.isInitialized) {
+            val selectedStreamId = channelList
+                .getOrNull(previewPosition)
+                ?.stream_id
+            loadChannels(
+                forceRefresh = false,
+                preserveStreamId = selectedStreamId
+            )
+        }
+    }
+
 
     private lateinit var binding: ActivityChannelListBinding
 
@@ -417,7 +429,8 @@ class ChannelListActivity : BaseActivity() {
 
 
     private fun loadChannels(
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        preserveStreamId: Int? = null
     ) {
 
 
@@ -445,7 +458,8 @@ class ChannelListActivity : BaseActivity() {
 
 
                 applyChannelsToUi(
-                    channels
+                    channels,
+                    preserveStreamId
                 )
 
 
@@ -471,7 +485,8 @@ class ChannelListActivity : BaseActivity() {
 
 
     private fun applyChannelsToUi(
-        channels: List<LiveChannel>
+        channels: List<LiveChannel>,
+        preserveStreamId: Int? = null
     ) {
 
 
@@ -502,18 +517,21 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-        val targetPos =
+        val preservedPosition = preserveStreamId
+            ?.let { streamId ->
+                channelList.indexOfFirst { it.stream_id == streamId }
+            }
+            ?.takeIf { it >= 0 }
 
-            if (
+        val targetPos = preservedPosition
+            ?: if (PlayerState.currentPosition in channelList.indices) {
                 PlayerState.currentPosition
-                in channelList.indices
-            )
-
-                PlayerState.currentPosition
-
-            else
-
+            } else {
                 0
+            }
+
+        val shouldRestartPlayback = preserveStreamId == null ||
+            channelList[targetPos].stream_id != preserveStreamId
 
 
 
@@ -529,9 +547,13 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-        showPreview(
-            channelList[targetPos]
-        )
+        if (shouldRestartPlayback) {
+            showPreview(channelList[targetPos])
+        } else {
+            binding.txtPlayerError.visibility = View.GONE
+            binding.btnReportChannel.visibility = View.GONE
+            binding.txtOverlayChannel.text = channelList[targetPos].name ?: ""
+        }
 
 
 

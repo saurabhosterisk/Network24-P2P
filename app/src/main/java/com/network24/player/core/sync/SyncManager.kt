@@ -251,6 +251,10 @@ class SyncManager(private val context: Context) {
                 )
             }
 
+            // The channel response may contain newly assigned epg_channel_id
+            // values. Do not let an old in-memory channel list hide them.
+            MemoryCache.clearAll()
+
             SyncResult.Success
         } catch (t: Throwable) {
             if (t is CancellationException) throw t

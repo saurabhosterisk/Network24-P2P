@@ -310,12 +310,35 @@ open class BaseActivity : AppCompatActivity() {
         start(onSuccess, onError)
     }
 
+    /**
+     * Refreshes channel metadata before downloading XMLTV. Providers can add
+     * an epg_channel_id to an existing stream without changing its stream_id;
+     * retaining the old catalogue made a newly enabled EPG invisible until
+     * logout/login rebuilt the catalogue.
+     */
+    protected open fun onTvGuideUpdated() = Unit
+
     protected fun refreshTvGuide(
         loadingMessage: String = "Updating TV Guide… This can take a minute."
     ) {
         showLoader(loadingMessage)
         lifecycleScope.launch {
-            val result = SyncManager(this@BaseActivity).syncFullEpg(force = true) { percent ->
+            val syncManager = SyncManager(this@BaseActivity)
+            val channelsResult = syncManager.syncLiveChannelsAll(force = true) { percent ->
+                showLoader("Refreshing channel data… $percent%")
+            }
+
+            if (channelsResult is SyncResult.Error) {
+                hideLoader()
+                Toast.makeText(
+                    this@BaseActivity,
+                    "Channel data refresh failed: ${channelsResult.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
+            val result = syncManager.syncFullEpg(force = true) { percent ->
                 showLoader("$loadingMessage $percent%")
             }
             hideLoader()
@@ -323,6 +346,7 @@ open class BaseActivity : AppCompatActivity() {
             when (result) {
                 is SyncResult.Success -> {
                     Toast.makeText(this@BaseActivity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
+                    onTvGuideUpdated()
                     sendBroadcast(Intent(ACTION_EPG_UPDATED))
                 }
                 is SyncResult.Error -> {

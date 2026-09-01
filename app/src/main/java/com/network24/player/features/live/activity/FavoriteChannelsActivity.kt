@@ -47,6 +47,10 @@ import kotlinx.coroutines.launch
 
 class FavoriteChannelsActivity : BaseActivity() {
 
+    override fun onTvGuideUpdated() {
+        if (::binding.isInitialized) loadAllChannelsToMemory(forceRefresh = false)
+    }
+
 
 
     private lateinit var binding:
@@ -694,6 +698,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
         )
 
+        loadProgramGuide(channelList[previewPosition])
+
     }
 
 
@@ -1133,24 +1139,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
                 R.id.action_refresh_guide -> {
-
-
-                    if (
-                        previewPosition in channelList.indices
-                    ) {
-
-
-                        loadProgramGuide(
-
-                            channelList[previewPosition]
-
-                        )
-
-                    }
-
-
+                    refreshTvGuide()
                     true
-
                 }
 
 

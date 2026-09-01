@@ -124,6 +124,13 @@ class LiveRepository(private val context: Context) {
         return fresh
     }
 
+    /** Returns the latest persisted metadata for the currently playing stream. */
+    suspend fun getChannelByStreamId(streamId: Int): LiveChannel? =
+        db.channelDao()
+            .getByStreamIds(listOf(streamId))
+            .firstOrNull()
+            ?.toLiveChannel()
+
     /**
      * Searches the persisted live-channel catalogue across every category.
      * Matching and ranking are performed by SQLite; only result rows are

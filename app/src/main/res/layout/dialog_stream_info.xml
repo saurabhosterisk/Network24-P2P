@@ -217,29 +217,25 @@
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
-            <ScrollView
+            <LinearLayout
                 android:id="@+id/detailScrollView"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="7dp"
                 android:layout_weight="1"
-                android:fadeScrollbars="true"
-                android:fillViewport="true"
+                android:orientation="vertical"
+                android:gravity="top"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:descendantFocusability="blocksDescendants"
                 android:nextFocusDown="@id/btnRunDiagnosis">
 
-                <TextView
+                <LinearLayout
                     android:id="@+id/tvDetailBody"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:lineSpacingExtra="2dp"
-                    android:text="Select a category below."
-                    android:textColor="#E7ECF5"
-                    android:textIsSelectable="true"
-                    android:textSize="15sp" />
-            </ScrollView>
+                    android:orientation="vertical" />
+            </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -261,7 +257,7 @@
 
             <Button
                 android:id="@+id/btnRunDiagnosis"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
                 android:text="RUN AUTO CHECK"
                 android:textSize="11sp"
@@ -282,9 +278,9 @@
 
             <Button
                 android:id="@+id/btnOverview"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="OVERVIEW"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -305,9 +301,9 @@
 
             <Button
                 android:id="@+id/btnStreamDetails"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="STREAM"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -328,9 +324,9 @@
 
             <Button
                 android:id="@+id/btnNetworkDetails"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="NETWORK"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -351,9 +347,9 @@
 
             <Button
                 android:id="@+id/btnDeviceDetails"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="DEVICE"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -374,9 +370,9 @@
 
             <Button
                 android:id="@+id/btnEventsDetails"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="EVENTS"
                 android:textSize="11sp"
                 android:singleLine="true"
@@ -397,9 +393,9 @@
 
             <Button
                 android:id="@+id/btnClose"
-                android:layout_width="116dp"
+                android:layout_width="110dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="4dp"
                 android:text="CLOSE"
                 android:textSize="11sp"
                 android:singleLine="true"

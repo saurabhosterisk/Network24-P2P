@@ -1,16 +1,13 @@
 package com.network24.player.features.player.ui.dialogs
 
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.StyleSpan
 import android.view.LayoutInflater
-import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
@@ -73,25 +70,6 @@ class StreamInfoDialog : DialogFragment() {
         showSummaryPanel()
         configureRemoteButtons()
         binding.btnRunDiagnosis.post { binding.btnRunDiagnosis.requestFocus() }
-        val detailKeyListener = View.OnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@OnKeyListener false
-            val scrollView = binding.detailScrollView
-            val delta = (scrollView.height * 0.72f).toInt().coerceAtLeast(120)
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (!scrollView.canScrollVertically(1)) return@OnKeyListener false
-                    scrollView.smoothScrollBy(0, delta)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    if (!scrollView.canScrollVertically(-1)) return@OnKeyListener false
-                    scrollView.smoothScrollBy(0, -delta)
-                    true
-                }
-                else -> false
-            }
-        }
-        binding.detailScrollView.setOnKeyListener(detailKeyListener)
         refreshUi()
     }
 
@@ -105,17 +83,14 @@ class StreamInfoDialog : DialogFragment() {
             binding.btnEventsDetails,
             binding.btnClose
         )
-        val density = resources.displayMetrics.density
         buttons.forEach { button ->
             button.backgroundTintList = null
-            button.setOnFocusChangeListener { view, hasFocus ->
-                view.animate()
-                    .scaleX(if (hasFocus) 1.025f else 1f)
-                    .scaleY(if (hasFocus) 1.025f else 1f)
-                    .setDuration(120L)
-                    .start()
-                view.elevation = if (hasFocus) 6f * density else 0f
-            }
+            button.stateListAnimator = null
+            // The drawable provides the focus indicator. Keep the button's
+            // bounds stable so DPAD navigation never changes the layout.
+            button.scaleX = 1f
+            button.scaleY = 1f
+            button.elevation = 0f
         }
     }
 
@@ -234,7 +209,7 @@ class StreamInfoDialog : DialogFragment() {
     private fun renderDetails() {
         if (_binding == null) return
         binding.tvDetailSection.text = sectionTitle(selectedSection)
-        binding.tvDetailBody.text = buildDetails(selectedSection)
+        renderDetailRows(buildDetails(selectedSection))
     }
 
     private fun showSummaryPanel() {
@@ -249,11 +224,13 @@ class StreamInfoDialog : DialogFragment() {
         binding.cardDetails.visibility = View.VISIBLE
     }
 
-    private fun buildDetails(section: String): SpannableStringBuilder {
+    private data class DetailRow(val label: String, val value: String)
+
+    private fun buildDetails(section: String): List<DetailRow> {
         val player = PlayerManager.getExoPlayerOrNull()
         val device = lastDevice ?: runCatching { DeviceHealthCollector.collect(requireContext()) }.getOrNull()
         val required = getRequiredSpeedMbps(player?.videoFormat?.height ?: 0)
-        return SpannableStringBuilder().apply {
+        return buildList {
             when (section) {
                 SECTION_STREAM -> {
                     row("Endpoint host", safeHost(PlayerManager.getCurrentUrlOrEmpty()))
@@ -313,16 +290,39 @@ class StreamInfoDialog : DialogFragment() {
         }
     }
 
-    private fun SpannableStringBuilder.row(label: String, value: String) {
-        val labelStart = length
-        append(label).append("\n")
-        setSpan(
-            StyleSpan(Typeface.BOLD),
-            labelStart,
-            labelStart + label.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-        append(value).append("\n\n")
+    private fun MutableList<DetailRow>.row(label: String, value: String) {
+        add(DetailRow(label, value))
+    }
+
+    private fun renderDetailRows(rows: List<DetailRow>) {
+        val container = binding.tvDetailBody
+        container.removeAllViews()
+        val density = resources.displayMetrics.density
+        rows.forEachIndexed { index, row ->
+            val rowLayout = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.TOP
+                setPadding(0, if (index == 0) 0 else (4 * density).toInt(), 0, (4 * density).toInt())
+            }
+            val labelView = TextView(requireContext()).apply {
+                text = row.label
+                setTextColor(android.graphics.Color.rgb(139, 152, 172))
+                textSize = 13f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val valueView = TextView(requireContext()).apply {
+                text = row.value
+                setTextColor(android.graphics.Color.rgb(231, 236, 245))
+                textSize = 14f
+                setLineSpacing(0f, 1.05f)
+            }
+            rowLayout.addView(labelView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.36f))
+            rowLayout.addView(valueView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.64f))
+            container.addView(rowLayout, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
     }
 
     private fun calculateHealthScore(downloadMbps: Double, requiredMbps: Float, rebufferCount: Int, hasError: Boolean): Int {

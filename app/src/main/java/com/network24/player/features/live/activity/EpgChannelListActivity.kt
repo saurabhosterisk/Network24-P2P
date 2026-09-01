@@ -57,6 +57,13 @@ import java.util.Locale
 
 class EpgChannelListActivity : BaseActivity() {
 
+    override fun onTvGuideUpdated() {
+        if (::binding.isInitialized) loadChannels()
+    }
+
+    /** Called by the EPG screen's drawer binder. */
+    internal fun refreshGuideFromMenu() = refreshTvGuide()
+
 
 
     private lateinit var binding:

@@ -44,6 +44,33 @@ import androidx.media3.common.TrackSelectionOverride
 @Suppress("UnsafeOptInUsageError")
 class PlayerActivity : BaseActivity() {
 
+    override fun onTvGuideUpdated() {
+        if (!::binding.isInitialized || !::repository.isInitialized) return
+
+        val current = PlayerState.currentChannel() ?: return
+        val streamId = current.stream_id ?: return
+
+        lifecycleScope.launch {
+            val refreshedChannel = withContext(Dispatchers.IO) {
+                repository.getChannelByStreamId(streamId)
+            } ?: current
+
+            val currentPosition = PlayerState.currentPosition
+            if (
+                currentPosition in PlayerState.channels.indices &&
+                PlayerState.channels[currentPosition].stream_id == streamId
+            ) {
+                PlayerState.channels[currentPosition] = refreshedChannel
+            }
+
+            val epgId = refreshedChannel.epg_channel_id
+                ?: refreshedChannel.stream_id?.toString()
+                ?: return@launch
+
+            loadEpg(epgId)
+        }
+    }
+
     companion object {
         const val EXTRA_PLAY_SELECTED_CHANNEL = "play_selected_channel"
     }
