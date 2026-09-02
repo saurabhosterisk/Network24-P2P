@@ -14,6 +14,8 @@ import androidx.media3.common.util.UnstableApi
 
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -276,6 +278,27 @@ object PlayerManager {
 
             .build()
 
+    // ExoPlayer's default AdaptiveTrackSelection needs 10s of continuously
+    // buffered media before it will step up to a higher-bitrate rendition
+    // (media3's own default is DEFAULT_MIN_DURATION_FOR_QUALITY_INCREASE_MS).
+    // minBufferMs above is intentionally kept below that (to stay compatible
+    // with LIVE_TARGET_OFFSET_MS), so on multi-bitrate channels that default
+    // threshold was rarely reachable and playback got stuck on its initial
+    // (often lowest) rendition — looking permanently soft/blurry even on a
+    // good connection. Lower the threshold to fit inside the buffer budget
+    // we actually maintain.
+    private const val MIN_DURATION_FOR_QUALITY_INCREASE_MS = 4_000
+
+    private fun createTrackSelector(context: Context): DefaultTrackSelector {
+        val adaptiveTrackSelectionFactory = AdaptiveTrackSelection.Factory(
+            MIN_DURATION_FOR_QUALITY_INCREASE_MS,
+            AdaptiveTrackSelection.DEFAULT_MAX_DURATION_FOR_QUALITY_DECREASE_MS,
+            AdaptiveTrackSelection.DEFAULT_MIN_DURATION_TO_RETAIN_AFTER_DISCARD_MS,
+            AdaptiveTrackSelection.DEFAULT_BANDWIDTH_FRACTION
+        )
+        return DefaultTrackSelector(context, adaptiveTrackSelectionFactory)
+    }
+
 
 
 
@@ -521,6 +544,10 @@ object PlayerManager {
 
                     .setLoadControl(
                         loadControl
+                    )
+
+                    .setTrackSelector(
+                        createTrackSelector(context)
                     )
 
                     .build()
