@@ -16,6 +16,10 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
+
 import com.network24.player.core.net.StreamDataSourceFactory
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.features.live.models.LiveChannel
@@ -76,6 +80,75 @@ object PlayerManager {
 
     private var lifecycleCallbacksRegistered =
         false
+
+    private var processLifecycleObserverRegistered = false
+
+    /**
+     * IPTV accounts typically allow only 1-2 concurrent connections. Leaving
+     * the player merely paused (never stopped) when nobody is showing it
+     * keeps the server-side stream connection open, so a later playback
+     * attempt can fail with "max connections reached" even though the user
+     * believes they closed the channel. This job releases the connection
+     * after a short grace period if no screen re-attaches the player, and
+     * [processLifecycleObserver] releases it immediately when the whole app
+     * leaves the foreground.
+     */
+    private var idleReleaseJob: Job? = null
+
+    // Bumped on every attach() so a pending idle-release can tell whether a
+    // new screen took over the player while it was waiting — currentPlayerView
+    // alone isn't reliable here since several screens (ChannelListActivity,
+    // EpgChannelListActivity) never call detach() on their way out, leaving
+    // it pointing at a stale view instead of null.
+    private var attachGeneration = 0
+
+    private const val IDLE_RELEASE_GRACE_MS = 20_000L
+
+    private val processLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onStop(owner: LifecycleOwner) {
+            // Every activity that could own the player has stopped — the
+            // app itself left the foreground (Home button, task switch, or
+            // fully closed). Free the connection now instead of leaving it
+            // paused-but-open.
+            if (exoPlayer != null) {
+                android.util.Log.d(
+                    "N24_CONNECTION",
+                    "App backgrounded; releasing player/connection"
+                )
+            }
+            cancelIdleRelease()
+            release()
+        }
+    }
+
+    private fun ensureProcessLifecycleObserver() {
+        if (processLifecycleObserverRegistered) return
+        processLifecycleObserverRegistered = true
+        ProcessLifecycleOwner.get().lifecycle.addObserver(processLifecycleObserver)
+    }
+
+    private fun scheduleIdleRelease() {
+        idleReleaseJob?.cancel()
+        val scheduledGeneration = attachGeneration
+        idleReleaseJob = playerScope.launch {
+            delay(IDLE_RELEASE_GRACE_MS)
+            // Nobody re-attached a player screen within the grace period —
+            // release so the connection isn't held open behind a screen
+            // (Dashboard, Settings, VOD, ...) that never shows it.
+            if (attachGeneration == scheduledGeneration && exoPlayer != null) {
+                android.util.Log.d(
+                    "N24_CONNECTION",
+                    "Idle grace period expired; releasing player/connection"
+                )
+                release()
+            }
+        }
+    }
+
+    private fun cancelIdleRelease() {
+        idleReleaseJob?.cancel()
+        idleReleaseJob = null
+    }
 
 
 
@@ -174,21 +247,31 @@ object PlayerManager {
     private const val STREAM_SWITCH_SETTLE_MS =
         750L
 
+    private const val LIVE_TARGET_OFFSET_MS =
+        10000L
 
 
 
 
-    // Keep live streams responsive when switching channels while retaining a
-    // small buffer to absorb normal IPTV network variation.
+
+    // IPTV routes can have short loss/jitter bursts even when the WiFi link is
+    // healthy. Keep enough media queued to absorb those bursts. Playback still
+    // starts after two seconds; the larger minimum/max buffer is filled while
+    // playing and does not force a 50-second startup delay.
+    //
+    // minBufferMs is kept below LIVE_TARGET_OFFSET_MS: on IPTV channels with a
+    // short HLS DVR window, wanting more buffer than exists between the
+    // playback position and the live edge makes BehindLiveWindowException
+    // more likely instead of less.
     private val loadControl =
 
         DefaultLoadControl.Builder()
 
             .setBufferDurationsMs(
-                5_000,
-                20_000,
-                1_000,
-                2_000
+                8_000,
+                30_000,
+                2_000,
+                3_000
             )
 
             .build()
@@ -207,6 +290,8 @@ object PlayerManager {
         if (
             lifecycleCallbacksRegistered
         ) return
+
+        ensureProcessLifecycleObserver()
 
 
 
@@ -315,6 +400,8 @@ object PlayerManager {
                     ) {
 
                         exoPlayer?.pause()
+
+                        scheduleIdleRelease()
 
                         ownerActivityRef =
                             null
@@ -578,6 +665,10 @@ object PlayerManager {
     ) {
 
 
+        attachGeneration++
+
+        cancelIdleRelease()
+
         ensureActivityLifecycleCallbacks(
             context
         )
@@ -752,9 +843,7 @@ object PlayerManager {
 
             player.setMediaItem(
 
-                MediaItem.fromUri(
-                    streamUrl
-                )
+                liveMediaItem(streamUrl)
             )
 
 
@@ -778,6 +867,18 @@ object PlayerManager {
     private fun mediaSourceFactory(context: Context): androidx.media3.exoplayer.source.DefaultMediaSourceFactory {
         return StreamDataSourceFactory.createMediaSourceFactory()
     }
+
+    private fun liveMediaItem(streamUrl: String): MediaItem =
+        MediaItem.Builder()
+            .setUri(streamUrl)
+            // Stay a little behind the live edge so a delayed segment does not
+            // immediately push the player behind the HLS live window.
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(LIVE_TARGET_OFFSET_MS)
+                    .build()
+            )
+            .build()
 
 
 
@@ -820,9 +921,7 @@ object PlayerManager {
 
         player.setMediaItem(
 
-            MediaItem.fromUri(
-                currentUrl!!
-            )
+            liveMediaItem(currentUrl!!)
         )
 
 
@@ -1120,25 +1219,28 @@ object PlayerManager {
 
                 exoPlayer?.apply {
 
-
-                    stop()
-
-
-                    clearMediaItems()
-
-
-
-                    setMediaItem(
-                        MediaItem.fromUri(
-                            failedUrl
+                    if (lastError?.let(::canRecoverWithoutReload) == true) {
+                        // Behind-live-window and transient network errors don't
+                        // mean the stream itself is broken. Seeking to the live
+                        // default position and re-preparing the same session
+                        // recovers without the visible black-screen flash of a
+                        // full stop/clear/reload.
+                        android.util.Log.d(
+                            "N24_RECOVERY",
+                            "Recovering without full reload (soft retry)"
                         )
-                    )
-
-
-                    prepare()
-
-
-                    play()
+                        lastError = null
+                        streamErrorType = StreamErrorType.NONE
+                        seekToDefaultPosition()
+                        prepare()
+                        play()
+                    } else {
+                        stop()
+                        clearMediaItems()
+                        setMediaItem(liveMediaItem(failedUrl))
+                        prepare()
+                        play()
+                    }
                 }
 
 
@@ -1228,6 +1330,8 @@ object PlayerManager {
 
     fun release() {
 
+
+        cancelIdleRelease()
 
         cancelLiveRecovery()
 
@@ -1380,6 +1484,18 @@ object PlayerManager {
                 3600000L
             )
     }
+
+    // IPTV routes drop and re-establish a connection frequently; that alone
+    // doesn't mean the stream/session is broken. Treat it the same as
+    // behind-live-window: recover in place instead of a full reload.
+    private fun canRecoverWithoutReload(error: PlaybackException): Boolean =
+        when (error.errorCode) {
+            PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> true
+
+            else -> false
+        }
 
     fun getTotalBufferingMsIncludingActive(): Long {
         val activeBufferingMs = if (bufferingSessionActive && bufferingStartedAtMs > 0L) {

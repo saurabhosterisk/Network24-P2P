@@ -48,6 +48,10 @@ class StreamInfoDialog : DialogFragment() {
     private var lastDevice: DeviceHealthSnapshot? = null
     private var lastMeasuredMbps = 0.0
     private var diagnosisRunning = false
+    private var speedTestRunning = false
+    private var lastSpeedTest: StreamProbeResult? = null
+    private var lastDiagnosisError: SummaryMessage? = null
+    private var lastSpeedTestError: SummaryMessage? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -62,6 +66,7 @@ class StreamInfoDialog : DialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         binding.btnClose.setOnClickListener { dismiss() }
         binding.btnRunDiagnosis.setOnClickListener { runAutoDiagnosis() }
+        binding.btnSpeedTest.setOnClickListener { runSpeedTest() }
         binding.btnOverview.setOnClickListener { selectSection(SECTION_OVERVIEW) }
         binding.btnStreamDetails.setOnClickListener { selectSection(SECTION_STREAM) }
         binding.btnNetworkDetails.setOnClickListener { selectSection(SECTION_NETWORK) }
@@ -76,6 +81,7 @@ class StreamInfoDialog : DialogFragment() {
     private fun configureRemoteButtons() {
         val buttons = listOf(
             binding.btnRunDiagnosis,
+            binding.btnSpeedTest,
             binding.btnOverview,
             binding.btnStreamDetails,
             binding.btnNetworkDetails,
@@ -103,6 +109,9 @@ class StreamInfoDialog : DialogFragment() {
     private fun runAutoDiagnosis() {
         if (diagnosisRunning) return
         showSummaryPanel()
+        lastSpeedTest = null
+        lastSpeedTestError = null
+        lastDiagnosisError = null
         diagnosisRunning = true
         binding.btnRunDiagnosis.isEnabled = false
         binding.btnRunDiagnosis.text = "TESTING..."
@@ -146,15 +155,56 @@ class StreamInfoDialog : DialogFragment() {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                binding.tvDiagnosisCause.text = "Diagnosis unavailable"
-                binding.tvDiagnosis.text = error.javaClass.simpleName
-                binding.tvDiagnosisEvidence.text = "The diagnostic test could not be completed"
-                binding.tvDiagnosisAction.text = "Action: Try again while the channel is playing"
-                renderDetails()
+                lastDiagnosisError = SummaryMessage(
+                    cause = "Diagnosis unavailable",
+                    detail = error.javaClass.simpleName,
+                    evidence = "The diagnostic test could not be completed",
+                    action = "Action: Try again while the channel is playing"
+                )
+                refreshUi()
             } finally {
                 diagnosisRunning = false
                 binding.btnRunDiagnosis.isEnabled = true
                 binding.btnRunDiagnosis.text = "RUN AUTO CHECK"
+            }
+        }
+    }
+
+    private fun runSpeedTest() {
+        if (speedTestRunning) return
+        showSummaryPanel()
+        lastDiagnosis = null
+        lastDiagnosisError = null
+        lastSpeedTest = null
+        lastSpeedTestError = null
+        speedTestRunning = true
+        binding.btnSpeedTest.isEnabled = false
+        binding.btnSpeedTest.text = "TESTING..."
+        binding.tvDiagnosisCause.text = "Running server speed test"
+        binding.tvDiagnosis.text = "Testing the current channel server path..."
+        binding.tvDiagnosisEvidence.text = "Playback will continue during the test"
+        binding.tvDiagnosisAction.text = ""
+        renderDetails()
+
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val result = runCatching { StreamProbe.runSpeedTest(PlayerManager.getCurrentUrlOrEmpty()) }
+            launch(Dispatchers.Main) {
+                result.onSuccess {
+                    lastProbe = it
+                    lastSpeedTest = it
+                    refreshUi()
+                }.onFailure {
+                    lastSpeedTestError = SummaryMessage(
+                        cause = "Speed test unavailable",
+                        detail = it.javaClass.simpleName,
+                        evidence = "The current server path could not be tested",
+                        action = "Action: Try again while the channel is playing"
+                    )
+                    refreshUi()
+                }
+                speedTestRunning = false
+                binding.btnSpeedTest.isEnabled = true
+                binding.btnSpeedTest.text = "SPEEDTEST"
             }
         }
     }
@@ -188,15 +238,52 @@ class StreamInfoDialog : DialogFragment() {
         binding.tvRebufferCount.text = rebufferCount.toString()
         binding.tvBufferingTime.text = formatDuration(bufferingMs)
 
-        if (lastDiagnosis == null) {
-            binding.tvDiagnosisCause.text = "Live player status"
-            binding.tvDiagnosis.text = buildLiveStatus(player, downloadMbps, requiredMbps, rebufferCount, bufferingMs, error != null)
-            binding.tvDiagnosisEvidence.text = "Evidence: current playback metrics"
-            binding.tvDiagnosisAction.text = "Action: Run AUTO CHECK for root-cause analysis"
-        } else {
-            renderDiagnosis(lastDiagnosis!!)
+        when {
+            lastSpeedTest != null -> renderSpeedTest(lastSpeedTest!!)
+            lastSpeedTestError != null -> renderSummaryMessage(lastSpeedTestError!!)
+            lastDiagnosis != null -> renderDiagnosis(lastDiagnosis!!)
+            lastDiagnosisError != null -> renderSummaryMessage(lastDiagnosisError!!)
+            else -> {
+                binding.tvDiagnosisCause.text = "Live player status"
+                binding.tvDiagnosis.text = buildLiveStatus(player, downloadMbps, requiredMbps, rebufferCount, bufferingMs, error != null)
+                binding.tvDiagnosisEvidence.text = "Evidence: current playback metrics"
+                binding.tvDiagnosisAction.text = "Action: Run AUTO CHECK for root-cause analysis"
+            }
         }
         renderDetails()
+    }
+
+    private data class SummaryMessage(
+        val cause: String,
+        val detail: String,
+        val evidence: String,
+        val action: String
+    )
+
+    private fun renderSummaryMessage(message: SummaryMessage) {
+        binding.tvDiagnosisCause.text = message.cause
+        binding.tvDiagnosis.text = message.detail
+        binding.tvDiagnosisEvidence.text = message.evidence
+        binding.tvDiagnosisAction.text = message.action
+    }
+
+    private fun renderSpeedTest(result: StreamProbeResult) {
+        val loss = result.packetLossPercent?.let { "$it% HTTP loss estimate" } ?: "-"
+        val speed = result.downloadMbps?.let { formatMbps(it) } ?: "Not measured"
+        val server = result.finalHost ?: safeHost(PlayerManager.getCurrentUrlOrEmpty())
+        binding.tvDiagnosisCause.text = if (result.successfulRequests > 0) {
+            "Server path test complete"
+        } else {
+            "Server path test failed"
+        }
+        binding.tvDiagnosis.text = "Loss: $loss  |  Download: $speed"
+        binding.tvDiagnosisEvidence.text = "Server: $server  |  Requests: ${result.successfulRequests}/${result.attemptedRequests}  |  TTFB: ${result.timeToFirstByteMs?.let { "$it ms" } ?: "-"}"
+        binding.tvDiagnosisAction.text = when {
+            result.successfulRequests == 0 -> "Action: Server did not respond; check the route or provider."
+            result.packetLossPercent != null && result.packetLossPercent >= 10 -> "Action: High request loss; check the client-to-server/LB route."
+            result.downloadMbps != null && result.downloadMbps < getRequiredSpeedMbps(PlayerManager.getExoPlayerOrNull()?.videoFormat?.height ?: 0) -> "Action: Low segment speed; check the server path or network."
+            else -> "Action: Server path looks healthy during this sample."
+        }
     }
 
     private fun renderDiagnosis(diagnosis: BufferingDiagnosis) {
@@ -243,6 +330,11 @@ class StreamInfoDialog : DialogFragment() {
                     row("Last error", PlayerManager.getLastError()?.errorCodeName ?: "None")
                     lastProbe?.let {
                         row("Diagnostic HTTP", it.responseCode?.toString() ?: "Failed (${it.error ?: "unknown"})")
+                        row("Resolved server", it.finalHost ?: "-")
+                        row("Request loss (HTTP)", it.packetLossPercent?.let { value -> "$value% (${it.successfulRequests}/${it.attemptedRequests})" } ?: "-")
+                        row("Server download", it.downloadMbps?.let { value -> formatMbps(value) } ?: "-")
+                        row("Segment HTTP", it.segmentResponseCode?.toString() ?: "-")
+                        row("Segment bytes", it.segmentBytesRead.toString())
                         row("First byte", it.timeToFirstByteMs?.let { value -> "$value ms" } ?: "-")
                         row("Probe duration", it.elapsedMs?.let { value -> "$value ms" } ?: "-")
                         row("Probe bytes", it.bytesRead.toString())
@@ -252,6 +344,8 @@ class StreamInfoDialog : DialogFragment() {
                     row("Connection", device?.networkType ?: "-")
                     row("Internet validated", device?.internetValidated?.let { if (it) "Yes" else "No" } ?: "-")
                     row("Stream throughput", formatMbps(SpeedMonitor.getMbps()))
+                    row("Server path loss", lastProbe?.packetLossPercent?.let { "$it% HTTP estimate" } ?: "Not tested")
+                    row("Server path speed", lastProbe?.downloadMbps?.let { formatMbps(it) } ?: "Not tested")
                     row("Required throughput", if (required > 0f) formatMbps(required.toDouble()) else "-")
                     row("WiFi signal", device?.wifiRssiDbm?.let { "$it dBm" } ?: "Not available")
                     row("WiFi link speed", device?.wifiLinkSpeedMbps?.let { "$it Mbps" } ?: "Not available")
