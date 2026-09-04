@@ -149,15 +149,6 @@
 
 
 
-        <!-- Chat -->
-
-        <activity
-            android:name=".features.chat.activity.ChatHubActivity"
-            android:exported="false"
-            android:screenOrientation="landscape" />
-
-
-
         <!-- Dashboard -->
 
         <activity

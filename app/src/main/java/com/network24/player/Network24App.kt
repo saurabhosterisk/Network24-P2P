@@ -184,11 +184,7 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
                             val currentSenderId = getMySenderId()
                             if (senderId != currentSenderId) {
-                                val isViewingChannelDown = isViewingChannelDownRoom()
-
-                                if (!isViewingChannelDown) {
-                                    showGlobalAlert("🚨 Channel Down Alert", messageText)
-                                }
+                                showGlobalAlert("🚨 Channel Down Alert", messageText)
                             }
                         }
                     }
@@ -200,14 +196,6 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         val senderName = prefs.getUsername().trim().ifEmpty { "guest" }
         val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "device"
         return senderName.lowercase().replace(" ", "_") + "_" + deviceId.takeLast(6)
-    }
-
-    private fun isViewingChannelDownRoom(): Boolean {
-        if (currentActivity?.javaClass?.simpleName == "ChatHubActivity") {
-            val lastRoomId = prefs.getLastChatRoomId()
-            return lastRoomId == "channel_down"
-        }
-        return false
     }
 
     // --- Activity Lifecycle Tracking ---

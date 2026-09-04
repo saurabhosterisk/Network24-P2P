@@ -32,9 +32,6 @@ class PreferenceManager(context: Context) {
         private const val KEY_DISABLED_CATEGORIES_CACHED = "disabled_live_category_ids_cached"
         private const val KEY_AUTO_RECONNECT_MODE = "auto_reconnect_mode"
         private const val KEY_SUBTITLES_ENABLED = "subtitles_enabled"
-
-        // Chat
-        private const val KEY_CHAT_LAST_ROOM_ID = "chat_last_room_id"
     }
 
     // -------------------------
@@ -173,28 +170,6 @@ class PreferenceManager(context: Context) {
     }
 
     fun areSubtitlesEnabled(): Boolean = prefs.getBoolean(KEY_SUBTITLES_ENABLED, false)
-
-    // -------------------------
-    // Chat preferences
-    // -------------------------
-
-    fun setLastChatRoomId(roomId: String) {
-        prefs.edit().putString(KEY_CHAT_LAST_ROOM_ID, roomId).apply()
-    }
-
-    fun getLastChatRoomId(): String? {
-        return prefs.getString(KEY_CHAT_LAST_ROOM_ID, null)
-    }
-
-    private fun chatLastSeenKey(roomId: String) = "chat_last_seen_$roomId"
-
-    fun setChatLastSeen(roomId: String, tsMs: Long) {
-        prefs.edit().putLong(chatLastSeenKey(roomId), tsMs).apply()
-    }
-
-    fun getChatLastSeen(roomId: String): Long {
-        return prefs.getLong(chatLastSeenKey(roomId), 0L)
-    }
 
     // -------------------------
     // Maintenance
