@@ -119,6 +119,14 @@ object StreamProbe {
                 setRequestProperty("Range", "bytes=0-$rangeEnd")
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("User-Agent", "N24Player-Diagnostics")
+                // This probe hits the same username/password stream path as
+                // real playback, so on IPTV panels that count a connection
+                // per open socket to that path, a diagnostic run can eat one
+                // of the account's limited slots. "Connection: close" stops
+                // the JVM's HTTP keep-alive pool from holding this socket
+                // open (and counted) beyond this single request, instead of
+                // silently reusing it across the whole probe/speed-test run.
+                setRequestProperty("Connection", "close")
             }
 
             val responseCode = connection.responseCode

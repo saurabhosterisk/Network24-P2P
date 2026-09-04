@@ -117,7 +117,8 @@ class StreamInfoDialog : DialogFragment() {
         binding.btnRunDiagnosis.text = "TESTING..."
         binding.tvDiagnosisCause.text = "Running live test"
         binding.tvDiagnosis.text = "Collecting stream, network and device evidence..."
-        binding.tvDiagnosisEvidence.text = "Keep the channel playing during the test"
+        binding.tvDiagnosisEvidence.text = "Keep the channel playing during the test. " +
+            "This briefly uses one of the account's connection slots."
         binding.tvDiagnosisAction.text = ""
         renderDetails()
 
@@ -182,7 +183,8 @@ class StreamInfoDialog : DialogFragment() {
         binding.btnSpeedTest.text = "TESTING..."
         binding.tvDiagnosisCause.text = "Running server speed test"
         binding.tvDiagnosis.text = "Testing the current channel server path..."
-        binding.tvDiagnosisEvidence.text = "Playback will continue during the test"
+        binding.tvDiagnosisEvidence.text = "Playback will continue during the test. " +
+            "This briefly uses one of the account's connection slots."
         binding.tvDiagnosisAction.text = ""
         renderDetails()
 

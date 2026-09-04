@@ -68,7 +68,19 @@ object StreamDataSourceFactory {
      * retrying won't fix a 403/404/5xx.
      */
     private class IptvLoadErrorHandlingPolicy :
-        DefaultLoadErrorHandlingPolicy(TRANSIENT_RETRY_COUNT) {
+        // No-arg base ctor keeps Media3's own per-data-type minimum retry
+        // counts (manifest vs. media vs. other) instead of flattening all of
+        // them to TRANSIENT_RETRY_COUNT. That flattening previously made the
+        // player retry a failing manifest/playlist fetch far more
+        // persistently than Media3 considers safe, which - combined with the
+        // near-instant delay below - could turn a single device's transient
+        // hiccup into a rapid-fire burst of reconnects to the IPTV server.
+        // Accounts sharing a small connection quota across multiple devices
+        // are exactly the case where that burst matters: a provider that
+        // rate-limits or briefly locks a username after too many reconnects
+        // in a short window can end up penalizing a second, otherwise
+        // healthy device on the same account.
+        DefaultLoadErrorHandlingPolicy() {
 
         override fun getRetryDelayMsFor(
             loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
@@ -81,13 +93,11 @@ object StreamDataSourceFactory {
             if (loadErrorInfo.errorCount > maxRetries) return C.TIME_UNSET
 
             return if (isTransientConnectionError) {
-                min(200L * loadErrorInfo.errorCount, 1_000L)
+                min(300L * loadErrorInfo.errorCount, 1_500L)
             } else {
                 min(500L * loadErrorInfo.errorCount, 2_000L)
             }
         }
-
-        override fun getMinimumLoadableRetryCount(dataType: Int): Int = TRANSIENT_RETRY_COUNT
 
         private companion object {
             const val TRANSIENT_RETRY_COUNT = 6
