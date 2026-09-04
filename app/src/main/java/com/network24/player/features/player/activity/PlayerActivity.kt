@@ -207,8 +207,6 @@ class PlayerActivity : BaseActivity() {
                         View.GONE
 
 
-                    binding.btnReportChannel.visibility =
-                        View.GONE
 
                     applySubtitlePreference()
                 }
@@ -333,8 +331,6 @@ class PlayerActivity : BaseActivity() {
             View.GONE
 
 
-        binding.btnReportChannel.visibility =
-            View.GONE
 
 
         binding.playerView.setShowSubtitleButton(
@@ -372,8 +368,6 @@ class PlayerActivity : BaseActivity() {
                 binding.txtPlayerError.visibility =
                     View.VISIBLE
 
-                binding.btnReportChannel.visibility =
-                    View.GONE
             }
         }
 
@@ -641,91 +635,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        binding.btnReportChannel.setOnClickListener {
-
-
-            val reportedChannel =
-                PlayerState.currentChannel()
-
-            val name =
-                reportedChannel
-                    ?.name
-                    ?: "Unknown Channel"
-
-
-
-            val data =
-                hashMapOf<String, Any>(
-
-                    "senderId" to "system_bot",
-
-                    "senderName" to "System",
-
-                    "text" to
-                            "🚨 System Alert : ${prefs.getUsername()} reported that the channel '$name' is currently down.",
-
-                    "ts" to
-                            com.google.firebase.firestore.FieldValue.serverTimestamp()
-                )
-
-            reportedChannel?.stream_id?.let { streamId ->
-                data["channelStreamId"] = streamId
-            }
-
-            reportedChannel?.name?.takeIf { it.isNotBlank() }?.let { channelName ->
-                data["channelName"] = channelName
-            }
-
-
-
-            binding.btnReportChannel.visibility =
-                View.GONE
-
-
-
-            binding.txtPlayerError.text =
-                "Sending report..."
-
-
-
-            com.google.firebase.firestore.FirebaseFirestore
-                .getInstance()
-                .collection("rooms")
-                .document("channel_down")
-                .collection("messages")
-                .add(data)
-
-
-
-                .addOnSuccessListener {
-
-
-                    binding.txtPlayerError.text =
-                        "Channel reported. Our team will look into it."
-                }
-
-
-
-                .addOnFailureListener { e ->
-
-
-                    binding.btnReportChannel.visibility =
-                        View.VISIBLE
-
-
-
-                    binding.txtPlayerError.text =
-                        "Failed to send report."
-
-
-
-                    Toast.makeText(
-                        this,
-                        "Error: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-        }
     }
 
 
@@ -850,8 +759,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-                binding.btnReportChannel.visibility =
-                    View.GONE
             }
 
 
@@ -885,8 +792,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-                binding.btnReportChannel.visibility =
-                    View.VISIBLE
             }
         }
 
@@ -971,25 +876,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        val errorType =
-            PlayerManager.getStreamErrorType()
-
-        binding.btnReportChannel.visibility =
-            if (
-                errorType ==
-                PlayerManager.StreamErrorType.SOURCE
-            ) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
-
-
-        binding.btnReportChannel.post {
-
-
-            binding.btnReportChannel.requestFocus()
-        }
 
 
 
@@ -1082,15 +968,8 @@ class PlayerActivity : BaseActivity() {
 
 
 
-                    if (binding.btnReportChannel.visibility != View.VISIBLE) {
-
-
-
-                        binding.btnPlayPause.post {
-
-
-                            binding.btnPlayPause.requestFocus()
-                        }
+                    binding.btnPlayPause.post {
+                        binding.btnPlayPause.requestFocus()
                     }
                 }
                 .start()
@@ -1166,8 +1045,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        binding.btnReportChannel.visibility =
-            View.GONE
 
 
 
@@ -1407,8 +1284,6 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        binding.btnReportChannel.visibility =
-            View.GONE
 
 
 

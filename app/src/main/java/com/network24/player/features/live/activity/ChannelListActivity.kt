@@ -28,7 +28,6 @@ import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.databinding.ActivityChannelListBinding
 
 import com.network24.player.features.dashboard.activity.DashboardActivity
-import com.network24.player.features.live.ChannelDownReporter
 import com.network24.player.features.live.adapter.ChannelAdapter
 import com.network24.player.features.live.history.LiveWatchHistory
 import com.network24.player.features.live.models.LiveChannel
@@ -186,7 +185,6 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-        setupReportButton()
 
 
 
@@ -211,8 +209,6 @@ class ChannelListActivity : BaseActivity() {
                         binding.txtPlayerError.visibility =
                             View.VISIBLE
 
-                        binding.btnReportChannel.visibility =
-                            View.GONE
                     }
 
 
@@ -224,8 +220,6 @@ class ChannelListActivity : BaseActivity() {
                         binding.txtPlayerError.visibility =
                             View.VISIBLE
 
-                        binding.btnReportChannel.visibility =
-                            View.VISIBLE
                     }
 
 
@@ -237,8 +231,6 @@ class ChannelListActivity : BaseActivity() {
                         binding.txtPlayerError.visibility =
                             View.VISIBLE
 
-                        binding.btnReportChannel.visibility =
-                            View.GONE
                     }
                 }
             }
@@ -255,8 +247,6 @@ class ChannelListActivity : BaseActivity() {
                 binding.txtPlayerError.visibility =
                     View.VISIBLE
 
-                binding.btnReportChannel.visibility =
-                    View.GONE
             }
         }
 
@@ -265,8 +255,6 @@ class ChannelListActivity : BaseActivity() {
                 binding.txtPlayerError.visibility =
                     View.GONE
 
-                binding.btnReportChannel.visibility =
-                    View.GONE
             }
         }
 
@@ -342,33 +330,6 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-    private fun setupReportButton() {
-        binding.btnReportChannel.visibility = View.GONE
-
-        binding.btnReportChannel.setOnClickListener {
-            if (previewPosition == -1 || channelList.isEmpty()) return@setOnClickListener
-
-            val currentChannel = channelList[previewPosition]
-            val channelName = currentChannel.name ?: "Unknown Channel"
-            val username = prefs.getUsername()
-
-            binding.btnReportChannel.visibility = View.GONE
-            binding.txtPlayerError.text = "Sending report..."
-
-            ChannelDownReporter.report(
-                username = username,
-                channelName = channelName,
-                onSuccess = {
-                    binding.txtPlayerError.text = "Channel reported. Our team will look into it."
-                },
-                onFailure = { exception ->
-                    binding.btnReportChannel.visibility = View.VISIBLE
-                    binding.txtPlayerError.text = "Failed to send report."
-                    Toast.makeText(this, "Error: ${exception.message}", Toast.LENGTH_LONG).show()
-                }
-            )
-        }
-    }
 
     private fun ensureInitialSyncThenLoad() {
 
@@ -551,7 +512,6 @@ class ChannelListActivity : BaseActivity() {
             showPreview(channelList[targetPos])
         } else {
             binding.txtPlayerError.visibility = View.GONE
-            binding.btnReportChannel.visibility = View.GONE
             binding.txtOverlayChannel.text = channelList[targetPos].name ?: ""
         }
 
@@ -1145,8 +1105,6 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-        binding.btnReportChannel.visibility =
-            View.GONE
 
 
 
