@@ -198,10 +198,9 @@ class PreferenceManager(context: Context) {
         prefs.edit().putBoolean(KEY_VPN_ENABLED, enabled).apply()
     }
 
-    // Default true: the VPN tunnel is meant to connect automatically after
-    // login with no separate opt-in, so "never touched this setting" reads
-    // the same as "on".
-    fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, true)
+    // Default false: the VPN tunnel is opt-in - it only starts once the user
+    // turns it on from the Secure Relay switch in Settings.
+    fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, false)
 
     fun saveVpnDeviceKeyPair(privateKey: String, publicKey: String) {
         prefs.edit()

@@ -86,11 +86,13 @@ class DashboardActivity : BaseActivity() {
     }
 
     /**
-     * Automatic, opt-out (not opt-in) VPN setup: requests the one-time system
-     * consent dialog if needed, then provisions and starts the tunnel in the
-     * background. Never blocks or interrupts normal dashboard usage - every
-     * failure here is silently ignored and the app keeps using its existing
-     * direct/relay HTTP path.
+     * Opt-in VPN setup: no-ops unless the user has already turned on Secure
+     * Relay in Settings (prefs.isVpnEnabled() defaults to false). Once
+     * enabled, this re-attempts the connection on every Dashboard visit if
+     * it isn't already active - requesting the one-time system consent
+     * dialog again only if it was never granted. Never blocks or interrupts
+     * normal dashboard usage - every failure here is silently ignored and
+     * the app keeps using its existing direct/relay HTTP path.
      */
     private fun attemptVpnSetup() {
         if (!prefs.isVpnEnabled() || tunnelManager.isActive(prefs)) return
