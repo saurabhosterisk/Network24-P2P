@@ -25,12 +25,33 @@ import kotlinx.coroutines.withContext
 class TunnelManager(context: Context) {
 
     private val appContext = context.applicationContext
-    private val backend: GoBackend by lazy { GoBackend(appContext) }
-    private val tunnel = N24Tunnel()
 
-    private class N24Tunnel : Tunnel {
-        override fun getName(): String = "network24"
-        override fun onStateChange(newState: Tunnel.State) {}
+    // GoBackend tracks which native tunnel handle is currently up as fields
+    // on the GoBackend INSTANCE itself (not shared/static state) - a tunnel
+    // brought up through one GoBackend object cannot be torn down by calling
+    // setState() on a different GoBackend object, even for the "same" tunnel
+    // name. Every TunnelManager (one per Activity/Application) must therefore
+    // share the exact same GoBackend + Tunnel objects for the whole process,
+    // or turning the tunnel off from a different screen than it was turned on
+    // from silently does nothing.
+    private val backend: GoBackend get() = sharedBackend(appContext)
+    private val tunnel: Tunnel get() = sharedTunnel
+
+    private companion object {
+        @Volatile
+        private var backendInstance: GoBackend? = null
+        private val lock = Any()
+
+        private val sharedTunnel: Tunnel = object : Tunnel {
+            override fun getName(): String = "network24"
+            override fun onStateChange(newState: Tunnel.State) {}
+        }
+
+        private fun sharedBackend(context: Context): GoBackend {
+            return backendInstance ?: synchronized(lock) {
+                backendInstance ?: GoBackend(context).also { backendInstance = it }
+            }
+        }
     }
 
     /**
