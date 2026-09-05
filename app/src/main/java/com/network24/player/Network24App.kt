@@ -6,6 +6,11 @@ import android.os.Bundle
 import android.os.StrictMode
 import com.network24.player.core.compat.Network24DeviceCompatibility
 import com.network24.player.core.diagnostics.Network24CrashReporter
+import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.core.vpn.TunnelManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
@@ -36,6 +41,28 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         }
         registerActivityLifecycleCallbacks(this)
         Network24CrashReporter.initialize(this, legacyTv)
+        reconnectVpnSilentlyIfAlreadyConsented()
+    }
+
+    /**
+     * Best-effort reconnect on process start for a device that already
+     * completed the VPN consent dialog in a previous session (e.g. after a
+     * reboot). Never shows a dialog here - if consent isn't already granted,
+     * DashboardActivity.attemptVpnSetup() handles that with an Activity
+     * available. Any failure here is a silent no-op.
+     */
+    private fun reconnectVpnSilentlyIfAlreadyConsented() {
+        val prefs = PreferenceManager(this)
+        if (!prefs.isVpnEnabled() || prefs.getVpnProvisioning() == null) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                val tunnelManager = TunnelManager(this@Network24App)
+                if (tunnelManager.requestConsentIntent() == null) {
+                    tunnelManager.start(prefs)
+                }
+            }
+        }
     }
 
     // --- Activity Lifecycle Tracking ---

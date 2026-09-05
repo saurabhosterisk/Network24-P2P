@@ -26,6 +26,9 @@ google-services = "4.4.2"
 firebase-crashlytics-plugin = "3.0.7"
 roomVersion = "2.6.1"
 
+wireguard = "1.0.20251231"
+desugarJdkLibs = "2.1.5"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
@@ -64,6 +67,9 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 firebase-messaging-ktx = { module = "com.google.firebase:firebase-messaging-ktx" }
+
+wireguard-tunnel = { group = "com.wireguard.android", name = "tunnel", version.ref = "wireguard" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

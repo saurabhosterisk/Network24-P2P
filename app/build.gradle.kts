@@ -85,13 +85,14 @@ android {
 
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
 
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 
 
@@ -140,6 +141,11 @@ dependencies {
 
     // QR Code
     implementation("com.google.zxing:core:3.5.3")
+
+
+    // VPN tunnel (per-app WireGuard relay)
+    implementation(libs.wireguard.tunnel)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
 
     // Firebase

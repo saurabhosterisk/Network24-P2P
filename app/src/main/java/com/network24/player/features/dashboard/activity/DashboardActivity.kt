@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -29,6 +30,7 @@ import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.sync.SyncManager
 import com.network24.player.core.sync.SyncResult
+import com.network24.player.core.vpn.TunnelManager
 import com.network24.player.databinding.ActivityDashboardBinding
 import com.network24.player.features.live.activity.FavoriteChannelsActivity
 import com.network24.player.features.live.activity.LiveCategoryActivity
@@ -39,6 +41,7 @@ import com.network24.player.features.live.repository.SyncCallback
 import com.network24.player.features.login.activity.LoginActivity
 import com.network24.player.features.login.repository.LoginRepository
 import com.network24.player.features.settings.activity.SettingsActivity
+import com.network24.player.features.vpn.repository.VpnProvisioningRepository
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -63,6 +66,15 @@ class DashboardActivity : BaseActivity() {
     private val loginRepository = LoginRepository()
     private var isAccountRefreshRunning = false
     private var isInitialSyncRunning = false
+    private val tunnelManager by lazy { TunnelManager(this) }
+    private val vpnProvisioningRepository = VpnProvisioningRepository()
+    private val vpnConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            lifecycleScope.launch { completeVpnSetup() }
+        }
+    }
     private val clockRunnable = object : Runnable { override fun run() { val now = Date(); binding.txtClock.text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(now); binding.txtDate.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(now); handler.postDelayed(this, 1000) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +82,40 @@ class DashboardActivity : BaseActivity() {
         if (!hasCredentials()) { startActivity(Intent(this, LoginActivity::class.java)); finishAffinity(); return }
         loadDashboard()
         if (intent.getBooleanExtra(EXTRA_REFRESH_ACCOUNT, false)) refreshAccountInfo()
-        binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
+        binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false); attemptVpnSetup()
+    }
+
+    /**
+     * Automatic, opt-out (not opt-in) VPN setup: requests the one-time system
+     * consent dialog if needed, then provisions and starts the tunnel in the
+     * background. Never blocks or interrupts normal dashboard usage - every
+     * failure here is silently ignored and the app keeps using its existing
+     * direct/relay HTTP path.
+     */
+    private fun attemptVpnSetup() {
+        if (!prefs.isVpnEnabled() || tunnelManager.isActive(prefs)) return
+        try {
+            val consentIntent = tunnelManager.requestConsentIntent()
+            if (consentIntent == null) {
+                lifecycleScope.launch { completeVpnSetup() }
+            } else {
+                vpnConsentLauncher.launch(consentIntent)
+            }
+        } catch (_: Exception) {
+            // Ignore: VPN setup is best-effort and must never affect login/playback.
+        }
+    }
+
+    private suspend fun completeVpnSetup() {
+        if (tunnelManager.isActive(prefs)) return
+        val provisioned = tunnelManager.ensureProvisioned(
+            prefs,
+            vpnProvisioningRepository,
+            prefs.getServer(),
+            prefs.getUsername(),
+            prefs.getPassword()
+        )
+        if (provisioned) tunnelManager.start(prefs)
     }
 
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }

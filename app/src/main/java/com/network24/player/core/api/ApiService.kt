@@ -4,10 +4,14 @@ import com.network24.player.core.network.DownloadProgressListener
 import com.network24.player.features.live.models.LiveCategory
 import com.network24.player.features.live.models.LiveChannel
 import com.network24.player.common.models.LoginResponse
+import com.network24.player.common.models.VpnProvisionRequest
+import com.network24.player.common.models.VpnProvisionResponse
 import com.network24.player.features.live.models.ShortEPGResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 import retrofit2.http.Streaming
 import retrofit2.http.Tag
@@ -19,6 +23,11 @@ interface ApiService {
         @Query("username") username: String,
         @Query("password") password: String
     ): Response<LoginResponse>
+
+    @POST("vpn-provision/provision")
+    suspend fun provisionVpn(
+        @Body request: VpnProvisionRequest
+    ): Response<VpnProvisionResponse>
 
     @GET("player_api.php")
     suspend fun getLiveCategories(

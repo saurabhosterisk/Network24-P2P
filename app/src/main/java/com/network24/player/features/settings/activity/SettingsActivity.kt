@@ -7,17 +7,50 @@ import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import com.network24.player.BuildConfig
 import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.cache.memory.MemoryCache
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.core.vpn.TunnelManager
 import com.network24.player.features.live.activity.ManageCategoriesActivity
 import com.network24.player.features.login.activity.LoginActivity
+import com.network24.player.features.vpn.repository.VpnProvisioningRepository
+import kotlinx.coroutines.launch
 
 class SettingsActivity : BaseActivity() {
 
     private lateinit var prefs: PreferenceManager
+    private val tunnelManager by lazy { TunnelManager(this) }
+    private val vpnProvisioningRepository = VpnProvisioningRepository()
+    private val vpnConsentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            lifecycleScope.launch {
+                val provisioned = tunnelManager.ensureProvisioned(
+                    prefs, vpnProvisioningRepository,
+                    prefs.getServer(), prefs.getUsername(), prefs.getPassword()
+                )
+                val started = provisioned && tunnelManager.start(prefs)
+                if (!started) {
+                    prefs.setVpnEnabled(false)
+                    findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
+                        R.id.vpnTunnelSwitch
+                    ).isChecked = false
+                }
+                updateVpnSummary()
+            }
+        } else {
+            prefs.setVpnEnabled(false)
+            findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
+                R.id.vpnTunnelSwitch
+            ).isChecked = false
+            updateVpnSummary()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +75,7 @@ class SettingsActivity : BaseActivity() {
         bindAccount()
         bindActions()
         updateAutoReconnectSummary()
+        bindVpnToggle()
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
             "Network24  •  Version ${BuildConfig.VERSION_NAME}"
@@ -143,6 +177,62 @@ class SettingsActivity : BaseActivity() {
         }
 
         findViewById<android.widget.TextView>(R.id.autoReconnectSummary).text = summary
+    }
+
+    private fun bindVpnToggle() {
+        val switch = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
+            R.id.vpnTunnelSwitch
+        )
+        switch.setOnCheckedChangeListener(null)
+        switch.isChecked = prefs.isVpnEnabled()
+        updateVpnSummary()
+
+        switch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                prefs.setVpnEnabled(true)
+                try {
+                    val consentIntent = tunnelManager.requestConsentIntent()
+                    if (consentIntent == null) {
+                        lifecycleScope.launch {
+                            val provisioned = tunnelManager.ensureProvisioned(
+                                prefs, vpnProvisioningRepository,
+                                prefs.getServer(), prefs.getUsername(), prefs.getPassword()
+                            )
+                            val started = provisioned && tunnelManager.start(prefs)
+                            if (!started) {
+                                prefs.setVpnEnabled(false)
+                                switch.isChecked = false
+                            }
+                            updateVpnSummary()
+                        }
+                    } else {
+                        vpnConsentLauncher.launch(consentIntent)
+                    }
+                } catch (_: Exception) {
+                    prefs.setVpnEnabled(false)
+                    switch.isChecked = false
+                    updateVpnSummary()
+                }
+            } else {
+                prefs.setVpnEnabled(false)
+                lifecycleScope.launch {
+                    tunnelManager.stop(prefs)
+                    updateVpnSummary()
+                }
+            }
+        }
+    }
+
+    private fun updateVpnSummary() {
+        val summary = when {
+            !prefs.isVpnEnabled() -> "Off"
+            tunnelManager.isActive(prefs) -> {
+                val ip = prefs.getVpnProvisioning()?.assignedIp?.substringBefore("/")
+                if (ip != null) "Active — tunnel IP $ip" else "Active"
+            }
+            else -> "Unavailable — using standard connection"
+        }
+        findViewById<android.widget.TextView>(R.id.vpnTunnelSummary).text = summary
     }
 
     private fun showAboutDeviceInfo() {
