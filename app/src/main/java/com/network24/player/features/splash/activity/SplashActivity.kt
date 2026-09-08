@@ -36,14 +36,21 @@ class SplashActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        // If app was just updated, force login once
+        // If the installed build is newer than the one we last recorded, an
+        // update genuinely took effect since the last cold start - skip the
+        // check once and go straight to login. This is derived from the real
+        // installed VERSION_CODE (not a hand-set flag), so it can never get
+        // stuck pointing at a false "just updated" state.
         val updatePrefs = getSharedPreferences("network24_update", MODE_PRIVATE)
-        if (updatePrefs.getBoolean("just_updated", false)) {
-            updatePrefs.edit().putBoolean("just_updated", false).apply()
+        val lastSeenVersion = updatePrefs.getInt("last_seen_version_code", -1)
+        val currentVersion = BuildConfig.VERSION_CODE
+        if (lastSeenVersion in 0 until currentVersion) {
+            updatePrefs.edit().putInt("last_seen_version_code", currentVersion).apply()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
             return
         }
+        updatePrefs.edit().putInt("last_seen_version_code", currentVersion).apply()
 
         tvVersion = findViewById(R.id.tvVersion)
         pbSplash = findViewById(R.id.pbSplash)

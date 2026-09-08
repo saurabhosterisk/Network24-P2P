@@ -43,6 +43,15 @@ class SettingsActivity : BaseActivity() {
     private lateinit var vpnConsentLauncher: ActivityResultLauncher<Intent>
     private var vpnErrorMessage: String? = null
 
+    // True from the moment the user flips Secure Relay on until the
+    // attempt resolves (success or failure). The system VPN consent
+    // dialog pauses/resumes this Activity, and onResume()'s bindVpnToggle()
+    // would otherwise forcibly resync the switch from TunnelManager's
+    // still-DOWN state mid-attempt, snapping it back to "Off" (and
+    // overwriting the "Connecting..." text) before the async connect
+    // has had a chance to finish.
+    private var isConnecting = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PreferenceManager(this)
@@ -53,6 +62,7 @@ class SettingsActivity : BaseActivity() {
             if (result.resultCode == RESULT_OK) {
                 startVpnTunnel()
             } else {
+                isConnecting = false
                 findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch).isChecked = false
                 Toast.makeText(this, "VPN permission was not granted", Toast.LENGTH_SHORT).show()
             }
@@ -252,15 +262,21 @@ class SettingsActivity : BaseActivity() {
         // stored flag - a force-kill (or the OS reclaiming the process)
         // skips Network24App's normal teardown-on-background path, which
         // would otherwise leave the switch showing "Connected" for a
-        // tunnel that isn't actually running any more.
-        val actuallyConnected = TunnelManager.currentState(this) == Tunnel.State.UP
-        if (actuallyConnected != prefs.isVpnEnabled()) {
-            prefs.setVpnEnabled(actuallyConnected)
+        // tunnel that isn't actually running any more. Skipped while a
+        // connect attempt is in flight (isConnecting) - the system VPN
+        // consent dialog resumes this Activity before the tunnel is up,
+        // and resyncing here would wrongly snap the switch back to Off.
+        if (!isConnecting) {
+            val actuallyConnected = TunnelManager.currentState(this) == Tunnel.State.UP
+            if (actuallyConnected != prefs.isVpnEnabled()) {
+                prefs.setVpnEnabled(actuallyConnected)
+            }
+            switch.isChecked = actuallyConnected
+            updateVpnSummary()
         }
-        switch.isChecked = actuallyConnected
-        updateVpnSummary()
         switch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
+                isConnecting = true
                 val consentIntent = GoBackend.VpnService.prepare(this)
                 if (consentIntent != null) {
                     vpnConsentLauncher.launch(consentIntent)
@@ -274,6 +290,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun startVpnTunnel() {
+        isConnecting = true
         vpnErrorMessage = null
         findViewById<TextView>(R.id.vpnTunnelSummary).text = "Connecting..."
         lifecycleScope.launch {
@@ -282,9 +299,12 @@ class SettingsActivity : BaseActivity() {
                 try {
                     TunnelManager.bringUp(this@SettingsActivity, config)
                     prefs.setVpnEnabled(true)
+                    findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch).isChecked = true
                     updateVpnSummary()
                 } catch (e: Exception) {
                     handleVpnStartFailure(VPN_UNREACHABLE_MESSAGE)
+                } finally {
+                    isConnecting = false
                 }
             }.onFailure {
                 // it.message is wwwdir/vpn_api.php's own "message" field
@@ -293,6 +313,7 @@ class SettingsActivity : BaseActivity() {
                 // no server response to carry a message (network failure,
                 // or a local-only failure like the tunnel not starting).
                 handleVpnStartFailure(it.message ?: VPN_UNREACHABLE_MESSAGE)
+                isConnecting = false
             }
         }
     }

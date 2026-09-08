@@ -1,7 +1,6 @@
 package com.network24.player.features.updater.manager
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -157,17 +156,14 @@ object UpdateManager {
         apkFile: File
     ) {
         if (!activity.packageManager.canRequestPackageInstalls()) {
+            // Don't mark the update as applied here - permission hasn't been
+            // granted yet and the install hasn't happened. SplashActivity's
+            // isInstallingApk/onResume fallback already detects the return
+            // from this screen and routes onward correctly either way.
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${activity.packageName}")
             )
-            val prefs = activity.getSharedPreferences(
-                "network24_update",
-                Context.MODE_PRIVATE
-            )
-            prefs.edit()
-                .putBoolean("just_updated", true)
-                .apply()
             activity.startActivity(intent)
             return
         }
