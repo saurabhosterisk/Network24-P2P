@@ -4,10 +4,14 @@ import android.app.Activity
 import android.app.Application
 import android.os.Bundle
 import android.os.StrictMode
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.network24.player.core.compat.Network24DeviceCompatibility
 import com.network24.player.core.diagnostics.Network24CrashReporter
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.vpn.TunnelManager
+import com.network24.player.features.vpn.repository.VpnProvisioningRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,28 +45,32 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         }
         registerActivityLifecycleCallbacks(this)
         Network24CrashReporter.initialize(this, legacyTv)
-        reconnectVpnSilentlyIfAlreadyConsented()
-    }
 
-    /**
-     * Best-effort reconnect on process start for a device that already
-     * completed the VPN consent dialog in a previous session (e.g. after a
-     * reboot). Never shows a dialog here - if consent isn't already granted,
-     * DashboardActivity.attemptVpnSetup() handles that with an Activity
-     * available. Any failure here is a silent no-op.
-     */
-    private fun reconnectVpnSilentlyIfAlreadyConsented() {
-        val prefs = PreferenceManager(this)
-        if (!prefs.isVpnEnabled() || prefs.getVpnProvisioning() == null) return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching {
-                val tunnelManager = TunnelManager(this@Network24App)
-                if (tunnelManager.requestConsentIntent() == null) {
-                    tunnelManager.start(prefs)
+        // Secure Relay is an explicit, per-session choice, not a
+        // persistent background service: it never reconnects on its own
+        // when the app is (re)opened, and it's torn down the moment the
+        // app leaves the foreground (see the observer below) - so it is
+        // only ever on while the user is actively in the app and has
+        // just turned it on.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                val prefs = PreferenceManager(this@Network24App)
+                if (!prefs.isVpnEnabled()) return
+                prefs.setVpnEnabled(false)
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        TunnelManager.bringDown(this@Network24App)
+                    } catch (e: Exception) {
+                        // Best-effort - nothing more to do if this fails.
+                    }
+                    try {
+                        VpnProvisioningRepository(prefs).release()
+                    } catch (e: Exception) {
+                        // Best-effort - server prunes stale peers independently.
+                    }
                 }
             }
-        }
+        })
     }
 
     // --- Activity Lifecycle Tracking ---

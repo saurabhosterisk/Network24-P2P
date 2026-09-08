@@ -6,9 +6,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.network24.player.BuildConfig
 import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
@@ -17,44 +20,43 @@ import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.core.vpn.TunnelManager
 import com.network24.player.features.live.activity.ManageCategoriesActivity
 import com.network24.player.features.login.activity.LoginActivity
+import com.network24.player.features.updater.manager.UpdateManager
+import com.network24.player.features.updater.models.UpdateResponse
 import com.network24.player.features.vpn.repository.VpnProvisioningRepository
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
 import kotlinx.coroutines.launch
 
 class SettingsActivity : BaseActivity() {
 
-    private lateinit var prefs: PreferenceManager
-    private val tunnelManager by lazy { TunnelManager(this) }
-    private val vpnProvisioningRepository = VpnProvisioningRepository()
-    private val vpnConsentLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            lifecycleScope.launch {
-                val provisioned = tunnelManager.ensureProvisioned(
-                    prefs, vpnProvisioningRepository,
-                    prefs.getServer(), prefs.getUsername(), prefs.getPassword()
-                )
-                val started = provisioned && tunnelManager.start(prefs)
-                if (!started) {
-                    prefs.setVpnEnabled(false)
-                    findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
-                        R.id.vpnTunnelSwitch
-                    ).isChecked = false
-                }
-                updateVpnSummary()
-            }
-        } else {
-            prefs.setVpnEnabled(false)
-            findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
-                R.id.vpnTunnelSwitch
-            ).isChecked = false
-            updateVpnSummary()
-        }
+    companion object {
+        // The one Secure-Relay failure message this app ever makes up
+        // itself - used only when there's no server response to relay a
+        // message from (network failure, or the local tunnel failing to
+        // start). Every other failure text comes from vpn_api.php's
+        // "message" field, so wording changes don't need an app update.
+        private const val VPN_UNREACHABLE_MESSAGE = "Couldn't Connect to VPN Servers."
     }
+
+    private lateinit var prefs: PreferenceManager
+    private lateinit var vpnRepository: VpnProvisioningRepository
+    private lateinit var vpnConsentLauncher: ActivityResultLauncher<Intent>
+    private var vpnErrorMessage: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PreferenceManager(this)
+        vpnRepository = VpnProvisioningRepository(prefs)
+        vpnConsentLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK) {
+                startVpnTunnel()
+            } else {
+                findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch).isChecked = false
+                Toast.makeText(this, "VPN permission was not granted", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         val contentRoot = layoutInflater.inflate(
             R.layout.activity_settings,
@@ -75,10 +77,18 @@ class SettingsActivity : BaseActivity() {
         bindAccount()
         bindActions()
         updateAutoReconnectSummary()
-        bindVpnToggle()
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
-            "Network24  •  Version ${BuildConfig.VERSION_NAME}"
+            "Network24  •  Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Secure Relay turns itself off whenever the app leaves the
+        // foreground (Network24App), so the switch needs to reflect that
+        // on return - e.g. this Activity was merely paused (not
+        // recreated) while the user was away.
+        bindVpnToggle()
     }
 
     private fun bindAccount() {
@@ -135,6 +145,10 @@ class SettingsActivity : BaseActivity() {
             showAboutDeviceInfo()
         }
 
+        findViewById<android.view.View>(R.id.checkForUpdates).setOnClickListener {
+            checkForUpdates()
+        }
+
         findViewById<android.view.View>(R.id.logout).setOnClickListener {
             showLogoutConfirmation()
         }
@@ -177,62 +191,6 @@ class SettingsActivity : BaseActivity() {
         }
 
         findViewById<android.widget.TextView>(R.id.autoReconnectSummary).text = summary
-    }
-
-    private fun bindVpnToggle() {
-        val switch = findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
-            R.id.vpnTunnelSwitch
-        )
-        switch.setOnCheckedChangeListener(null)
-        switch.isChecked = prefs.isVpnEnabled()
-        updateVpnSummary()
-
-        switch.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                prefs.setVpnEnabled(true)
-                try {
-                    val consentIntent = tunnelManager.requestConsentIntent()
-                    if (consentIntent == null) {
-                        lifecycleScope.launch {
-                            val provisioned = tunnelManager.ensureProvisioned(
-                                prefs, vpnProvisioningRepository,
-                                prefs.getServer(), prefs.getUsername(), prefs.getPassword()
-                            )
-                            val started = provisioned && tunnelManager.start(prefs)
-                            if (!started) {
-                                prefs.setVpnEnabled(false)
-                                switch.isChecked = false
-                            }
-                            updateVpnSummary()
-                        }
-                    } else {
-                        vpnConsentLauncher.launch(consentIntent)
-                    }
-                } catch (_: Exception) {
-                    prefs.setVpnEnabled(false)
-                    switch.isChecked = false
-                    updateVpnSummary()
-                }
-            } else {
-                prefs.setVpnEnabled(false)
-                lifecycleScope.launch {
-                    tunnelManager.stop(prefs)
-                    updateVpnSummary()
-                }
-            }
-        }
-    }
-
-    private fun updateVpnSummary() {
-        val summary = when {
-            !prefs.isVpnEnabled() -> "Off"
-            tunnelManager.isActive(prefs) -> {
-                val ip = prefs.getVpnProvisioning()?.assignedIp?.substringBefore("/")
-                if (ip != null) "Active — tunnel IP $ip" else "Active"
-            }
-            else -> "Unavailable — using standard connection"
-        }
-        findViewById<android.widget.TextView>(R.id.vpnTunnelSummary).text = summary
     }
 
     private fun showAboutDeviceInfo() {
@@ -285,6 +243,153 @@ class SettingsActivity : BaseActivity() {
             Android SDK version: ${Build.VERSION.SDK_INT}
             Security patch level: $securityPatch
         """.trimIndent()
+    }
+
+    private fun bindVpnToggle() {
+        val switch = findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch)
+        switch.setOnCheckedChangeListener(null)
+        // Source of truth is the real backend tunnel state, not the
+        // stored flag - a force-kill (or the OS reclaiming the process)
+        // skips Network24App's normal teardown-on-background path, which
+        // would otherwise leave the switch showing "Connected" for a
+        // tunnel that isn't actually running any more.
+        val actuallyConnected = TunnelManager.currentState(this) == Tunnel.State.UP
+        if (actuallyConnected != prefs.isVpnEnabled()) {
+            prefs.setVpnEnabled(actuallyConnected)
+        }
+        switch.isChecked = actuallyConnected
+        updateVpnSummary()
+        switch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                val consentIntent = GoBackend.VpnService.prepare(this)
+                if (consentIntent != null) {
+                    vpnConsentLauncher.launch(consentIntent)
+                } else {
+                    startVpnTunnel()
+                }
+            } else {
+                stopVpnTunnel()
+            }
+        }
+    }
+
+    private fun startVpnTunnel() {
+        vpnErrorMessage = null
+        findViewById<TextView>(R.id.vpnTunnelSummary).text = "Connecting..."
+        lifecycleScope.launch {
+            val result = vpnRepository.provision()
+            result.onSuccess { config ->
+                try {
+                    TunnelManager.bringUp(this@SettingsActivity, config)
+                    prefs.setVpnEnabled(true)
+                    updateVpnSummary()
+                } catch (e: Exception) {
+                    handleVpnStartFailure(VPN_UNREACHABLE_MESSAGE)
+                }
+            }.onFailure {
+                // it.message is wwwdir/vpn_api.php's own "message" field
+                // (see VpnProvisioningRepository) - this is the only wording
+                // the client ever makes up itself, used only when there was
+                // no server response to carry a message (network failure,
+                // or a local-only failure like the tunnel not starting).
+                handleVpnStartFailure(it.message ?: VPN_UNREACHABLE_MESSAGE)
+            }
+        }
+    }
+
+    private fun handleVpnStartFailure(message: String) {
+        prefs.setVpnEnabled(false)
+        findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch).isChecked = false
+        vpnErrorMessage = message
+        updateVpnSummary()
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopVpnTunnel() {
+        vpnErrorMessage = null
+        lifecycleScope.launch {
+            try {
+                TunnelManager.bringDown(this@SettingsActivity)
+            } catch (e: Exception) {
+                // Already down or never came up - state below is what matters.
+            }
+            vpnRepository.release()
+            prefs.setVpnEnabled(false)
+            updateVpnSummary()
+        }
+    }
+
+    private fun updateVpnSummary() {
+        val summaryView = findViewById<TextView>(R.id.vpnTunnelSummary)
+        val error = vpnErrorMessage
+        when {
+            prefs.isVpnEnabled() -> {
+                summaryView.setTextColor(getColor(R.color.text_hint))
+                summaryView.text = "Connected — traffic routed through Secure Relay"
+            }
+            error != null -> {
+                summaryView.setTextColor(getColor(R.color.error))
+                summaryView.text = error
+            }
+            else -> {
+                summaryView.setTextColor(getColor(R.color.text_hint))
+                summaryView.text = "Off"
+            }
+        }
+    }
+
+    private fun checkForUpdates() {
+        val summary = findViewById<TextView>(R.id.checkForUpdatesSummary)
+        summary.text = "Checking..."
+        UpdateManager.checkForUpdate(
+            onNoUpdate = {
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    summary.text = "Check if a newer app version is available"
+                    Toast.makeText(this, "You're on the latest version", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onUpdateAvailable = { update ->
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    summary.text = "Check if a newer app version is available"
+                    AlertDialog.Builder(this)
+                        .setTitle("Update Available")
+                        .setMessage("A newer version (build ${update.versionCode}) is available. Download and install it now?")
+                        .setNegativeButton("Later", null)
+                        .setPositiveButton("Update") { _, _ ->
+                            startUpdateDownload(update)
+                        }
+                        .show()
+                }
+            }
+        )
+    }
+
+    private fun startUpdateDownload(update: UpdateResponse) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("Downloading Update")
+            .setMessage("Starting...")
+            .setCancelable(false)
+            .show()
+
+        UpdateManager.downloadApk(
+            this,
+            "${update.apk}?t=${System.currentTimeMillis()}"
+        ) { progress ->
+            if (isFinishing || isDestroyed) return@downloadApk
+            when {
+                progress in 0..100 -> progressDialog.setMessage("Downloading update... $progress%")
+                progress > 100 -> {
+                    progressDialog.setMessage("Installing update...")
+                    progressDialog.dismiss()
+                }
+                progress == -1 -> {
+                    progressDialog.dismiss()
+                    Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun showLogoutConfirmation() {

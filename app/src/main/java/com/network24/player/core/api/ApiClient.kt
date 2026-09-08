@@ -16,9 +16,21 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private val apiCache = ConcurrentHashMap<String, ApiService>()
+    private val vpnApiCache = ConcurrentHashMap<String, VpnApiService>()
 
     fun get(baseUrl: String): ApiService {
         return apiCache.getOrPut(baseUrl) {
+            retrofit(baseUrl).create(ApiService::class.java)
+        }
+    }
+
+    fun vpnApi(baseUrl: String): VpnApiService {
+        return vpnApiCache.getOrPut(baseUrl) {
+            retrofit(baseUrl).create(VpnApiService::class.java)
+        }
+    }
+
+    private fun retrofit(baseUrl: String): Retrofit {
             // Log level BODY bada data print karta hai logcat mein.
             //API ke call ko log me dekhne ke liye !important
             // Agar app slow ho toh isko 'Level.BASIC' ya 'Level.NONE' kar sakte hain.
@@ -87,17 +99,15 @@ object ApiClient {
                 .addInterceptor(logging)
                 .build()
 
-            val retrofit = Retrofit.Builder()
+            return Retrofit.Builder()
                 .baseUrl(baseUrl)
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
-
-            retrofit.create(ApiService::class.java)
-        }
     }
 
     fun clear() {
         apiCache.clear()
+        vpnApiCache.clear()
     }
 }

@@ -36,12 +36,6 @@ class PreferenceManager(context: Context) {
         private const val KEY_VPN_ENABLED = "vpn_enabled"
         private const val KEY_VPN_DEVICE_PRIVATE_KEY = "vpn_device_private_key"
         private const val KEY_VPN_DEVICE_PUBLIC_KEY = "vpn_device_public_key"
-        private const val KEY_VPN_ASSIGNED_IP = "vpn_assigned_ip"
-        private const val KEY_VPN_SERVER_PUBLIC_KEY = "vpn_server_public_key"
-        private const val KEY_VPN_ENDPOINT = "vpn_endpoint"
-        private const val KEY_VPN_ALLOWED_IPS = "vpn_allowed_ips"
-        private const val KEY_VPN_PROVISIONED_AT = "vpn_provisioned_at"
-        private const val KEY_VPN_TUNNEL_ACTIVE = "vpn_tunnel_active"
     }
 
     // -------------------------
@@ -182,86 +176,22 @@ class PreferenceManager(context: Context) {
     fun areSubtitlesEnabled(): Boolean = prefs.getBoolean(KEY_SUBTITLES_ENABLED, false)
 
     // -------------------------
-    // VPN tunnel
+    // VPN (Secure Relay)
     // -------------------------
 
-    data class VpnProvisioningState(
-        val devicePrivateKey: String,
-        val devicePublicKey: String,
-        val assignedIp: String,
-        val serverPublicKey: String,
-        val endpoint: String,
-        val allowedIps: List<String>
-    )
+    fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, false)
 
     fun setVpnEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_VPN_ENABLED, enabled).apply()
     }
 
-    // Default false: the VPN tunnel is opt-in - it only starts once the user
-    // turns it on from the Secure Relay switch in Settings.
-    fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, false)
+    fun getVpnDevicePrivateKey(): String? = prefs.getString(KEY_VPN_DEVICE_PRIVATE_KEY, null)
+    fun getVpnDevicePublicKey(): String? = prefs.getString(KEY_VPN_DEVICE_PUBLIC_KEY, null)
 
     fun saveVpnDeviceKeyPair(privateKey: String, publicKey: String) {
         prefs.edit()
             .putString(KEY_VPN_DEVICE_PRIVATE_KEY, privateKey)
             .putString(KEY_VPN_DEVICE_PUBLIC_KEY, publicKey)
-            .apply()
-    }
-
-    fun getVpnDevicePrivateKey(): String? = prefs.getString(KEY_VPN_DEVICE_PRIVATE_KEY, null)
-    fun getVpnDevicePublicKey(): String? = prefs.getString(KEY_VPN_DEVICE_PUBLIC_KEY, null)
-
-    fun saveVpnProvisioning(
-        assignedIp: String,
-        serverPublicKey: String,
-        endpoint: String,
-        allowedIps: List<String>
-    ) {
-        prefs.edit()
-            .putString(KEY_VPN_ASSIGNED_IP, assignedIp)
-            .putString(KEY_VPN_SERVER_PUBLIC_KEY, serverPublicKey)
-            .putString(KEY_VPN_ENDPOINT, endpoint)
-            .putStringSet(KEY_VPN_ALLOWED_IPS, allowedIps.toSet())
-            .putLong(KEY_VPN_PROVISIONED_AT, System.currentTimeMillis())
-            .apply()
-    }
-
-    fun getVpnProvisioning(): VpnProvisioningState? {
-        val devicePrivateKey = getVpnDevicePrivateKey() ?: return null
-        val devicePublicKey = getVpnDevicePublicKey() ?: return null
-        val assignedIp = prefs.getString(KEY_VPN_ASSIGNED_IP, null) ?: return null
-        val serverPublicKey = prefs.getString(KEY_VPN_SERVER_PUBLIC_KEY, null) ?: return null
-        val endpoint = prefs.getString(KEY_VPN_ENDPOINT, null) ?: return null
-        val allowedIps = prefs.getStringSet(KEY_VPN_ALLOWED_IPS, emptySet())?.toList() ?: emptyList()
-
-        return VpnProvisioningState(
-            devicePrivateKey = devicePrivateKey,
-            devicePublicKey = devicePublicKey,
-            assignedIp = assignedIp,
-            serverPublicKey = serverPublicKey,
-            endpoint = endpoint,
-            allowedIps = allowedIps
-        )
-    }
-
-    // Set by TunnelManager right after a setState() call it made itself
-    // succeeds/fails - GoBackend's own running-tunnel query is unreliable to
-    // call from a freshly constructed instance (its service binding is
-    // asynchronous), so this persisted flag is the source of truth for UI.
-    fun setVpnTunnelActive(active: Boolean) {
-        prefs.edit().putBoolean(KEY_VPN_TUNNEL_ACTIVE, active).apply()
-    }
-
-    fun isVpnTunnelActive(): Boolean = prefs.getBoolean(KEY_VPN_TUNNEL_ACTIVE, false)
-
-    fun clearVpnProvisioning() {
-        prefs.edit()
-            .remove(KEY_VPN_ASSIGNED_IP)
-            .remove(KEY_VPN_SERVER_PUBLIC_KEY)
-            .remove(KEY_VPN_ENDPOINT)
-            .remove(KEY_VPN_ALLOWED_IPS)
-            .remove(KEY_VPN_PROVISIONED_AT)
             .apply()
     }
 

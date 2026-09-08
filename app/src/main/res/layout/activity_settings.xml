@@ -329,7 +329,7 @@
             android:layout_width="match_parent"
             android:layout_height="68dp"
             android:layout_marginTop="10dp"
-            android:background="@drawable/bg_settings_action"
+            android:background="@drawable/bg_settings_card"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="18dp"
@@ -363,6 +363,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:text="Off"
                     android:textColor="@color/text_hint"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -420,6 +421,60 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:text="App, device, and operating system details"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textColor="@color/text_hint"
+                android:textSize="28sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/checkForUpdates"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_settings_action"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp">
+
+            <ImageView
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_settings_icon"
+                android:padding="7dp"
+                android:src="@drawable/ic_refresh"
+                android:tint="@color/text_primary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Check For Updates"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/checkForUpdatesSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Check if a newer app version is available"
                     android:textColor="@color/text_hint"
                     android:textSize="12sp" />
             </LinearLayout>

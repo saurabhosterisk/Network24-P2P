@@ -14,12 +14,14 @@ android {
     defaultConfig {
         applicationId = "com.network24.player"
 
-        // First-generation Fire TV/Stick devices run API 21/22. Keep the
-        // APK installable there.
-        minSdk = 21
+        // Raised from 21 to 24: the WireGuard tunnel library (Secure
+        // Relay) needs 24+ to avoid a CompletableFuture crash on VPN
+        // teardown - confirmed live on an Android 9 (API 28) Fire TV.
+        // First-gen Fire TV Stick (API 21-22) no longer installs.
+        minSdk = 24
         targetSdk = 35
 
-        versionCode = 33
+        versionCode = 35
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -142,10 +144,10 @@ dependencies {
     // QR Code
     implementation("com.google.zxing:core:3.5.3")
 
-
-    // VPN tunnel (per-app WireGuard relay)
-    implementation(libs.wireguard.tunnel)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+
+    // VPN (Secure Relay)
+    implementation(libs.wireguard.tunnel)
 
 
     // Firebase
