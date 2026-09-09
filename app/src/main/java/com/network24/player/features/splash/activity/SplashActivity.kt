@@ -22,6 +22,10 @@ class SplashActivity : BaseActivity() {
 
     private var isRouted = false
     private var isInstallingApk = false // 🔥 Naya flag install state track karne ke liye
+    // True only when we sent the user to the "install unknown apps"
+    // permission screen (not the real installer) - lets onResume() retry
+    // the actual install instead of discarding the finished download.
+    private var awaitingInstallPermission = false
 
     // Timeout handler in case the server takes too long to respond
     private val timeoutHandler = Handler(Looper.getMainLooper())
@@ -93,6 +97,9 @@ class SplashActivity : BaseActivity() {
                                     tvVersion.text = "Installing update..."
                                     pbSplash.isIndeterminate = true
                                     isInstallingApk = true // 🔥 Flag set kiya kyunki install screen open ho rahi hai
+                                    if (progress == 102) {
+                                        awaitingInstallPermission = true
+                                    }
                                 }
                                 progress == -1 -> {
                                     // Handle Failed Download
@@ -118,6 +125,16 @@ class SplashActivity : BaseActivity() {
         // App update nahi hui (Ya toh user ne cancel kiya, ya purana version hone ki wajah se OS ne reject kar diya)
         if (isInstallingApk) {
             isInstallingApk = false
+            if (awaitingInstallPermission) {
+                awaitingInstallPermission = false
+                if (UpdateManager.retryInstallAfterPermission(this)) {
+                    // Permission was just granted and the real installer
+                    // launched - wait for the user to return from THAT
+                    // screen before deciding the update was skipped.
+                    isInstallingApk = true
+                    return
+                }
+            }
             Toast.makeText(this, "Update skipped or failed. Starting app.....", Toast.LENGTH_SHORT).show()
             routeNext()
         }

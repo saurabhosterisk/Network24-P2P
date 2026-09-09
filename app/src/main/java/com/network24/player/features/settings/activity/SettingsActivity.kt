@@ -51,6 +51,13 @@ class SettingsActivity : BaseActivity() {
     // has had a chance to finish.
     private var isConnecting = false
 
+    // Same "install unknown apps" permission dance as SplashActivity - true
+    // only while waiting to come back from that settings screen, so
+    // onResume() can retry the actual install instead of discarding an
+    // already-finished download.
+    private var awaitingUpdatePermission = false
+    private var updateProgressDialog: ProgressDialogHandle? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = PreferenceManager(this)
@@ -98,6 +105,19 @@ class SettingsActivity : BaseActivity() {
         // on return - e.g. this Activity was merely paused (not
         // recreated) while the user was away.
         bindVpnToggle()
+
+        if (awaitingUpdatePermission) {
+            awaitingUpdatePermission = false
+            if (UpdateManager.retryInstallAfterPermission(this)) {
+                // Real installer just launched - leave the progress dialog
+                // up until the user returns from THAT screen.
+                updateProgressDialog?.setMessage("Installing update...")
+            } else {
+                updateProgressDialog?.dismiss()
+                updateProgressDialog = null
+                Toast.makeText(this, "Update skipped or failed.", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun bindAccount() {
@@ -385,6 +405,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun startUpdateDownload(update: UpdateResponse) {
         val progressDialog = showProgressDialog("Downloading Update", "Starting...")
+        updateProgressDialog = progressDialog
 
         UpdateManager.downloadApk(
             this,
@@ -393,12 +414,22 @@ class SettingsActivity : BaseActivity() {
             if (isFinishing || isDestroyed) return@downloadApk
             when {
                 progress in 0..100 -> progressDialog.setMessage("Downloading update... $progress%")
+                progress == 102 -> {
+                    // Only the "allow installs" permission screen opened -
+                    // onResume() retries the real install once the user
+                    // comes back, so keep the dialog up instead of
+                    // dismissing it here.
+                    progressDialog.setMessage("Waiting for install permission...")
+                    awaitingUpdatePermission = true
+                }
                 progress > 100 -> {
                     progressDialog.setMessage("Installing update...")
                     progressDialog.dismiss()
+                    updateProgressDialog = null
                 }
                 progress == -1 -> {
                     progressDialog.dismiss()
+                    updateProgressDialog = null
                     Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_SHORT).show()
                 }
             }

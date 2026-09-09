@@ -21,6 +21,13 @@ import kotlin.concurrent.thread
 object UpdateManager {
     private const val TAG = "UpdateManager"
 
+    // The most recently downloaded update APK, kept around so a caller can
+    // retry the actual install once the user grants the "install unknown
+    // apps" permission and returns - without this the download (already
+    // paid for in data/time) would just be thrown away and the app would
+    // silently stay on the old version.
+    private var pendingApkFile: File? = null
+
     fun checkForUpdate(
         onNoUpdate: () -> Unit,
         onUpdateAvailable: (UpdateResponse) -> Unit
@@ -138,10 +145,17 @@ object UpdateManager {
                 }
 
                 Log.d(TAG, "APK Download Complete")
+                pendingApkFile = apkFile
 
                 postToUi {
                     onProgress(101)
-                    installApk(activity, apkFile)
+                    if (!installApk(activity, apkFile)) {
+                        // Permission wasn't granted - we only opened the
+                        // "allow installs" settings screen. Tell the caller
+                        // so it knows to retry (not give up) once the user
+                        // comes back with the permission granted.
+                        onProgress(102)
+                    }
                 }
 
             } catch (e: Exception) {
@@ -151,22 +165,36 @@ object UpdateManager {
         }
     }
 
+    /**
+     * Call this from onResume() after sending the user to the "install
+     * unknown apps" permission screen (progress == 102). If the permission
+     * has since been granted, this actually launches the installer for the
+     * APK that was already downloaded - without it the finished download
+     * would be discarded and the app would silently stay on the old version.
+     * Returns false if the permission still isn't granted or there's no
+     * pending download to install.
+     */
+    fun retryInstallAfterPermission(activity: Activity): Boolean {
+        val apkFile = pendingApkFile ?: return false
+        if (!activity.packageManager.canRequestPackageInstalls()) return false
+        return installApk(activity, apkFile)
+    }
+
+    /** Returns true if the real package installer was launched, false if we only opened the permission screen. */
     private fun installApk(
         activity: Activity,
         apkFile: File
-    ) {
+    ): Boolean {
         if (!activity.packageManager.canRequestPackageInstalls()) {
-            // Don't mark the update as applied here - permission hasn't been
-            // granted yet and the install hasn't happened. SplashActivity's
-            // isInstallingApk/onResume fallback already detects the return
-            // from this screen and routes onward correctly either way.
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${activity.packageName}")
             )
             activity.startActivity(intent)
-            return
+            return false
         }
+
+        pendingApkFile = null
 
         val uri = FileProvider.getUriForFile(
             activity,
@@ -183,5 +211,6 @@ object UpdateManager {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         activity.startActivity(intent)
+        return true
     }
 }
