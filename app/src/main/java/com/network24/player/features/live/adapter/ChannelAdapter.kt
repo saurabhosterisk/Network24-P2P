@@ -179,11 +179,21 @@ class ChannelAdapter(
         }
     }
 
-    fun setPlaying(position: Int) {
+    /**
+     * @param moveFocus Requests DPAD focus on the newly-playing row once it
+     * scrolls into view. Pass false when the RecyclerView is currently
+     * View.GONE (e.g. ChannelListActivity's in-place fullscreen mode) -
+     * requestFocus() on a row inside a GONE view fails, but still clears
+     * focus from wherever it actually was (the caller's own control),
+     * leaving it stranded nowhere instead of just staying put.
+     */
+    fun setPlaying(position: Int, moveFocus: Boolean = true) {
         val old = playingPosition
         playingPosition = position
         if (old != RecyclerView.NO_POSITION) notifyItemChanged(old)
         if (position != RecyclerView.NO_POSITION) notifyItemChanged(position)
+
+        if (!moveFocus) return
 
         // RecyclerView only creates ViewHolders for visible rows. When fullscreen
         // playback moves 10/20/etc. channels away, the playing row is therefore not

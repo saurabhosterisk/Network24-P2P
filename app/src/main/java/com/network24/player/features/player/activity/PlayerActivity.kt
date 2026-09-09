@@ -84,6 +84,14 @@ class PlayerActivity : BaseActivity() {
     private var errorActive = false
     private var hasEverPlayed = false
 
+    // True from a real surface handoff (PlayerManager.attach/moveTo actually
+    // moved the player onto binding.playerView) until onRenderedFirstFrame
+    // confirms this surface has a genuine current frame. Player.STATE_READY
+    // alone can't signal this - the player was already READY before the
+    // handoff, so that state never changes even while the view is still
+    // showing the old surface's last frame frozen.
+    private var awaitingFirstFrame = false
+
 
     private var isSubtitleEnabled = false
     private var currentAspectRatioIndex = 0
@@ -162,6 +170,20 @@ class PlayerActivity : BaseActivity() {
 
             override fun onTracksChanged(tracks: Tracks) {
                 applySubtitlePreference()
+            }
+
+            // Player.STATE_READY only reflects the decoder's internal buffer
+            // state, which stays READY the whole time when a channel that
+            // was already playing (in the inline preview) hands its surface
+            // over to this Activity's PlayerView - so it never signals the
+            // real gap here. The renderer keeps the old surface's last frame
+            // frozen on screen for a moment while it re-targets output to
+            // the new surface. onRenderedFirstFrame is Media3's actual
+            // signal that THIS surface has a real, current frame on it.
+            override fun onRenderedFirstFrame() {
+                awaitingFirstFrame = false
+                binding.progressBar.visibility =
+                    View.GONE
             }
 
 
@@ -378,10 +400,22 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        PlayerManager.moveTo(
+        val movedToNewSurface = PlayerManager.moveTo(
             this,
             binding.playerView
         )
+
+        if (movedToNewSurface) {
+            // A real handoff from another PlayerView (e.g. the inline
+            // preview on ChannelListActivity) - cover the frozen last frame
+            // until onRenderedFirstFrame confirms this surface has a
+            // genuine current one. Adding the listener now (not just in
+            // onResume) means it can't be missed even if rendering somehow
+            // completes before onResume runs.
+            awaitingFirstFrame = true
+            binding.progressBar.visibility = View.VISIBLE
+            binding.playerView.player?.addListener(playerListener)
+        }
 
         if (intent.getBooleanExtra(EXTRA_PLAY_SELECTED_CHANNEL, false)) {
             PlayerState.currentChannel()?.let(::switchToChannel)
@@ -726,10 +760,14 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        PlayerManager.attach(
+        val movedToNewSurface = PlayerManager.attach(
             this,
             binding.playerView
         )
+
+        if (movedToNewSurface) {
+            awaitingFirstFrame = true
+        }
 
         binding.playerView.player
             ?.addListener(playerListener)
@@ -741,7 +779,8 @@ class PlayerActivity : BaseActivity() {
 
 
             binding.playerView.player?.playbackState ==
-                    Player.STATE_READY -> {
+                    Player.STATE_READY &&
+                    !awaitingFirstFrame -> {
 
 
 

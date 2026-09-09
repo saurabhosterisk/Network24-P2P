@@ -122,6 +122,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_md"
+            android:background="@drawable/bg_checkbox_focus"
+            android:paddingStart="8dp"
+            android:paddingEnd="12dp"
+            android:paddingVertical="6dp"
             android:text="Remember Me"
             android:textColor="@color/text_primary"/>
 

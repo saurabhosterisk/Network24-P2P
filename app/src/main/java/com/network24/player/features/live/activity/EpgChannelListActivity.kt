@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -17,9 +18,14 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 
+import androidx.activity.addCallback
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.ui.AspectRatioFrameLayout
 
 import coil.load
 import com.google.firebase.firestore.FirebaseFirestore
@@ -39,9 +45,10 @@ import com.network24.player.features.live.history.LiveWatchHistory
 import com.network24.player.features.live.models.LiveChannel
 import com.network24.player.features.live.repository.LiveRepository
 
-import com.network24.player.features.player.activity.PlayerActivity
 import com.network24.player.features.player.manager.PlayerManager
+import com.network24.player.features.player.multiview.MultiViewActivity
 import com.network24.player.features.player.state.PlayerState
+import com.network24.player.features.player.ui.dialogs.StreamInfoDialog
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -189,8 +196,41 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-    private var expectingFullscreenReturn =
-        false
+    // (expectingFullscreenReturn removed: openFullscreen no longer leaves
+    // this activity, so there is no "returned from PlayerActivity" case
+    // to detect in onResume anymore.)
+
+    // True while topCard is expanded to fill the screen in place of the
+    // channel/EPG grid. The same binding.playerView keeps rendering the
+    // whole time - no surface handoff, so no decoder-level freeze on toggle.
+    private var isFullscreen = false
+
+    private var fsSubtitleEnabled = false
+    private var fsAspectRatioIndex = 0
+
+    private val fsHideHandler = Handler(Looper.getMainLooper())
+
+    private val fsHideRunnable = Runnable {
+        val d = 300L
+
+        binding.fsTopTint.animate().alpha(0f).setDuration(d)
+            .withEndAction { binding.fsTopTint.visibility = View.GONE }.start()
+
+        binding.fsBtnBack.animate().alpha(0f).setDuration(d)
+            .withEndAction { binding.fsBtnBack.visibility = View.GONE }.start()
+
+        binding.fsTxtChannelTitle.animate().alpha(0f).setDuration(d)
+            .withEndAction { binding.fsTxtChannelTitle.visibility = View.GONE }.start()
+
+        binding.fsBottomOverlay.animate().alpha(0f).translationY(50f).setDuration(d)
+            .withEndAction { binding.fsBottomOverlay.visibility = View.GONE }.start()
+    }
+
+    // Saved so exitFullscreen() can put topCard back exactly where it was.
+    private var topCardCornerRadius = 0f
+    private var topCardElevation = 0f
+    private var contentRootNormalConstraintSet: ConstraintSet? = null
+    private var topCardInnerNormalConstraintSet: ConstraintSet? = null
 
 
 
@@ -307,6 +347,8 @@ class EpgChannelListActivity : BaseActivity() {
         prefs =
             PreferenceManager(this)
 
+        fsSubtitleEnabled = prefs.areSubtitlesEnabled()
+
 
         favoritesRepository =
             FavoritesRepository(
@@ -352,6 +394,19 @@ class EpgChannelListActivity : BaseActivity() {
             finish()
         }
 
+        // Exiting fullscreen takes priority over the default finish()
+        // above - registered after so it is the callback the dispatcher
+        // invokes first.
+        onBackPressedDispatcher.addCallback(this) {
+            if (isFullscreen) {
+                exitFullscreen()
+            } else {
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        }
+
 
 
 
@@ -362,10 +417,15 @@ class EpgChannelListActivity : BaseActivity() {
         )
 
 
-        // Match the Channel List and Favorites behaviour: touching the active
-        // preview opens the same full-screen PlayerActivity and its controls.
+        // Touching the active preview expands it in place to fill the
+        // screen; touching it again while already fullscreen just toggles
+        // the control overlay.
         binding.playerView.setOnClickListener {
-            playingChannel?.let(::openFullscreen)
+            if (isFullscreen) {
+                toggleFsUi()
+            } else {
+                playingChannel?.let(::openFullscreen)
+            }
         }
 
 
@@ -399,6 +459,9 @@ class EpgChannelListActivity : BaseActivity() {
 
 
         setupStickyScrolling()
+
+
+        setupFullscreenControls()
 
 
         loadChannels()
@@ -3173,33 +3236,33 @@ class EpgChannelListActivity : BaseActivity() {
     }
 
 
+    // Fullscreen used to hand off to a separate PlayerActivity via
+    // startActivity() + PlayerManager re-attaching the player's video
+    // surface to a brand new PlayerView. That handoff is a real decoder
+    // level operation (MediaCodec output surface retarget) that visibly
+    // froze the last frame for a moment on this hardware. Expanding
+    // topCard/playerView in place instead means binding.playerView is
+    // never swapped, so there is no handoff left to freeze on.
     private fun openFullscreen(
         channel: LiveChannel
     ) {
 
+        if (isFullscreen) return
 
         val position = channels.indexOfFirst {
             it.stream_id == channel.stream_id
         }
 
-
         if (position < 0) return
 
+        isFullscreen = true
 
-        // PlayerActivity uses PlayerState for previous/next channel controls
-        // and MultiView. Populate it with this EPG category's channel list.
+        // Still populated for MultiView's "at least 2 channels" grid button.
         PlayerState.channels.clear()
         PlayerState.channels.addAll(channels)
         PlayerState.currentPosition = position
 
-
-        playingChannel =
-            channel
-
-
-        expectingFullscreenReturn =
-            true
-
+        playingChannel = channel
 
         PlayerManager.play(
             this,
@@ -3208,13 +3271,394 @@ class EpgChannelListActivity : BaseActivity() {
             channel.stream_id?.toString()
         )
 
+        val topCard = binding.topCard
 
-        startActivity(
-            Intent(
-                this,
-                PlayerActivity::class.java
-            )
+        topCardCornerRadius = topCard.radius
+        topCardElevation = topCard.cardElevation
+        topCard.radius = 0f
+        topCard.cardElevation = 0f
+        topCard.setContentPadding(0, 0, 0, 0)
+
+        if (contentRootNormalConstraintSet == null) {
+            contentRootNormalConstraintSet = ConstraintSet().apply {
+                clone(binding.contentRoot)
+            }
+        }
+
+        ConstraintSet().apply {
+            clone(binding.contentRoot)
+            clear(topCard.id, ConstraintSet.START)
+            clear(topCard.id, ConstraintSet.END)
+            clear(topCard.id, ConstraintSet.TOP)
+            clear(topCard.id, ConstraintSet.BOTTOM)
+            constrainPercentHeight(topCard.id, 1f)
+            connect(topCard.id, ConstraintSet.START, binding.contentRoot.id, ConstraintSet.START)
+            connect(topCard.id, ConstraintSet.END, binding.contentRoot.id, ConstraintSet.END)
+            connect(topCard.id, ConstraintSet.TOP, binding.contentRoot.id, ConstraintSet.TOP)
+            connect(topCard.id, ConstraintSet.BOTTOM, binding.contentRoot.id, ConstraintSet.BOTTOM)
+            setMargin(topCard.id, ConstraintSet.START, 0)
+            setMargin(topCard.id, ConstraintSet.END, 0)
+            setMargin(topCard.id, ConstraintSet.TOP, 0)
+            setMargin(topCard.id, ConstraintSet.BOTTOM, 0)
+            applyTo(binding.contentRoot)
+        }
+
+        if (topCardInnerNormalConstraintSet == null) {
+            topCardInnerNormalConstraintSet = ConstraintSet().apply {
+                clone(binding.topCardInner)
+            }
+        }
+
+        // playerView normally only takes 30% of topCard's width, with
+        // infoPanel filling the rest - drop that percentage constraint so
+        // it fills topCardInner entirely (infoPanel is hidden below anyway).
+        ConstraintSet().apply {
+            clone(binding.topCardInner)
+            constrainPercentWidth(binding.playerView.id, 1f)
+            clear(binding.playerView.id, ConstraintSet.END)
+            connect(binding.playerView.id, ConstraintSet.END, binding.topCardInner.id, ConstraintSet.END)
+            applyTo(binding.topCardInner)
+        }
+
+        binding.headerCard.visibility = View.GONE
+        binding.epgArea.visibility = View.GONE
+        binding.infoPanel.visibility = View.GONE
+
+        binding.fsTxtChannelTitle.text = run {
+            val streamId = channel.stream_id?.let { "$it - " } ?: ""
+            "$streamId${channel.name ?: "Unknown Channel"}"
+        }
+
+        binding.playerView.subtitleView?.visibility = View.VISIBLE
+        fsToggleSubtitles(fsSubtitleEnabled)
+
+        val epgId = channel.epg_channel_id ?: channel.stream_id?.toString()
+        binding.fsTxtNowTitle.text =
+            epgByChannel[epgId.orEmpty()]
+                ?.firstOrNull {
+                    val now = System.currentTimeMillis()
+                    (it.startTimestamp ?: Long.MAX_VALUE) <= now &&
+                        (it.stopTimestamp ?: 0L) >= now
+                }
+                ?.title
+                ?: "No Program Info"
+
+        showFsUiWithTimeout()
+
+        binding.fsBtnPlayPause.post {
+            binding.fsBtnPlayPause.requestFocus()
+        }
+    }
+
+
+    private fun exitFullscreen() {
+
+        if (!isFullscreen) return
+
+        isFullscreen = false
+
+        fsHideHandler.removeCallbacks(fsHideRunnable)
+
+        val topCard = binding.topCard
+
+        topCard.radius = topCardCornerRadius
+        topCard.cardElevation = topCardElevation
+        topCard.setContentPadding(0, 0, 0, 0)
+
+        contentRootNormalConstraintSet?.applyTo(binding.contentRoot)
+        topCardInnerNormalConstraintSet?.applyTo(binding.topCardInner)
+
+        binding.headerCard.visibility = View.VISIBLE
+        binding.epgArea.visibility = View.VISIBLE
+        binding.infoPanel.visibility = View.VISIBLE
+
+        binding.fsTopTint.visibility = View.GONE
+        binding.fsBtnBack.visibility = View.GONE
+        binding.fsTxtChannelTitle.visibility = View.GONE
+        binding.fsBottomOverlay.visibility = View.GONE
+
+        binding.playerView.subtitleView?.visibility = View.GONE
+
+        // fsPlayNextChannel/fsPlayPreviousChannel may have moved playingChannel
+        // while fullscreen - re-focus the grid on whatever is actually
+        // playing now that it is visible again, same as a normal channel
+        // switch already does via pendingFocusChannelId.
+        playingChannel?.stream_id?.let { streamId ->
+            pendingFocusChannelId = streamId
+            pendingFocusProgramKey = null
+            restorePendingFocus()
+        }
+    }
+
+
+    private fun showFsUiWithTimeout() {
+
+        binding.fsBtnPlayPause.setImageResource(
+            if (PlayerManager.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play
         )
+
+        val d = 300L
+
+        if (binding.fsBottomOverlay.visibility != View.VISIBLE) {
+
+            binding.fsTopTint.alpha = 0f
+            binding.fsTopTint.visibility = View.VISIBLE
+            binding.fsTopTint.animate().alpha(1f).setDuration(d).start()
+
+            binding.fsBtnBack.alpha = 0f
+            binding.fsBtnBack.visibility = View.VISIBLE
+            binding.fsBtnBack.animate().alpha(1f).setDuration(d).start()
+
+            binding.fsTxtChannelTitle.alpha = 0f
+            binding.fsTxtChannelTitle.visibility = View.VISIBLE
+            binding.fsTxtChannelTitle.animate().alpha(1f).setDuration(d).start()
+
+            binding.fsBottomOverlay.alpha = 0f
+            binding.fsBottomOverlay.translationY = 50f
+            binding.fsBottomOverlay.visibility = View.VISIBLE
+            binding.fsBottomOverlay.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(d)
+                .withEndAction {
+                    binding.fsBtnPlayPause.post {
+                        binding.fsBtnPlayPause.requestFocus()
+                    }
+                }
+                .start()
+        }
+
+        fsHideHandler.removeCallbacks(fsHideRunnable)
+        fsHideHandler.postDelayed(fsHideRunnable, 5000)
+    }
+
+
+    private fun toggleFsUi() {
+
+        if (binding.fsBottomOverlay.visibility == View.VISIBLE) {
+            fsHideHandler.removeCallbacks(fsHideRunnable)
+            fsHideRunnable.run()
+        } else {
+            showFsUiWithTimeout()
+        }
+    }
+
+
+    private fun fsSwitchToChannel(channel: LiveChannel) {
+
+        LiveWatchHistory.record(applicationContext, channel)
+
+        updateTopInfo(channel)
+
+        playingChannel = channel
+        pendingFocusChannelId = channel.stream_id
+
+        PlayerManager.play(
+            this,
+            binding.playerView,
+            buildStreamUrl(channel),
+            channel.stream_id?.toString()
+        )
+
+        binding.fsTxtChannelTitle.text = run {
+            val streamId = channel.stream_id?.let { "$it - " } ?: ""
+            "$streamId${channel.name ?: "Unknown Channel"}"
+        }
+
+        val epgId = channel.epg_channel_id ?: channel.stream_id?.toString()
+        binding.fsTxtNowTitle.text =
+            epgByChannel[epgId.orEmpty()]
+                ?.firstOrNull {
+                    val now = System.currentTimeMillis()
+                    (it.startTimestamp ?: Long.MAX_VALUE) <= now &&
+                        (it.stopTimestamp ?: 0L) >= now
+                }
+                ?.title
+                ?: "No Program Info"
+    }
+
+
+    private fun fsPlayNextChannel() {
+
+        if (channels.isEmpty()) return
+
+        val currentIndex = channels.indexOfFirst {
+            it.stream_id == playingChannel?.stream_id
+        }
+
+        val next = (currentIndex + 1).let {
+            if (it < 0 || it >= channels.size) 0 else it
+        }
+
+        channels.getOrNull(next)?.let(::fsSwitchToChannel)
+    }
+
+
+    private fun fsPlayPreviousChannel() {
+
+        if (channels.isEmpty()) return
+
+        val currentIndex = channels.indexOfFirst {
+            it.stream_id == playingChannel?.stream_id
+        }
+
+        val prev = (currentIndex - 1).let {
+            if (it < 0) channels.size - 1 else it
+        }
+
+        channels.getOrNull(prev)?.let(::fsSwitchToChannel)
+    }
+
+
+    private fun fsToggleSubtitles(enable: Boolean) {
+
+        val player = binding.playerView.player ?: return
+
+        val builder = player.trackSelectionParameters.buildUpon()
+
+        if (enable) {
+
+            player.currentTracks.groups.forEach { group ->
+
+                if (group.type == C.TRACK_TYPE_TEXT) {
+
+                    for (i in 0 until group.length) {
+
+                        if (group.isTrackSupported(i)) {
+
+                            builder
+                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                .setOverrideForType(
+                                    TrackSelectionOverride(group.mediaTrackGroup, i)
+                                )
+
+                            break
+                        }
+                    }
+                }
+            }
+
+        } else {
+
+            builder
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
+
+        player.trackSelectionParameters = builder.build()
+
+        binding.fsBtnSubtitle.setColorFilter(
+            if (enable) Color.parseColor("#FFC107") else Color.WHITE
+        )
+    }
+
+
+    private fun fsCycleAspectRatio() {
+
+        fsAspectRatioIndex = (fsAspectRatioIndex + 1) % 4
+
+        val msg = when (fsAspectRatioIndex) {
+
+            0 -> {
+                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                "Aspect Ratio: Fit"
+            }
+
+            1 -> {
+                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                "Aspect Ratio: Fill"
+            }
+
+            2 -> {
+                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                "Aspect Ratio: Zoom"
+            }
+
+            else -> {
+                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+                "Aspect Ratio: Fixed Width"
+            }
+        }
+
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        showFsUiWithTimeout()
+    }
+
+
+    private fun setupFullscreenControls() {
+
+        binding.fsBtnBack.setOnClickListener {
+            exitFullscreen()
+        }
+
+        binding.fsBtnPlayPause.setOnClickListener {
+
+            if (PlayerManager.isPlaying()) {
+                PlayerManager.pause()
+                binding.fsBtnPlayPause.setImageResource(R.drawable.ic_play)
+            } else {
+                PlayerManager.resume()
+                binding.fsBtnPlayPause.setImageResource(R.drawable.ic_pause)
+            }
+
+            showFsUiWithTimeout()
+        }
+
+        binding.fsBtnNext.setOnClickListener {
+            fsPlayNextChannel()
+            showFsUiWithTimeout()
+        }
+
+        binding.fsBtnPrev.setOnClickListener {
+            fsPlayPreviousChannel()
+            showFsUiWithTimeout()
+        }
+
+        binding.fsBtnInfo.setOnClickListener {
+
+            if (playingChannel?.stream_id == null) {
+                Toast.makeText(this, "Channel not available", Toast.LENGTH_SHORT).show()
+            } else {
+                StreamInfoDialog.newInstance()
+                    .show(supportFragmentManager, "StreamInfoDialog")
+            }
+
+            showFsUiWithTimeout()
+        }
+
+        binding.fsBtnAspect.setOnClickListener {
+            fsCycleAspectRatio()
+        }
+
+        binding.fsBtnSubtitle.setOnClickListener {
+
+            fsSubtitleEnabled = !fsSubtitleEnabled
+            prefs.setSubtitlesEnabled(fsSubtitleEnabled)
+
+            fsToggleSubtitles(fsSubtitleEnabled)
+
+            Toast.makeText(
+                this,
+                if (fsSubtitleEnabled) "Subtitles Enabled" else "Subtitles Disabled",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            showFsUiWithTimeout()
+        }
+
+        binding.fsBtnGrid.setOnClickListener {
+
+            if (PlayerState.channels.size < 2) {
+                Toast.makeText(
+                    this,
+                    "Multi-view needs at least 2 channels",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                startActivity(Intent(this, MultiViewActivity::class.java))
+                showFsUiWithTimeout()
+            }
+        }
     }
 
 
@@ -3703,18 +4147,6 @@ class EpgChannelListActivity : BaseActivity() {
             }
 
 
-            if (expectingFullscreenReturn) {
-                expectingFullscreenReturn = false
-
-
-                PlayerState.currentChannel()?.let { channel ->
-                    playingChannel = channel
-                    updateTopInfo(channel)
-                    pendingFocusChannelId = channel.stream_id
-                }
-            }
-
-
             if (playingChannel != null) {
                 PlayerManager.resume()
             }
@@ -3736,8 +4168,72 @@ class EpgChannelListActivity : BaseActivity() {
             ?.removeListener(playerListener)
 
         nowHandler.removeCallbacks(nowLineRunnable)
+        fsHideHandler.removeCallbacks(fsHideRunnable)
 
         super.onPause()
+    }
+
+
+    override fun onKeyDown(
+        keyCode: Int,
+        event: KeyEvent?
+    ): Boolean {
+
+        if (!isFullscreen) {
+            return super.onKeyDown(keyCode, event)
+        }
+
+        if (binding.fsBottomOverlay.visibility != View.VISIBLE) {
+
+            when (keyCode) {
+
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+
+                    showFsUiWithTimeout()
+                    return true
+                }
+            }
+
+        } else {
+
+            fsHideHandler.removeCallbacks(fsHideRunnable)
+            fsHideHandler.postDelayed(fsHideRunnable, 5000)
+
+            when (keyCode) {
+
+                KeyEvent.KEYCODE_CHANNEL_UP,
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    fsPlayNextChannel()
+                    return true
+                }
+
+                KeyEvent.KEYCODE_CHANNEL_DOWN,
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    fsPlayPreviousChannel()
+                    return true
+                }
+            }
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+
+            showFsUiWithTimeout()
+
+            if (PlayerManager.isPlaying()) {
+                PlayerManager.pause()
+            } else {
+                PlayerManager.resume()
+            }
+
+            return true
+        }
+
+        return super.onKeyDown(keyCode, event)
     }
 
 

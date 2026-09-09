@@ -356,32 +356,7 @@ object PlayerManager {
 
                 override fun onActivityResumed(
                     activity: Activity
-                ) {
-
-
-                    if (
-
-                        activity.javaClass.name.endsWith(
-                            "features.live.activity.EpgChannelListActivity"
-                        )
-
-                        &&
-
-                        !currentUrl.isNullOrBlank()
-
-                    ) {
-
-
-                        runCatching {
-
-
-                            attachFromEpgReflection(
-                                activity
-                            )
-
-                        }
-                    }
-                }
+                ) = Unit
 
 
 
@@ -447,69 +422,6 @@ object PlayerManager {
         lifecycleCallbacksRegistered =
             true
     }
-
-    private fun attachFromEpgReflection(
-        activity: Activity
-    ) {
-
-
-        try {
-
-
-            val bindingField =
-                activity.javaClass
-                    .getDeclaredField(
-                        "binding"
-                    )
-                    .apply {
-                        isAccessible = true
-                    }
-
-
-
-            val binding =
-                bindingField.get(
-                    activity
-                )
-
-
-
-            val playerField =
-                binding.javaClass
-                    .getDeclaredField(
-                        "playerView"
-                    )
-                    .apply {
-                        isAccessible = true
-                    }
-
-
-
-
-            val playerView =
-                playerField.get(
-                    binding
-                )
-                        as? PlayerView
-                    ?: return
-
-
-
-
-            attach(
-                activity,
-                playerView
-            )
-
-
-
-        } catch (_: Exception) {
-
-
-        }
-    }
-
-
 
 
 
@@ -686,10 +598,18 @@ object PlayerManager {
 
 
 
+    /**
+     * @return true if this call actually moved the player's output to a
+     * different PlayerView (a real surface handoff, which briefly freezes
+     * on the last frame until the renderer targets the new surface) -
+     * false if [playerView] was already the current one. Callers use this
+     * to know whether they need to cover the view and wait for
+     * Player.Listener.onRenderedFirstFrame before showing it.
+     */
     fun attach(
         context: Context,
         playerView: PlayerView
-    ) {
+    ): Boolean {
 
 
         attachGeneration++
@@ -741,7 +661,11 @@ object PlayerManager {
 
             currentPlayerView =
                 playerView
+
+            return true
         }
+
+        return false
     }
 
 
@@ -783,10 +707,10 @@ object PlayerManager {
     fun moveTo(
         context: Context,
         playerView: PlayerView
-    ) {
+    ): Boolean {
 
 
-        attach(
+        return attach(
             context,
             playerView
         )

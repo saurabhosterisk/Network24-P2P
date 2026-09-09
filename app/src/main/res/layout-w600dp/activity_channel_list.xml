@@ -8,6 +8,7 @@
 
     <!-- MAIN CONTENT ROOT -->
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/contentRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/bg_dashboard">
@@ -236,7 +237,6 @@
                     android:padding="8dp"
                     android:src="@drawable/ic_fullscreen"
                     app:tint="@android:color/white"
-                    android:visibility="gone"
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"/>
 
@@ -376,6 +376,271 @@
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- ========================= -->
+        <!-- Fullscreen Controls Overlay (shown only while cardPlayer -->
+        <!-- fills the whole screen - see enterFullscreen()/exitFullscreen() -->
+        <!-- in ChannelListActivity). Sits above cardPlayer/cardChannels/ -->
+        <!-- cardEpg in z-order since it is declared after them. Reuses the -->
+        <!-- same binding.playerView the whole time - no PlayerManager -->
+        <!-- attach()/surface handoff happens when toggling fullscreen, so -->
+        <!-- there is nothing here for that transition to freeze on. -->
+        <!-- ========================= -->
+        <View
+            android:id="@+id/fsTopTint"
+            android:layout_width="0dp"
+            android:layout_height="58dp"
+            android:background="#88000000"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <ImageButton
+            android:id="@+id/fsBtnBack"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_back_focus"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_back"
+            app:tint="@android:color/white"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/fsTopTint"
+            app:layout_constraintBottom_toBottomOf="@id/fsTopTint"/>
+
+        <TextView
+            android:id="@+id/fsTxtChannelTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@id/fsTopTint"
+            app:layout_constraintBottom_toBottomOf="@id/fsTopTint"
+            app:layout_constraintStart_toEndOf="@id/fsBtnBack"
+            app:layout_constraintEnd_toEndOf="parent"/>
+
+        <LinearLayout
+            android:id="@+id/fsBottomOverlay"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="16dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:background="#C0000000"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <!-- NOW row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Now:"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/fsTxtNowTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="No Program Info"
+                    android:textColor="#DDDDDD"
+                    android:textSize="13sp"/>
+
+                <TextView
+                    android:id="@+id/fsTxtNowTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"/>
+            </LinearLayout>
+
+            <!-- Progress bar (EPG progress strip) -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="10dp">
+
+                <View
+                    android:id="@+id/fsEpgTrack"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#333333"/>
+
+                <View
+                    android:id="@+id/fsEpgProgress"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="start"
+                    android:background="#FFC107"/>
+            </FrameLayout>
+
+            <!-- NEXT row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Next:"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/fsTxtNextTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#DDDDDD"
+                    android:textSize="13sp"/>
+
+                <TextView
+                    android:id="@+id/fsTxtNextTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"/>
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="12dp"
+                android:background="@android:color/transparent"/>
+
+            <!-- Playback controls row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageButton
+                    android:id="@+id/fsBtnInfo"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_info"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
+
+                <Space android:layout_width="8dp" android:layout_height="1dp"/>
+
+                <ImageButton
+                    android:id="@+id/fsBtnAspect"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_aspect"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"/>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageButton
+                        android:id="@+id/fsBtnPrev"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:padding="14dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_prev"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+
+                    <Space android:layout_width="12dp" android:layout_height="1dp"/>
+
+                    <ImageButton
+                        android:id="@+id/fsBtnPlayPause"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:padding="16dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_pause"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+
+                    <Space android:layout_width="12dp" android:layout_height="1dp"/>
+
+                    <ImageButton
+                        android:id="@+id/fsBtnNext"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:padding="14dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_next"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"/>
+
+                <Space android:layout_width="8dp" android:layout_height="1dp"/>
+
+                <ImageButton
+                    android:id="@+id/fsBtnSubtitle"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_cc_on"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
+
+                <ImageButton
+                    android:id="@+id/fsBtnGrid"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_grid"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
+            </LinearLayout>
+        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- ========================= -->
