@@ -1,7 +1,6 @@
 package com.network24.player.features.live.activity
 
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -1806,40 +1805,12 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-        AlertDialog.Builder(this)
-
-            .setTitle(
-                "Remove Favorite"
-            )
-
-
-            .setMessage(
-
-                "Remove ${channel.name} from favorites?"
-
-            )
-
-
-            .setPositiveButton(
-                "Remove"
-            ) { _, _ ->
-
-
-                removeFromFavorites(
-                    channel
-                )
-
-            }
-
-
-            .setNegativeButton(
-                "Cancel",
-                null
-            )
-
-
-            .show()
-
+        showConfirmDialog(
+            title = "Remove Favorite",
+            message = "Remove ${channel.name} from favorites?",
+            positiveText = "Remove",
+            onPositive = { removeFromFavorites(channel) }
+        )
     }
 
 

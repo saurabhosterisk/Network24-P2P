@@ -1,6 +1,5 @@
 package com.network24.player.features.live.activity
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -3716,14 +3715,12 @@ class EpgChannelListActivity : BaseActivity() {
             val channelName = channel.name ?: "this channel"
             val action = if (isFavorite) "remove" else "add"
 
-            AlertDialog.Builder(this@EpgChannelListActivity)
-                .setTitle("Favorites")
-                .setMessage("Do you want to $action $channelName ${if (isFavorite) "from" else "to"} Favorites?")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton(if (isFavorite) "Remove" else "Add") { _, _ ->
-                    toggleChannelFavorite(channel)
-                }
-                .show()
+            showConfirmDialog(
+                title = "Favorites",
+                message = "Do you want to $action $channelName ${if (isFavorite) "from" else "to"} Favorites?",
+                positiveText = if (isFavorite) "Remove" else "Add",
+                onPositive = { toggleChannelFavorite(channel) }
+            )
         }
     }
 

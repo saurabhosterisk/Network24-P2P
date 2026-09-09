@@ -1,6 +1,7 @@
 package com.network24.player.core.base
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -199,16 +200,205 @@ open class BaseActivity : AppCompatActivity() {
 
     fun confirmExitApp() {
         if (isFinishing) return
-        AlertDialog.Builder(this)
-            .setTitle("Exit Network24?")
-            .setMessage("Your login and session will be kept.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Exit") { _, _ ->
+        showConfirmDialog(
+            title = "Exit Network24?",
+            message = "Your login and session will be kept.",
+            positiveText = "Exit",
+            onPositive = {
                 // Close every Activity in the app task, then remove that task.
                 finishAffinity()
                 finishAndRemoveTask()
             }
-            .show()
+        )
+    }
+
+    /**
+     * A fully custom-drawn confirmation dialog instead of android.app.AlertDialog.
+     *
+     * Fire OS forcibly re-skins platform AlertDialog with its own system accent
+     * color, ignoring android:alertDialogTheme and even an explicit style passed
+     * to the Builder constructor - confirmed by testing both and getting the
+     * identical unstyled system look either way. Every button also inherited
+     * that same flat, non-focus-aware system style, so a D-pad user had no way
+     * to tell which button was selected.
+     *
+     * This bypasses AlertDialog entirely: a plain Dialog hosting our own layout
+     * (dialog_confirm.xml), transparent window background so nothing but our
+     * own rounded card shows, and buttons using the exact same
+     * bg_settings_action / bg_primary_action drawables (and the same
+     * maroon-fill + white-outline focused look) as every other button in the
+     * app - Dashboard tiles, Settings rows, fullscreen player controls - so a
+     * dialog no longer looks or behaves like a different app bolted on.
+     */
+    /**
+     * Theme_Translucent_NoTitleBar is a full-screen theme (only the
+     * background is transparent) - the layout/gravity calls below make the
+     * inflated card float centered at its own wrap_content size instead of
+     * stretching to fill the window, and FLAG_DIM_BEHIND restores the modal
+     * scrim that theme doesn't provide on its own.
+     */
+    private fun createFloatingDialog(view: View): Dialog {
+        val dialog = Dialog(this, android.R.style.Theme_Translucent_NoTitleBar)
+        dialog.setContentView(view)
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT
+            )
+            setGravity(Gravity.CENTER)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.6f)
+        }
+        return dialog
+    }
+
+    protected fun showConfirmDialog(
+        title: String,
+        message: String,
+        positiveText: String,
+        negativeText: String = "Cancel",
+        onPositive: () -> Unit,
+        onNegative: (() -> Unit)? = null
+    ) {
+        if (isFinishing || isDestroyed) return
+
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_confirm, null)
+        val dialog = createFloatingDialog(view)
+        dialog.setCancelable(true)
+
+        view.findViewById<TextView>(R.id.dialogTitle).text = title
+        view.findViewById<TextView>(R.id.dialogMessage).text = message
+
+        val positiveView = view.findViewById<TextView>(R.id.dialogPositive)
+        val negativeView = view.findViewById<TextView>(R.id.dialogNegative)
+        positiveView.text = positiveText
+        negativeView.text = negativeText
+
+        positiveView.setOnClickListener {
+            dialog.dismiss()
+            onPositive()
+        }
+        negativeView.setOnClickListener {
+            dialog.dismiss()
+            onNegative?.invoke()
+        }
+
+        // Cancel (back button / outside touch) should behave like the
+        // negative action, not silently do nothing.
+        dialog.setOnCancelListener {
+            onNegative?.invoke()
+        }
+
+        dialog.setOnShowListener {
+            negativeView.post {
+                negativeView.requestFocus()
+            }
+        }
+
+        dialog.show()
+    }
+
+    protected fun showChoiceDialog(
+        title: String,
+        items: List<String>,
+        selectedIndex: Int,
+        negativeText: String = "Cancel",
+        onNegative: (() -> Unit)? = null,
+        onSelect: (Int) -> Unit
+    ) {
+        if (isFinishing || isDestroyed) return
+
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_choice, null)
+        val dialog = createFloatingDialog(view)
+        dialog.setCancelable(true)
+
+        view.findViewById<TextView>(R.id.dialogTitle).text = title
+
+        val container = view.findViewById<ViewGroup>(R.id.choiceContainer)
+        val rows = items.mapIndexed { index, label ->
+            val row = LayoutInflater.from(this)
+                .inflate(R.layout.item_dialog_choice, container, false)
+            row.findViewById<TextView>(R.id.choiceLabel).text = label
+            row.findViewById<TextView>(R.id.choiceCheck).visibility =
+                if (index == selectedIndex) View.VISIBLE else View.INVISIBLE
+            row.setOnClickListener {
+                dialog.dismiss()
+                onSelect(index)
+            }
+            container.addView(row)
+            row
+        }
+
+        val negativeView = view.findViewById<TextView>(R.id.dialogNegative)
+        negativeView.text = negativeText
+        negativeView.setOnClickListener {
+            dialog.dismiss()
+            onNegative?.invoke()
+        }
+
+        dialog.setOnShowListener {
+            val target = rows.getOrNull(selectedIndex) ?: negativeView
+            target.post { target.requestFocus() }
+        }
+
+        dialog.show()
+    }
+
+    protected fun showInfoDialog(
+        title: String,
+        message: String,
+        buttonText: String = "Close",
+        onClose: (() -> Unit)? = null
+    ) {
+        if (isFinishing || isDestroyed) return
+
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_info, null)
+        val dialog = createFloatingDialog(view)
+        dialog.setCancelable(true)
+
+        view.findViewById<TextView>(R.id.dialogTitle).text = title
+        view.findViewById<TextView>(R.id.dialogMessage).text = message
+
+        val positiveView = view.findViewById<TextView>(R.id.dialogPositive)
+        positiveView.text = buttonText
+        positiveView.setOnClickListener {
+            dialog.dismiss()
+            onClose?.invoke()
+        }
+        dialog.setOnCancelListener { onClose?.invoke() }
+
+        dialog.setOnShowListener {
+            positiveView.post { positiveView.requestFocus() }
+        }
+
+        dialog.show()
+    }
+
+    protected class ProgressDialogHandle(
+        private val dialog: Dialog,
+        private val messageView: TextView
+    ) {
+        fun setMessage(text: String) {
+            messageView.text = text
+        }
+
+        fun dismiss() {
+            if (dialog.isShowing) dialog.dismiss()
+        }
+    }
+
+    protected fun showProgressDialog(title: String, initialMessage: String): ProgressDialogHandle {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_progress, null)
+        val dialog = createFloatingDialog(view)
+        dialog.setCancelable(false)
+
+        view.findViewById<TextView>(R.id.dialogTitle).text = title
+        val messageView = view.findViewById<TextView>(R.id.dialogMessage)
+        messageView.text = initialMessage
+
+        dialog.show()
+        return ProgressDialogHandle(dialog, messageView)
     }
 
     /** Uses only public View APIs so drawer focus stays stable across Material versions. */

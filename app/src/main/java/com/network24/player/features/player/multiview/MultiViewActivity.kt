@@ -1,6 +1,5 @@
 package com.network24.player.features.player.multiview
 
-import android.app.AlertDialog
 import android.os.Bundle
 import android.view.KeyEvent
 import android.widget.FrameLayout
@@ -94,20 +93,18 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
             return
         }
 
-        val names = channels.map { it.name ?: "Unknown Channel" }.toTypedArray()
+        val names = channels.map { it.name ?: "Unknown Channel" }
         val currentIndex = selected[slot]?.let { selectedChannel ->
             channels.indexOfFirst { it.stream_id == selectedChannel.stream_id }
         } ?: -1
 
-        AlertDialog.Builder(this)
-            .setTitle("Choose channel for Window ${slot + 1}")
-            .setSingleChoiceItems(names, currentIndex) { dialog, which ->
-                setSlot(slot, channels[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton("Clear") { _, _ -> clearSlot(slot) }
-            .setNeutralButton("Cancel", null)
-            .show()
+        showChoiceDialog(
+            title = "Choose channel for Window ${slot + 1}",
+            items = names,
+            selectedIndex = currentIndex,
+            negativeText = "Clear",
+            onNegative = { clearSlot(slot) }
+        ) { which -> setSlot(slot, channels[which]) }
     }
 
     private fun buildStreamUrl(channel: LiveChannel): String {

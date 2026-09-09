@@ -1,6 +1,5 @@
 package com.network24.player.features.live.activity
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -10,6 +9,7 @@ import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.firebase.firestore.FirebaseFirestore
+import com.network24.player.R
 import com.network24.player.common.models.FavoriteItemType
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
@@ -156,17 +156,13 @@ class MasterChannelSearchActivity : BaseActivity() {
             }
 
             val action = if (isFavorite) "remove" else "add"
-            AlertDialog.Builder(this@MasterChannelSearchActivity)
-                .setTitle("Favorites")
-                .setMessage(
-                    "Do you want to $action $channelName " +
-                        "${if (isFavorite) "from" else "to"} Favorites?"
-                )
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton(if (isFavorite) "Remove" else "Add") { _, _ ->
-                    updateFavorite(result, isFavorite)
-                }
-                .show()
+            showConfirmDialog(
+                title = "Favorites",
+                message = "Do you want to $action $channelName " +
+                    "${if (isFavorite) "from" else "to"} Favorites?",
+                positiveText = if (isFavorite) "Remove" else "Add",
+                onPositive = { updateFavorite(result, isFavorite) }
+            )
         }
     }
 

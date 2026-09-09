@@ -1,6 +1,5 @@
 package com.network24.player.features.live.activity
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -2033,32 +2032,13 @@ class ChannelListActivity : BaseActivity() {
 
 
 
-        AlertDialog.Builder(this)
-
-            .setTitle(
-                "Favorites"
-            )
-
-            .setMessage(
-                "Do you want to add $name to Favorites?"
-            )
-
-            .setPositiveButton(
-                "Yes"
-            ) { _, _ ->
-
-
-                toggleChannelFavorite(
-                    channel
-                )
-            }
-
-            .setNegativeButton(
-                "No",
-                null
-            )
-
-            .show()
+        showConfirmDialog(
+            title = "Favorites",
+            message = "Do you want to add $name to Favorites?",
+            positiveText = "Yes",
+            negativeText = "No",
+            onPositive = { toggleChannelFavorite(channel) }
+        )
     }
 
 

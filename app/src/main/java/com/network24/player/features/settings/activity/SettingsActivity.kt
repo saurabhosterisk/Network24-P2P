@@ -1,6 +1,5 @@
 package com.network24.player.features.settings.activity
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -177,15 +176,14 @@ class SettingsActivity : BaseActivity() {
         )
         val selectedIndex = modes.indexOf(prefs.getAutoReconnectMode())
 
-        AlertDialog.Builder(this)
-            .setTitle("Auto Reconnect")
-            .setSingleChoiceItems(labels, selectedIndex) { dialog, which ->
-                prefs.setAutoReconnectMode(modes[which])
-                updateAutoReconnectSummary()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        showChoiceDialog(
+            title = "Auto Reconnect",
+            items = labels.toList(),
+            selectedIndex = selectedIndex
+        ) { which ->
+            prefs.setAutoReconnectMode(modes[which])
+            updateAutoReconnectSummary()
+        }
     }
 
     private fun updateAutoReconnectSummary() {
@@ -204,11 +202,10 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun showAboutDeviceInfo() {
-        AlertDialog.Builder(this)
-            .setTitle("About / Device Information")
-            .setMessage(buildDeviceInfo())
-            .setPositiveButton("Close", null)
-            .show()
+        showInfoDialog(
+            title = "About / Device Information",
+            message = buildDeviceInfo()
+        )
     }
 
     private fun buildDeviceInfo(): String {
@@ -374,25 +371,20 @@ class SettingsActivity : BaseActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     summary.text = "Check if a newer app version is available"
-                    AlertDialog.Builder(this)
-                        .setTitle("Update Available")
-                        .setMessage("A newer version (build ${update.versionCode}) is available. Download and install it now?")
-                        .setNegativeButton("Later", null)
-                        .setPositiveButton("Update") { _, _ ->
-                            startUpdateDownload(update)
-                        }
-                        .show()
+                    showConfirmDialog(
+                        title = "Update Available",
+                        message = "A newer version (build ${update.versionCode}) is available. Download and install it now?",
+                        positiveText = "Update",
+                        negativeText = "Later",
+                        onPositive = { startUpdateDownload(update) }
+                    )
                 }
             }
         )
     }
 
     private fun startUpdateDownload(update: UpdateResponse) {
-        val progressDialog = AlertDialog.Builder(this)
-            .setTitle("Downloading Update")
-            .setMessage("Starting...")
-            .setCancelable(false)
-            .show()
+        val progressDialog = showProgressDialog("Downloading Update", "Starting...")
 
         UpdateManager.downloadApk(
             this,
@@ -414,27 +406,27 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun showLogoutConfirmation() {
-        AlertDialog.Builder(this)
-            .setTitle("Log out?")
-            .setMessage("Are you sure you want to logout?")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Logout") { _, _ ->
+        showConfirmDialog(
+            title = "Log out?",
+            message = "Are you sure you want to logout?",
+            positiveText = "Logout",
+            onPositive = {
                 prefs.clear()
                 startActivity(Intent(this, LoginActivity::class.java))
                 finishAffinity()
             }
-            .show()
+        )
     }
 
     private fun showExitConfirmation() {
-        AlertDialog.Builder(this)
-            .setTitle("Exit Network24?")
-            .setMessage("Your login and session will be kept.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Exit") { _, _ ->
+        showConfirmDialog(
+            title = "Exit Network24?",
+            message = "Your login and session will be kept.",
+            positiveText = "Exit",
+            onPositive = {
                 finishAffinity()
                 finishAndRemoveTask()
             }
-            .show()
+        )
     }
 }
