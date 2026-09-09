@@ -29,6 +29,19 @@
         android:name="android.hardware.type.television"
         android:required="false" />
 
+    <!-- Android 11+ hides other apps' packages unless declared here. Needed
+         so DashboardActivity's Cinema Pro 3 launcher can both look up the
+         known package by name AND fall back to scanning installed launcher
+         apps by label/package when that exact name doesn't match (a Cinema
+         Pro 3 build with a slightly different applicationId, for example). -->
+    <queries>
+        <package android:name="com.infahash.fvision.cpro3" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
 
     <application
 
