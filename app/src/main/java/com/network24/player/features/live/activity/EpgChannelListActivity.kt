@@ -3433,15 +3433,40 @@ class EpgChannelListActivity : BaseActivity() {
                 .translationY(0f)
                 .setDuration(d)
                 .withEndAction {
-                    binding.fsBtnPlayPause.post {
-                        binding.fsBtnPlayPause.requestFocus()
-                    }
+                    ensureOverlayControlHasFocus()
                 }
                 .start()
+        } else {
+
+            // The branch above (which requests focus once the fade-in
+            // animation ends) only runs when the overlay was hidden. Every
+            // other caller here - every button's own click listener resets
+            // the auto-hide timer through this same function while the
+            // overlay is already visible - skipped it entirely. Real
+            // Android focus also gets cleared off these buttons the moment
+            // fsHideRunnable hides the overlay (a GONE view cannot hold
+            // focus) and nothing ever reclaimed it, so it silently fell
+            // back to the root layout - from then on the D-pad simply had
+            // nothing focusable to send CENTER/ENTER to, even though a
+            // button still looked focused on screen. Restore it here too,
+            // without stealing focus from a button the user has already
+            // navigated to.
+            ensureOverlayControlHasFocus()
         }
 
         fsHideHandler.removeCallbacks(fsHideRunnable)
         fsHideHandler.postDelayed(fsHideRunnable, 5000)
+    }
+
+    // Only claims focus for the play/pause button when nothing in the
+    // fullscreen control row already has it, so this never overrides
+    // deliberate D-pad navigation to a different button.
+    private fun ensureOverlayControlHasFocus() {
+        if (binding.fsBottomOverlay.findFocus() == null) {
+            binding.fsBtnPlayPause.post {
+                binding.fsBtnPlayPause.requestFocus()
+            }
+        }
     }
 
 

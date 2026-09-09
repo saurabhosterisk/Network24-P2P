@@ -691,13 +691,29 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-        showPreview(
+        val targetChannel = channelList[previewPosition]
 
-            channelList[previewPosition]
+        // This whole function re-runs every time the favorites DB flow
+        // re-emits - not just when the user actually adds/removes a
+        // favorite, but for any rewrite of that table (e.g. a background
+        // Firestore sync). showPreview() unconditionally calls
+        // PlayerManager.play(), which - even for the exact same
+        // already-loaded URL - still calls player.play() and forces
+        // playWhenReady back to true. That silently undid a pause the user
+        // had just made with the fullscreen play/pause button, since a
+        // re-emission could land moments later with no actual channel
+        // change. Only reload when the previewed channel genuinely changed.
+        if (PlayerManager.getCurrentUrl() != buildStreamUrl(targetChannel)) {
+            showPreview(
+                targetChannel
+            )
+        } else {
+            binding.txtOverlayChannel.text =
+                targetChannel.name
+                    ?: ""
+        }
 
-        )
-
-        loadProgramGuide(channelList[previewPosition])
+        loadProgramGuide(targetChannel)
 
     }
 
@@ -1110,15 +1126,40 @@ class FavoriteChannelsActivity : BaseActivity() {
                 .translationY(0f)
                 .setDuration(d)
                 .withEndAction {
-                    binding.fsBtnPlayPause.post {
-                        binding.fsBtnPlayPause.requestFocus()
-                    }
+                    ensureOverlayControlHasFocus()
                 }
                 .start()
+        } else {
+
+            // The branch above (which requests focus once the fade-in
+            // animation ends) only runs when the overlay was hidden. Every
+            // other caller here - every button's own click listener resets
+            // the auto-hide timer through this same function while the
+            // overlay is already visible - skipped it entirely. Real
+            // Android focus also gets cleared off these buttons the moment
+            // fsHideRunnable hides the overlay (a GONE view cannot hold
+            // focus) and nothing ever reclaimed it, so it silently fell
+            // back to the root layout - from then on the D-pad simply had
+            // nothing focusable to send CENTER/ENTER to, even though a
+            // button still looked focused on screen. Restore it here too,
+            // without stealing focus from a button the user has already
+            // navigated to.
+            ensureOverlayControlHasFocus()
         }
 
         fsHideHandler.removeCallbacks(fsHideRunnable)
         fsHideHandler.postDelayed(fsHideRunnable, 5000)
+    }
+
+    // Only claims focus for the play/pause button when nothing in the
+    // fullscreen control row already has it, so this never overrides
+    // deliberate D-pad navigation to a different button.
+    private fun ensureOverlayControlHasFocus() {
+        if (binding.fsBottomOverlay.findFocus() == null) {
+            binding.fsBtnPlayPause.post {
+                binding.fsBtnPlayPause.requestFocus()
+            }
+        }
     }
 
 
@@ -1276,6 +1317,17 @@ class FavoriteChannelsActivity : BaseActivity() {
         binding.contentRoot.setOnClickListener {
             if (isFullscreen) toggleFsUi()
         }
+        // setOnClickListener() makes a view focusable by default. contentRoot
+        // spans the entire screen, so once it became focusable it acted as
+        // the D-pad's fallback focus target every time the fullscreen
+        // buttons lost focus (e.g. when the overlay auto-hides). From then
+        // on DPAD_CENTER landed on contentRoot instead - its own click
+        // handler only toggles the overlay's visibility, so the overlay
+        // still visibly reacted to remote presses while play/pause,
+        // subtitle, aspect, etc. silently never received a real click.
+        // Keep it clickable (for touch-to-toggle) but out of D-pad focus
+        // traversal entirely.
+        binding.contentRoot.isFocusable = false
 
         binding.playerView.setOnClickListener {
 
