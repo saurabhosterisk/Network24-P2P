@@ -776,6 +776,15 @@ class FavoriteChannelsActivity : BaseActivity() {
                                 channel
                             )
 
+                            // showPreview() only resets the preview text fields to a
+                            // "Loading TV Guide..." placeholder and starts playback - it
+                            // does not fetch EPG data itself. Without this call, NOW/NEXT
+                            // just kept showing whatever the previously-previewed
+                            // channel's loadProgramGuide() call had last written.
+                            loadProgramGuide(
+                                channel
+                            )
+
                         }
 
                     },

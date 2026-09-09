@@ -137,6 +137,23 @@ class ChannelListActivity : BaseActivity() {
 
     private lateinit var categoryId: String
 
+    // Unlike FavoriteChannelsActivity, this was never wired up here, so the
+    // buffering spinner never appeared while a stream connected/reconnected
+    // - a slow or dead channel just looked like a black-screen hang with no
+    // feedback until PlayerManager's recovery-failed listener (up to ~60s
+    // later) finally showed txtPlayerError.
+    private val playerListener =
+        object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                binding.progressLoading.visibility =
+                    if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+
+                if (playbackState == Player.STATE_READY) {
+                    binding.txtPlayerError.visibility = View.GONE
+                }
+            }
+        }
+
 
 
     override fun onCreate(
@@ -256,6 +273,9 @@ class ChannelListActivity : BaseActivity() {
         PlayerManager.setRecoveryFailedListener {
 
             runOnUiThread {
+
+                binding.progressLoading.visibility =
+                    View.GONE
 
                 when (
                     PlayerManager.getStreamErrorType()
@@ -2015,17 +2035,20 @@ class ChannelListActivity : BaseActivity() {
 
 
 
+        PlayerManager.attach(
+            this,
+            binding.playerView
+        )
+
+        binding.playerView.player
+            ?.addListener(playerListener)
+
+
+
         if (
             previewPosition >= 0 &&
             channelList.isNotEmpty()
         ) {
-
-
-
-            PlayerManager.attach(
-                this,
-                binding.playerView
-            )
 
 
 
@@ -2091,6 +2114,9 @@ class ChannelListActivity : BaseActivity() {
         super.onPause()
 
         fsHideHandler.removeCallbacks(fsHideRunnable)
+
+        binding.playerView.player
+            ?.removeListener(playerListener)
     }
 
 

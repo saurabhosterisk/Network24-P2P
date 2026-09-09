@@ -58,6 +58,7 @@ class LiveCategoryActivity : BaseActivity() {
     private var initialLoadCompleted = false
     private var categoryLoadInFlight = false
     private var activityStartMs = 0L
+    private var pendingFocusCategoryId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         activityStartMs = SystemClock.elapsedRealtime()
@@ -187,7 +188,12 @@ class LiveCategoryActivity : BaseActivity() {
         updateFavoritesSectionVisibility()
         initialLoadCompleted = true
         logPerf("LiveCategory.adapterPopulation", SystemClock.elapsedRealtime() - startMs)
-        binding.rvCategories.post { binding.rvCategories.postDelayed({ binding.rvCategories.layoutManager?.findViewByPosition(0)?.requestFocus() }, 50) }
+        val targetId = pendingFocusCategoryId
+        pendingFocusCategoryId = null
+        val targetPosition = targetId
+            ?.let { id -> allCategories.indexOfFirst { it.category_id == id } }
+            ?.takeIf { it >= 0 } ?: 0
+        binding.rvCategories.post { binding.rvCategories.postDelayed({ binding.rvCategories.layoutManager?.findViewByPosition(targetPosition)?.requestFocus() }, 50) }
     }
 
     private var isRefreshing = false
@@ -290,6 +296,7 @@ class LiveCategoryActivity : BaseActivity() {
 
     private fun openCategory(category: LiveCategory) {
         if (disabledCategoryIds.contains(category.category_id)) return
+        pendingFocusCategoryId = category.category_id
         if (epgMode) {
             startActivity(Intent(this, EpgChannelListActivity::class.java).apply {
                 putExtra("category_id", category.category_id)
