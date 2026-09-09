@@ -150,6 +150,17 @@ class ChannelListActivity : BaseActivity() {
 
                 if (playbackState == Player.STATE_READY) {
                     binding.txtPlayerError.visibility = View.GONE
+
+                    // A fresh load (PlayerManager's idle-release grace period
+                    // tears the player down after ~20s backgrounded - e.g.
+                    // time spent in Settings toggling Secure Relay, or in
+                    // MultiView) hands back a new ExoPlayer with new
+                    // TrackGroup instances. The subtitle TrackSelectionOverride
+                    // set on the old ones no longer matches anything, and
+                    // nothing else re-selects a text track, so subtitles
+                    // silently stopped rendering even though fsSubtitleEnabled
+                    // (and the on-screen toggle) still say they're on.
+                    fsToggleSubtitles(fsSubtitleEnabled)
                 }
             }
         }
@@ -2099,6 +2110,16 @@ class ChannelListActivity : BaseActivity() {
                     }
                 }
             }
+        }
+
+        // onPause() cancels the auto-hide timer but never restarted it here -
+        // so leaving fullscreen for another activity (Settings, MultiView)
+        // and coming back left the top/bottom overlay controls permanently
+        // visible with nothing left to hide them again. showFsUiWithTimeout()
+        // is safe to call unconditionally: it only fades the overlay in if
+        // it isn't already visible, and always reschedules the hide timer.
+        if (isFullscreen) {
+            showFsUiWithTimeout()
         }
     }
 
