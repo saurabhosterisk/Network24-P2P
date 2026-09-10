@@ -102,7 +102,8 @@ class DashboardActivity : BaseActivity() {
                         expiry = userInfo.exp_date?.toLongOrNull() ?: prefs.getExpiry(),
                         activeConnections = userInfo.active_cons?.toIntOrNull() ?: prefs.getActiveConnections(),
                         maxConnections = userInfo.max_connections?.toIntOrNull() ?: prefs.getMaxConnections(),
-                        isTrial = userInfo.is_trial == "1"
+                        isTrial = userInfo.is_trial == "1",
+                        vpnPersistentAccess = userInfo.vpn_access?.let { it == "1" } ?: prefs.hasPersistentVpnAccess()
                     )
                     loadDashboard()
                     binding.txtAccountUpdated.text = "Live • Updated just now"

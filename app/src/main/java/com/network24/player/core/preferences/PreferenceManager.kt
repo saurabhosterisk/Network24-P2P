@@ -26,6 +26,7 @@ class PreferenceManager(context: Context) {
         private const val KEY_ACTIVE_CONNECTIONS = "active_connections"
         private const val KEY_MAX_CONNECTIONS = "max_connections"
         private const val KEY_IS_TRIAL = "is_trial"
+        private const val KEY_VPN_PERSISTENT_ACCESS = "vpn_persistent_access"
 
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
         private const val KEY_DISABLED_CATEGORIES = "disabled_live_category_ids"
@@ -106,7 +107,8 @@ class PreferenceManager(context: Context) {
         expiry: Long,
         activeConnections: Int,
         maxConnections: Int,
-        isTrial: Boolean
+        isTrial: Boolean,
+        vpnPersistentAccess: Boolean = hasPersistentVpnAccess()
     ) {
         prefs.edit()
             .putString(KEY_USERNAME, username)
@@ -115,6 +117,7 @@ class PreferenceManager(context: Context) {
             .putInt(KEY_ACTIVE_CONNECTIONS, activeConnections)
             .putInt(KEY_MAX_CONNECTIONS, maxConnections)
             .putBoolean(KEY_IS_TRIAL, isTrial)
+            .putBoolean(KEY_VPN_PERSISTENT_ACCESS, vpnPersistentAccess)
             .apply()
     }
 
@@ -123,6 +126,11 @@ class PreferenceManager(context: Context) {
     fun getActiveConnections(): Int = prefs.getInt(KEY_ACTIVE_CONNECTIONS, 0)
     fun getMaxConnections(): Int = prefs.getInt(KEY_MAX_CONNECTIONS, 0)
     fun isTrial(): Boolean = prefs.getBoolean(KEY_IS_TRIAL, false)
+
+    // player_api.php's user_info.vpn_access == "1" - "1" grants persistent
+    // Secure Relay (stays on across app backgrounding); "0"/absent keeps
+    // the default per-session behavior (torn down on background).
+    fun hasPersistentVpnAccess(): Boolean = prefs.getBoolean(KEY_VPN_PERSISTENT_ACCESS, false)
 
     // -------------------------
     // Sync time

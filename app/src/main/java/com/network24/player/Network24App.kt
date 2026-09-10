@@ -46,16 +46,20 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         registerActivityLifecycleCallbacks(this)
         Network24CrashReporter.initialize(this, legacyTv)
 
-        // Secure Relay is an explicit, per-session choice, not a
-        // persistent background service: it never reconnects on its own
-        // when the app is (re)opened, and it's torn down the moment the
-        // app leaves the foreground (see the observer below) - so it is
-        // only ever on while the user is actively in the app and has
-        // just turned it on.
+        // Secure Relay is an explicit, per-session choice by default - it
+        // never reconnects on its own when the app is (re)opened, and it's
+        // torn down the moment the app leaves the foreground (see the
+        // observer below) - so it is only ever on while the user is
+        // actively in the app and has just turned it on. Accounts with
+        // player_api.php's user_info.vpn_access == "1" are the exception:
+        // for them Secure Relay behaves like a normal persistent setting
+        // and stays connected across backgrounding until the user turns
+        // it off themselves.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStop(owner: LifecycleOwner) {
                 val prefs = PreferenceManager(this@Network24App)
                 if (!prefs.isVpnEnabled()) return
+                if (prefs.hasPersistentVpnAccess()) return
                 prefs.setVpnEnabled(false)
                 CoroutineScope(Dispatchers.IO).launch {
                     try {

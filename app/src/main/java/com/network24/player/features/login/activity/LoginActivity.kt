@@ -108,7 +108,8 @@ class LoginActivity : BaseActivity() {
                         expiry = userInfo.exp_date?.toLongOrNull() ?: 0L,
                         activeConnections = userInfo.active_cons?.toIntOrNull() ?: 0,
                         maxConnections = userInfo.max_connections?.toIntOrNull() ?: 0,
-                        isTrial = userInfo.is_trial == "1"
+                        isTrial = userInfo.is_trial == "1",
+                        vpnPersistentAccess = userInfo.vpn_access == "1"
                     )
 
                     prefs.saveLogin(
