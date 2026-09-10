@@ -170,6 +170,16 @@ class SettingsActivity : BaseActivity() {
             showAutoReconnectOptions()
         }
 
+        // The switch itself is no longer individually focusable/clickable
+        // (see activity_settings.xml) so it renders the same D-pad focus
+        // highlight as every other settings row - this just flips it,
+        // which re-triggers the existing OnCheckedChangeListener wired in
+        // bindVpnToggle() that does the actual connect/disconnect work.
+        findViewById<android.view.View>(R.id.vpnTunnel).setOnClickListener {
+            val switch = findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch)
+            switch.isChecked = !switch.isChecked
+        }
+
         findViewById<android.view.View>(R.id.aboutDeviceInfo).setOnClickListener {
             showAboutDeviceInfo()
         }

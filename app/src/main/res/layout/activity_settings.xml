@@ -329,7 +329,9 @@
             android:layout_width="match_parent"
             android:layout_height="68dp"
             android:layout_marginTop="10dp"
-            android:background="@drawable/bg_settings_card"
+            android:background="@drawable/bg_settings_action"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="18dp"
@@ -368,10 +370,20 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <!-- Not individually focusable/clickable - the row itself is the
+                 D-pad target (same as every other settings row), so this is
+                 a pure visual on/off indicator toggled from the row's click
+                 listener. Without this, D-pad focus landed on the switch
+                 itself and showed Material's own small default focus ring
+                 instead of the app-wide row highlight every other setting
+                 uses. -->
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/vpnTunnelSwitch"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:focusable="false"
+                android:focusableInTouchMode="false" />
         </LinearLayout>
 
         <TextView
