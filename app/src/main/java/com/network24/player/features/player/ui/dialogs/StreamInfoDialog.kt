@@ -8,26 +8,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.DialogFragment
-import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.C
 import androidx.media3.common.Player
-import com.network24.player.core.diagnostics.BufferingDiagnosis
-import com.network24.player.core.diagnostics.BufferingDiagnosisEngine
-import com.network24.player.core.diagnostics.BufferingDiagnosisInput
 import com.network24.player.core.diagnostics.DeviceHealthCollector
-import com.network24.player.core.diagnostics.DeviceHealthSnapshot
-import com.network24.player.core.diagnostics.StreamProbe
-import com.network24.player.core.diagnostics.StreamProbeResult
 import com.network24.player.core.net.SpeedMonitor
 import com.network24.player.databinding.DialogStreamInfoBinding
 import com.network24.player.features.player.manager.PlayerManager
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 class StreamInfoDialog : DialogFragment() {
@@ -43,12 +29,6 @@ class StreamInfoDialog : DialogFragment() {
     }
 
     private var selectedSection = SECTION_OVERVIEW
-    private var lastDiagnosis: BufferingDiagnosis? = null
-    private var lastProbe: StreamProbeResult? = null
-    private var lastDevice: DeviceHealthSnapshot? = null
-    private var lastMeasuredMbps = 0.0
-    private var diagnosisRunning = false
-    private var lastDiagnosisError: SummaryMessage? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -62,7 +42,6 @@ class StreamInfoDialog : DialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding.btnClose.setOnClickListener { dismiss() }
-        binding.btnRunDiagnosis.setOnClickListener { runAutoDiagnosis() }
         binding.btnOverview.setOnClickListener { selectSection(SECTION_OVERVIEW) }
         binding.btnStreamDetails.setOnClickListener { selectSection(SECTION_STREAM) }
         binding.btnNetworkDetails.setOnClickListener { selectSection(SECTION_NETWORK) }
@@ -70,13 +49,12 @@ class StreamInfoDialog : DialogFragment() {
         binding.btnEventsDetails.setOnClickListener { selectSection(SECTION_EVENTS) }
         showSummaryPanel()
         configureRemoteButtons()
-        binding.btnRunDiagnosis.post { binding.btnRunDiagnosis.requestFocus() }
+        binding.btnOverview.post { binding.btnOverview.requestFocus() }
         refreshUi()
     }
 
     private fun configureRemoteButtons() {
         val buttons = listOf(
-            binding.btnRunDiagnosis,
             binding.btnOverview,
             binding.btnStreamDetails,
             binding.btnNetworkDetails,
@@ -101,70 +79,6 @@ class StreamInfoDialog : DialogFragment() {
         renderDetails()
     }
 
-    private fun runAutoDiagnosis() {
-        if (diagnosisRunning) return
-        showSummaryPanel()
-        lastDiagnosisError = null
-        diagnosisRunning = true
-        binding.btnRunDiagnosis.isEnabled = false
-        binding.btnRunDiagnosis.text = "TESTING..."
-        binding.tvDiagnosisCause.text = "Running live test"
-        binding.tvDiagnosis.text = "Collecting stream, network and device evidence..."
-        binding.tvDiagnosisEvidence.text = "Keep the channel playing during the test. " +
-            "This briefly uses one of the account's connection slots."
-        binding.tvDiagnosisAction.text = ""
-        renderDetails()
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            val startRebuffers = PlayerManager.getRebufferCount()
-            val startBufferingMs = PlayerManager.getTotalBufferingMsIncludingActive()
-            val appContext = requireContext().applicationContext
-            val probeJob = async(Dispatchers.IO) { StreamProbe.run(PlayerManager.getCurrentUrlOrEmpty()) }
-            val deviceJob = async(Dispatchers.IO) { DeviceHealthCollector.collect(appContext) }
-
-            try {
-                delay(6_000L)
-                val probe = probeJob.await()
-                val device = deviceJob.await()
-                val player = PlayerManager.getExoPlayerOrNull()
-                val measuredMbps = SpeedMonitor.getMbps()
-                val requiredMbps = getRequiredSpeedMbps(player?.videoFormat?.height ?: 0)
-                val diagnosis = BufferingDiagnosisEngine.evaluate(
-                    BufferingDiagnosisInput(
-                        playbackStarted = PlayerManager.hasEverStartedPlayback(),
-                        rebufferCount = (PlayerManager.getRebufferCount() - startRebuffers).coerceAtLeast(0),
-                        bufferingMs = (PlayerManager.getTotalBufferingMsIncludingActive() - startBufferingMs).coerceAtLeast(0L),
-                        measuredMbps = measuredMbps,
-                        requiredMbps = requiredMbps,
-                        errorType = PlayerManager.getStreamErrorType().name,
-                        behindLiveWindowCount = PlayerManager.getBehindLiveWindowCount(),
-                        probe = probe,
-                        device = device
-                    )
-                )
-                lastDiagnosis = diagnosis
-                lastProbe = probe
-                lastDevice = device
-                lastMeasuredMbps = measuredMbps
-                refreshUi()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                lastDiagnosisError = SummaryMessage(
-                    cause = "Diagnosis unavailable",
-                    detail = error.javaClass.simpleName,
-                    evidence = "The diagnostic test could not be completed",
-                    action = "Action: Try again while the channel is playing"
-                )
-                refreshUi()
-            } finally {
-                diagnosisRunning = false
-                binding.btnRunDiagnosis.isEnabled = true
-                binding.btnRunDiagnosis.text = "RUN AUTO CHECK"
-            }
-        }
-    }
-
     private fun refreshUi() {
         val player = PlayerManager.getExoPlayerOrNull() ?: run {
             binding.tvHealthScore.text = "- / 100"
@@ -172,7 +86,7 @@ class StreamInfoDialog : DialogFragment() {
             binding.tvRebufferCount.text = "-"
             binding.tvBufferingTime.text = "-"
             binding.tvDiagnosisCause.text = "Player is not ready"
-            binding.tvDiagnosis.text = "Start playback before running AUTO CHECK."
+            binding.tvDiagnosis.text = "Start playback to see live stream status."
             binding.tvDiagnosisEvidence.text = "Evidence: -"
             binding.tvDiagnosisAction.text = "Action: Select a live channel"
             renderDetails()
@@ -194,38 +108,11 @@ class StreamInfoDialog : DialogFragment() {
         binding.tvRebufferCount.text = rebufferCount.toString()
         binding.tvBufferingTime.text = formatDuration(bufferingMs)
 
-        when {
-            lastDiagnosis != null -> renderDiagnosis(lastDiagnosis!!)
-            lastDiagnosisError != null -> renderSummaryMessage(lastDiagnosisError!!)
-            else -> {
-                binding.tvDiagnosisCause.text = "Live player status"
-                binding.tvDiagnosis.text = buildLiveStatus(player, downloadMbps, requiredMbps, rebufferCount, bufferingMs, error != null)
-                binding.tvDiagnosisEvidence.text = "Evidence: current playback metrics"
-                binding.tvDiagnosisAction.text = "Action: Run AUTO CHECK for root-cause analysis"
-            }
-        }
+        binding.tvDiagnosisCause.text = "Live player status"
+        binding.tvDiagnosis.text = buildLiveStatus(player, downloadMbps, requiredMbps, rebufferCount, bufferingMs, error != null)
+        binding.tvDiagnosisEvidence.text = "Evidence: current playback metrics"
+        binding.tvDiagnosisAction.text = "Action: Check the Network, Device, and Stream tabs above for details."
         renderDetails()
-    }
-
-    private data class SummaryMessage(
-        val cause: String,
-        val detail: String,
-        val evidence: String,
-        val action: String
-    )
-
-    private fun renderSummaryMessage(message: SummaryMessage) {
-        binding.tvDiagnosisCause.text = message.cause
-        binding.tvDiagnosis.text = message.detail
-        binding.tvDiagnosisEvidence.text = message.evidence
-        binding.tvDiagnosisAction.text = message.action
-    }
-
-    private fun renderDiagnosis(diagnosis: BufferingDiagnosis) {
-        binding.tvDiagnosisCause.text = diagnosis.title
-        binding.tvDiagnosis.text = "Confidence: ${diagnosis.confidence} — ${diagnosis.summary}"
-        binding.tvDiagnosisEvidence.text = "Evidence: ${diagnosis.evidence.joinToString(" • ")}"
-        binding.tvDiagnosisAction.text = "Action: ${diagnosis.action}"
     }
 
     private fun renderDetails() {
@@ -250,7 +137,7 @@ class StreamInfoDialog : DialogFragment() {
 
     private fun buildDetails(section: String): List<DetailRow> {
         val player = PlayerManager.getExoPlayerOrNull()
-        val device = lastDevice ?: runCatching { DeviceHealthCollector.collect(requireContext()) }.getOrNull()
+        val device = runCatching { DeviceHealthCollector.collect(requireContext()) }.getOrNull()
         val required = getRequiredSpeedMbps(player?.videoFormat?.height ?: 0)
         return buildList {
             when (section) {
@@ -263,13 +150,6 @@ class StreamInfoDialog : DialogFragment() {
                     row("Video bitrate", formatBitrate(player?.videoFormat?.bitrate))
                     row("Audio codec", player?.audioFormat?.sampleMimeType ?: "-")
                     row("Last error", PlayerManager.getLastError()?.errorCodeName ?: "None")
-                    lastProbe?.let {
-                        row("Diagnostic HTTP", it.responseCode?.toString() ?: "Failed (${it.error ?: "unknown"})")
-                        row("Resolved server", it.finalHost ?: "-")
-                        row("First byte", it.timeToFirstByteMs?.let { value -> "$value ms" } ?: "-")
-                        row("Probe duration", it.elapsedMs?.let { value -> "$value ms" } ?: "-")
-                        row("Probe bytes", it.bytesRead.toString())
-                    } ?: row("Diagnostic probe", "Not run")
                 }
                 SECTION_NETWORK -> {
                     row("Connection", device?.networkType ?: "-")
@@ -299,16 +179,8 @@ class StreamInfoDialog : DialogFragment() {
                     row("Error category", PlayerManager.getStreamErrorType().name)
                     row("Error details", PlayerManager.getLastErrorMessage().ifBlank { "None" })
                     row("Recovery", "Automatic recovery is ${if (PlayerManager.getLastError() == null) "not active" else "active or recently triggered"}")
-                    lastDiagnosis?.evidence?.takeIf { it.isNotEmpty() }?.let { row("Test evidence", it.joinToString("\n• ", prefix = "• ")) }
                 }
                 else -> {
-                    lastDiagnosis?.let {
-                        row("Likely cause", it.title)
-                        row("Confidence", it.confidence)
-                        row("Summary", it.summary)
-                        row("Recommended action", it.action)
-                        row("Evidence", it.evidence.joinToString("\n• ", prefix = "• "))
-                    } ?: row("Status", "Run AUTO CHECK while the customer is experiencing buffering.")
                     row("Current player", playerState(player))
                     row("Current network", device?.networkType ?: "-")
                     row("Current rebuffer count", PlayerManager.getRebufferCount().toString())
