@@ -272,13 +272,23 @@ object PlayerManager {
 
     // IPTV routes can have short loss/jitter bursts even when the WiFi link is
     // healthy. Keep enough media queued to absorb those bursts. Playback still
-    // starts after two seconds; the larger minimum/max buffer is filled while
-    // playing and does not force a 50-second startup delay.
+    // starts after three seconds; the larger minimum/max buffer is filled
+    // while playing and does not force a 50-second startup delay.
     //
     // minBufferMs is kept below LIVE_TARGET_OFFSET_MS: on IPTV channels with a
     // short HLS DVR window, wanting more buffer than exists between the
     // playback position and the live edge makes BehindLiveWindowException
     // more likely instead of less.
+    //
+    // bufferForPlaybackAfterRebufferMs (the buffer needed to resume after a
+    // stall) was 3s - on a fast connection with plenty of throughput that
+    // still produced repeated back-to-back stalls, because most of what
+    // actually causes a mid-stream stall is a single slow/delayed HLS
+    // segment fetch (a brief LB hop, origin encoder restart, CDN edge
+    // miss), not the viewer's own bandwidth. 3s of cushion drains on the
+    // very next slow segment, triggering another stall almost immediately.
+    // 6s gives enough margin to usually absorb a second hiccup right after
+    // resuming, at the cost of a slightly longer wait before that resume.
     private val loadControl =
 
         DefaultLoadControl.Builder()
@@ -286,8 +296,8 @@ object PlayerManager {
             .setBufferDurationsMs(
                 8_000,
                 30_000,
-                2_000,
-                3_000
+                3_000,
+                6_000
             )
 
             .build()
