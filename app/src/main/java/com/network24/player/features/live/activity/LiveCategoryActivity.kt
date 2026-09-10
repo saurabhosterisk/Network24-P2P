@@ -138,15 +138,33 @@ class LiveCategoryActivity : BaseActivity() {
         if (initialLoadStarted) return
         initialLoadStarted = true
         val startMs = SystemClock.elapsedRealtime()
+        // repository.getCategories() silently does its own network sync
+        // when the local DB is empty (a real first login) before returning
+        // - without a loader up front, that sync ran with the categories
+        // grid just sitting there empty, showing no feedback while ANY
+        // eventual forceRefreshData() loader below was unreachable (the
+        // sync already succeeded and returned non-empty by the time we'd
+        // get there).
+        showLoader("Loading categories…")
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val categories = repository.getCategories(server = prefs.getServer(), username = prefs.getUsername(), password = prefs.getPassword(), forceRefresh = false)
                 withContext(Dispatchers.Main) {
                     logPerf("LiveCategory.initialCategoryRead", SystemClock.elapsedRealtime() - startMs)
-                    if (categories.isNotEmpty()) loadCategoriesFromDB() else forceRefreshData(isInitialSync = true)
+                    if (categories.isNotEmpty()) {
+                        hideLoader()
+                        loadCategoriesFromDB()
+                    } else {
+                        // Same loader, reused - forceRefreshData() shows its
+                        // own message on the same singleton dialog.
+                        forceRefreshData(isInitialSync = true)
+                    }
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { Toast.makeText(this@LiveCategoryActivity, e.message ?: "Initial load failed", Toast.LENGTH_LONG).show() }
+                withContext(Dispatchers.Main) {
+                    hideLoader()
+                    Toast.makeText(this@LiveCategoryActivity, e.message ?: "Initial load failed", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

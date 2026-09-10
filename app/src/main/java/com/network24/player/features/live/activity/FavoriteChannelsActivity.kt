@@ -499,6 +499,12 @@ class FavoriteChannelsActivity : BaseActivity() {
         forceRefresh: Boolean
     ) {
 
+        // repository.getChannels() silently does its own network sync when
+        // the local channel table is empty (first-ever visit to this
+        // screen, or a fresh account) before returning - without a loader
+        // up front, that sync ran with the favorites list just sitting
+        // there empty, no feedback at all.
+        showLoader("Loading channels…")
 
         lifecycleScope.launch {
 
@@ -533,11 +539,13 @@ class FavoriteChannelsActivity : BaseActivity() {
                     channels.isEmpty() &&
                     !forceRefresh
                 ) {
+                    // Same loader, reused - forceRefreshData() shows its own
+                    // message on the same singleton dialog.
                     forceRefreshData()
                     return@launch
                 }
 
-
+                hideLoader()
 
                 allChannels.clear()
 
@@ -559,6 +567,7 @@ class FavoriteChannelsActivity : BaseActivity() {
                 e: Exception
             ) {
 
+                hideLoader()
 
                 Toast.makeText(
 
@@ -1427,6 +1436,10 @@ class FavoriteChannelsActivity : BaseActivity() {
 
         isRefreshing = true
 
+        runCallbackSyncWithLoader(
+            loadingMessage = "Downloading channels for the first time…"
+        ) { onLoaderSuccess, onLoaderError ->
+
 
 
 
@@ -1462,6 +1475,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
+                        onLoaderSuccess()
+
                         loadAllChannelsToMemory(
                             true
                         )
@@ -1481,20 +1496,14 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-                        Toast.makeText(
-
-                            this@FavoriteChannelsActivity,
-
-                            message,
-
-                            Toast.LENGTH_LONG
-
-                        ).show()
+                        onLoaderError(message)
 
                     }
 
                 }
         )
+
+        }
 
     }
 

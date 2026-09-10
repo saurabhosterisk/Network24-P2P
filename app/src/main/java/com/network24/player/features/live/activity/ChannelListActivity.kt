@@ -418,6 +418,11 @@ class ChannelListActivity : BaseActivity() {
 
     private fun ensureInitialSyncThenLoad() {
 
+        // repository.getChannels() silently does its own network sync when
+        // this category has no channels locally yet (first-ever visit)
+        // before returning - without a loader up front, that sync ran with
+        // the channel list just sitting there empty, no feedback at all.
+        showLoader("Loading channels…")
 
         lifecycleScope.launch {
 
@@ -438,6 +443,7 @@ class ChannelListActivity : BaseActivity() {
 
                 if (channels.isNotEmpty()) {
 
+                    hideLoader()
 
                     applyChannelsToUi(
                         channels
@@ -446,7 +452,8 @@ class ChannelListActivity : BaseActivity() {
 
                 } else {
 
-
+                    // Same loader, reused - forceRefreshData() shows its own
+                    // message on the same singleton dialog.
                     forceRefreshData(
                         isInitialSync = true
                     )
@@ -456,6 +463,7 @@ class ChannelListActivity : BaseActivity() {
 
             } catch (e: Exception) {
 
+                hideLoader()
 
                 Toast.makeText(
                     this@ChannelListActivity,
