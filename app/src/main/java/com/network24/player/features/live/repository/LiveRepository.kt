@@ -174,11 +174,25 @@ class LiveRepository(private val context: Context) {
         val allWordsClause = tokens.joinToString(" AND ") {
             "$normalizedName LIKE ?"
         }
-        val anyWordsClause = tokens.joinToString(" OR ") {
-            "$normalizedName LIKE ?"
-        }
-        val anyEpgWordsClause = tokens.joinToString(" OR ") {
-            "LOWER(COALESCE(e.title, '')) LIKE ?"
+        // Every typed word must be accounted for somewhere (name or that
+        // channel's cached EPG titles) before a channel qualifies at all -
+        // more words typed means a more specific search, not a broader
+        // one. Previously this was an OR-across-words match, so typing
+        // "family feud" (no exact channel) still surfaced every channel
+        // with just "family" in its name, because that alone satisfied
+        // the WHERE clause. Each token gets its own name-OR-epg clause,
+        // and all of those are AND-ed together.
+        val allWordsAcrossNameOrEpgClause = tokens.joinToString(" AND ") {
+            """(
+                $normalizedName LIKE ?
+                OR EXISTS(
+                    SELECT 1 FROM epg e
+                    WHERE e.epgChannelId = c.epgChannelId
+                      AND e.title IS NOT NULL
+                      AND TRIM(e.title) != ''
+                      AND LOWER(e.title) LIKE ?
+                )
+            )"""
         }
 
         val sql = """
@@ -206,16 +220,7 @@ class LiveRepository(private val context: Context) {
                 AND cat.type = 'LIVE'
             WHERE c.name IS NOT NULL
               AND TRIM(c.name) != ''
-              AND (
-                ($anyWordsClause)
-                OR EXISTS(
-                    SELECT 1 FROM epg e
-                    WHERE e.epgChannelId = c.epgChannelId
-                      AND e.title IS NOT NULL
-                      AND TRIM(e.title) != ''
-                      AND ($anyEpgWordsClause)
-                )
-              )
+              AND ($allWordsAcrossNameOrEpgClause)
             ORDER BY
                 CASE
                     WHEN $normalizedName = ? THEN 1
@@ -229,8 +234,12 @@ class LiveRepository(private val context: Context) {
         """.trimIndent()
 
         val args = mutableListOf<Any>()
-        args.addAll(tokens.map { "%$it%" })
-        args.addAll(tokens.map { "%$it%" })
+        // WHERE clause: one (name-LIKE, epg-LIKE) pair per token, in order.
+        tokens.forEach { token ->
+            args.add("%$token%")
+            args.add("%$token%")
+        }
+        // ORDER BY: exact match, prefix match, then name-only all-words tier.
         args.add(compactQuery)
         args.add("$compactQuery%")
         args.addAll(tokens.map { "%$it%" })
