@@ -100,6 +100,17 @@ class ChannelListActivity : BaseActivity() {
     private var fsSubtitleEnabled = false
     private var fsAspectRatioIndex = 0
 
+    // How long STATE_BUFFERING can run uninterrupted before we tell the user
+    // their connection looks slow, instead of leaving them staring at a
+    // silent spinner with no idea whether the app is stuck or just waiting
+    // on a genuinely poor connection.
+    private val slowBufferingHandler = Handler(Looper.getMainLooper())
+    private val slowBufferingRunnable = Runnable {
+        binding.txtPlayerError.text =
+            "Still buffering…\nYour connection looks slow."
+        binding.txtPlayerError.visibility = View.VISIBLE
+    }
+
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
     private val fsHideRunnable = Runnable {
@@ -146,6 +157,13 @@ class ChannelListActivity : BaseActivity() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 binding.progressLoading.visibility =
                     if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+
+                if (playbackState == Player.STATE_BUFFERING) {
+                    slowBufferingHandler.removeCallbacks(slowBufferingRunnable)
+                    slowBufferingHandler.postDelayed(slowBufferingRunnable, 15000L)
+                } else {
+                    slowBufferingHandler.removeCallbacks(slowBufferingRunnable)
+                }
 
                 if (playbackState == Player.STATE_READY) {
                     binding.txtPlayerError.visibility = View.GONE
@@ -2173,6 +2191,7 @@ class ChannelListActivity : BaseActivity() {
         super.onPause()
 
         fsHideHandler.removeCallbacks(fsHideRunnable)
+        slowBufferingHandler.removeCallbacks(slowBufferingRunnable)
 
         binding.playerView.player
             ?.removeListener(playerListener)
