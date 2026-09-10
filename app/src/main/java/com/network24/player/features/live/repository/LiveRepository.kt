@@ -194,6 +194,15 @@ class LiveRepository(private val context: Context) {
                 )
             )"""
         }
+        // All typed words found in the title of whatever is airing on this
+        // channel right now (not just cached anywhere in its schedule) -
+        // used to float channels currently playing a match to the very
+        // top, since that's almost always what the user actually wants to
+        // tune into (they can start watching immediately, no waiting for
+        // a rerun or scrolling to a future slot).
+        val nowPlayingAllWordsClause = tokens.joinToString(" AND ") {
+            "LOWER(COALESCE(e2.title, '')) LIKE ?"
+        }
 
         val sql = """
             SELECT
@@ -223,6 +232,17 @@ class LiveRepository(private val context: Context) {
               AND ($allWordsAcrossNameOrEpgClause)
             ORDER BY
                 CASE
+                    WHEN EXISTS(
+                        SELECT 1 FROM epg e2
+                        WHERE e2.epgChannelId = c.epgChannelId
+                          AND e2.title IS NOT NULL
+                          AND TRIM(e2.title) != ''
+                          AND e2.startTimestamp IS NOT NULL
+                          AND e2.stopTimestamp IS NOT NULL
+                          AND e2.startTimestamp <= ?
+                          AND e2.stopTimestamp > ?
+                          AND ($nowPlayingAllWordsClause)
+                    ) THEN 0
                     WHEN $normalizedName = ? THEN 1
                     WHEN $normalizedName LIKE ? THEN 2
                     WHEN $allWordsClause THEN 3
@@ -239,7 +259,12 @@ class LiveRepository(private val context: Context) {
             args.add("%$token%")
             args.add("%$token%")
         }
-        // ORDER BY: exact match, prefix match, then name-only all-words tier.
+        // ORDER BY: currently-airing tier (now, now, one LIKE per token),
+        // then exact match, prefix match, then name-only all-words tier.
+        val nowMs = System.currentTimeMillis()
+        args.add(nowMs)
+        args.add(nowMs)
+        args.addAll(tokens.map { "%$it%" })
         args.add(compactQuery)
         args.add("$compactQuery%")
         args.addAll(tokens.map { "%$it%" })
