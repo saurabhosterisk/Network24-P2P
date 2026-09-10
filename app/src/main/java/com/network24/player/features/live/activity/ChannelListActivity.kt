@@ -162,6 +162,20 @@ class ChannelListActivity : BaseActivity() {
                     fsToggleSubtitles(fsSubtitleEnabled)
                 }
             }
+
+            // The single source of truth for the fullscreen play/pause icon.
+            // Every call site that starts playback (openFullscreen, a
+            // channel switch) sets the icon from isPlaying() right after
+            // calling PlayerManager.play() - but play() only starts
+            // buffering, it doesn't start playing immediately, so that
+            // snapshot always read "not playing" and nothing ever corrected
+            // it once buffering actually finished. This fires on the real
+            // transition, whenever it happens.
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                binding.fsBtnPlayPause.setImageResource(
+                    if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+                )
+            }
         }
 
 
@@ -2192,12 +2206,19 @@ class ChannelListActivity : BaseActivity() {
                 KeyEvent.KEYCODE_CHANNEL_UP,
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     fsPlayNextChannel()
+                    // The on-screen Next/Prev buttons call this after
+                    // switching too - without it here the play/pause icon
+                    // kept showing whatever the previous channel's state
+                    // was (e.g. still "paused" after switching away from a
+                    // paused channel, even though the new one autoplays).
+                    showFsUiWithTimeout()
                     return true
                 }
 
                 KeyEvent.KEYCODE_CHANNEL_DOWN,
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     fsPlayPreviousChannel()
+                    showFsUiWithTimeout()
                     return true
                 }
             }
@@ -2205,13 +2226,18 @@ class ChannelListActivity : BaseActivity() {
 
         if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
 
-            showFsUiWithTimeout()
-
+            // Toggle first, then refresh the UI - showFsUiWithTimeout() sets
+            // the play/pause icon from PlayerManager.isPlaying(), so calling
+            // it before the toggle below read the state as it was BEFORE
+            // this key press and always displayed the icon for the state
+            // being left, not the state being entered.
             if (PlayerManager.isPlaying()) {
                 PlayerManager.pause()
             } else {
                 PlayerManager.resume()
             }
+
+            showFsUiWithTimeout()
 
             return true
         }
