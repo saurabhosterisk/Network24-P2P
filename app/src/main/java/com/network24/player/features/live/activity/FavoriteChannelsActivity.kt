@@ -403,7 +403,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn) { showFsUiWithTimeout() }
+        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
         vpnToggle.register()
 
         // playerView's click listener (touch-open-fullscreen, plus

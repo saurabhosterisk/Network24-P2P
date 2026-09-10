@@ -471,7 +471,7 @@ class EpgChannelListActivity : BaseActivity() {
 
         setupStickyScrolling()
 
-        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn) { showFsUiWithTimeout() }
+        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
         vpnToggle.register()
 
         setupFullscreenControls()

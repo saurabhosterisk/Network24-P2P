@@ -273,6 +273,19 @@
                 android:tint="#FFFFFF"
                 android:focusable="true"/>
 
+            <Space android:layout_width="8dp" android:layout_height="1dp"/>
+
+            <ImageButton
+                android:id="@+id/fsBtnVpnRotate"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="10dp"
+                android:background="@drawable/bg_btn_focus_selector"
+                android:src="@drawable/ic_refresh"
+                android:tint="#FFFFFF"
+                android:visibility="gone"
+                android:focusable="true"/>
+
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"

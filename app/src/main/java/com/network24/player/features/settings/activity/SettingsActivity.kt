@@ -322,9 +322,9 @@ class SettingsActivity : BaseActivity() {
         findViewById<TextView>(R.id.vpnTunnelSummary).text = "Connecting..."
         lifecycleScope.launch {
             val result = vpnRepository.provision()
-            result.onSuccess { config ->
+            result.onSuccess { tunnel ->
                 try {
-                    TunnelManager.bringUp(this@SettingsActivity, config)
+                    TunnelManager.bringUp(this@SettingsActivity, tunnel.config)
                     prefs.setVpnEnabled(true)
                     findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch).isChecked = true
                     updateVpnSummary()

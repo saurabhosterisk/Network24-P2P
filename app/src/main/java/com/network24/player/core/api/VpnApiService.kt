@@ -16,6 +16,14 @@ interface VpnApiService {
     ): Response<VpnProvisionResponse>
 
     @GET("vpn_api.php")
+    suspend fun rotatePeer(
+        @Query("action") action: String = "rotate_peer",
+        @Query("username") username: String,
+        @Query("password") password: String,
+        @Query("public_key") publicKey: String
+    ): Response<VpnProvisionResponse>
+
+    @GET("vpn_api.php")
     suspend fun releasePeer(
         @Query("action") action: String = "release_peer",
         @Query("username") username: String,

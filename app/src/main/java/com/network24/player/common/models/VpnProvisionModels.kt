@@ -10,5 +10,6 @@ data class VpnProvisionResponse(
     val endpoint: String? = null,
     @SerializedName("assigned_ip") val assignedIp: String? = null,
     @SerializedName("allowed_ips") val allowedIps: String? = null,
-    val dns: String? = null
+    val dns: String? = null,
+    @SerializedName("server_id") val serverId: Int? = null
 )

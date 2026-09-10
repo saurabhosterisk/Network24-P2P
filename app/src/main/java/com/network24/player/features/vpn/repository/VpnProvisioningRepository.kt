@@ -2,11 +2,16 @@ package com.network24.player.features.vpn.repository
 
 import com.network24.player.core.api.ApiClient
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.common.models.VpnProvisionResponse
 import com.wireguard.config.Config
 import com.wireguard.config.InetNetwork
 import com.wireguard.config.Interface
 import com.wireguard.config.Peer
 import com.wireguard.crypto.KeyPair
+import retrofit2.Response
+
+/** A ready-to-use tunnel Config plus which vpn_servers row it came from. */
+data class ProvisionedTunnel(val config: Config, val serverId: Int?)
 
 /**
  * Talks to Main Server's vpn_api.php to obtain a WireGuard peer
@@ -35,26 +40,49 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
         return privateKey to publicKey
     }
 
-    suspend fun provision(): Result<Config> {
-        val username = prefs.getUsername()
-        val password = prefs.getPassword()
+    suspend fun provision(): Result<ProvisionedTunnel> {
         val (privateKey, publicKey) = ensureDeviceKeyPair()
-
-        // Every failure message the user can see comes from the server
-        // (vpn_api.php's "message" field) so wording can be changed
-        // without an app update - the one exception is when the server
-        // couldn't be reached at all (see SettingsActivity), which by
-        // definition has no server response to carry a message.
         val response = try {
             ApiClient.vpnApi(VPN_API_BASE_URL).requestPeer(
-                username = username,
-                password = password,
+                username = prefs.getUsername(),
+                password = prefs.getPassword(),
                 publicKey = publicKey
             )
         } catch (e: Exception) {
             return Result.failure(e)
         }
+        return toTunnelResult(response, privateKey)
+    }
 
+    /**
+     * Always drops whatever server this device is currently assigned to
+     * and gets a different one (vpn_api.php's rotate_peer excludes the
+     * server it just released) - for a user who wants to try another
+     * Secure Relay server because the current one is still buffering.
+     * Repeated calls cycle through the available servers rather than
+     * building up a permanent exclusion list - each call only ever
+     * excludes whichever single server the device is on right now.
+     */
+    suspend fun rotate(): Result<ProvisionedTunnel> {
+        val (privateKey, publicKey) = ensureDeviceKeyPair()
+        val response = try {
+            ApiClient.vpnApi(VPN_API_BASE_URL).rotatePeer(
+                username = prefs.getUsername(),
+                password = prefs.getPassword(),
+                publicKey = publicKey
+            )
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+        return toTunnelResult(response, privateKey)
+    }
+
+    // Every failure message the user can see comes from the server
+    // (vpn_api.php's "message" field) so wording can be changed without
+    // an app update - the one exception is when the server couldn't be
+    // reached at all (see SettingsActivity/FullscreenVpnToggle), which
+    // by definition has no server response to carry a message.
+    private fun toTunnelResult(response: Response<VpnProvisionResponse>, privateKey: String): Result<ProvisionedTunnel> {
         val body = response.body()
         if (!response.isSuccessful || body == null || !body.result) {
             return Result.failure(IllegalStateException(body?.message))
@@ -83,7 +111,7 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
                         .build()
                 )
                 .build()
-            Result.success(config)
+            Result.success(ProvisionedTunnel(config, body.serverId))
         } catch (e: Exception) {
             Result.failure(e)
         }
