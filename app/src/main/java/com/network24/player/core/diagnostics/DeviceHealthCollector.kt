@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
@@ -19,6 +20,11 @@ data class DeviceHealthSnapshot(
     val availableRamMb: Long,
     val totalRamMb: Long,
     val freeStorageMb: Long,
+    // False on devices with no physical battery (Fire TV / most Android TV
+    // boxes) - those still answer ACTION_BATTERY_CHANGED, but with a fixed
+    // placeholder level/temperature that means nothing, so batteryPercent
+    // and batteryTemperatureC are only ever non-null when this is true.
+    val batteryPresent: Boolean,
     val batteryPercent: Int?,
     val batteryTemperatureC: Double?
 )
@@ -66,12 +72,17 @@ object DeviceHealthCollector {
         val battery = runCatching {
             appContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         }.getOrNull()
-        val batteryPercent = battery?.let {
-            val level = it.getIntExtra("level", -1)
-            val scale = it.getIntExtra("scale", -1)
+        // EXTRA_PRESENT is what actually distinguishes "this device has a
+        // real battery" from a battery-less device's fixed placeholder
+        // reply - level/scale/temperature come back looking valid either way.
+        val batteryPresent = battery?.getBooleanExtra(BatteryManager.EXTRA_PRESENT, false) == true
+        val batteryPercent = battery?.takeIf { batteryPresent }?.let {
+            val level = it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = it.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
             if (level >= 0 && scale > 0) (level * 100 / scale).coerceIn(0, 100) else null
         }
-        val batteryTemperatureC = battery?.getIntExtra("temperature", Int.MIN_VALUE)
+        val batteryTemperatureC = battery?.takeIf { batteryPresent }
+            ?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
             ?.takeIf { it != Int.MIN_VALUE }
             ?.div(10.0)
 
@@ -83,6 +94,7 @@ object DeviceHealthCollector {
             availableRamMb = memory.availMem / MB,
             totalRamMb = memory.totalMem / MB,
             freeStorageMb = freeStorageMb,
+            batteryPresent = batteryPresent,
             batteryPercent = batteryPercent,
             batteryTemperatureC = batteryTemperatureC
         )

@@ -356,8 +356,12 @@ class StreamInfoDialog : DialogFragment() {
                 SECTION_DEVICE -> {
                     row("Available RAM", "${device?.availableRamMb ?: 0} MB / ${device?.totalRamMb ?: 0} MB")
                     row("Free storage", "${device?.freeStorageMb ?: 0} MB")
-                    row("Battery", device?.batteryPercent?.let { "$it%" } ?: "-")
-                    row("Battery temperature", device?.batteryTemperatureC?.let { String.format(Locale.US, "%.1f C", it) } ?: "-")
+                    if (device?.batteryPresent == true) {
+                        row("Battery", device.batteryPercent?.let { "$it%" } ?: "-")
+                        row("Battery temperature", device.batteryTemperatureC?.let { String.format(Locale.US, "%.1f C", it) } ?: "-")
+                    } else {
+                        row("Battery", "No battery (mains/USB-powered device)")
+                    }
                     row("Interpretation", "Low RAM/storage can cause instability even when network speed is good.")
                 }
                 SECTION_EVENTS -> {
