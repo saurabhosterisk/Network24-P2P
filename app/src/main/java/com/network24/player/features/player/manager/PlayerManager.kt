@@ -184,11 +184,25 @@ object PlayerManager {
         NONE,
         NETWORK,
         SOURCE,
+        // The player fell far enough behind the live broadcast edge (usually
+        // from packet loss/retransmission on the client's connection, not a
+        // server fault) that the segment it needed had already rolled off
+        // the server's live HLS window. Kept distinct from SOURCE/UNKNOWN so
+        // the diagnosis engine attributes it to the client network instead
+        // of the server.
+        LIVE_WINDOW,
         UNKNOWN
     }
 
     private var streamErrorType =
         StreamErrorType.NONE
+
+    // Cumulative for the current channel (reset in resetDiagnostics(), same
+    // as rebufferCount) - this is the on-device evidence that a WiFi/network
+    // hiccup, not the server, caused a stall: the stream fell behind live
+    // and had to reload even though the RSSI/link-speed snapshot alone can
+    // look fine at the moment the diagnosis is run after the fact.
+    private var behindLiveWindowCount = 0
 
 
 
@@ -1024,6 +1038,11 @@ object PlayerManager {
                 PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ->
                     StreamErrorType.SOURCE
 
+                PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+                    behindLiveWindowCount++
+                    StreamErrorType.LIVE_WINDOW
+                }
+
                 else -> StreamErrorType.UNKNOWN
             }
 
@@ -1268,6 +1287,8 @@ object PlayerManager {
 
         streamErrorType = StreamErrorType.NONE
 
+        behindLiveWindowCount = 0
+
         lastPlaybackState =
             Player.STATE_IDLE
 
@@ -1482,6 +1503,10 @@ object PlayerManager {
 
     fun getStreamErrorType(): StreamErrorType {
         return streamErrorType
+    }
+
+    fun getBehindLiveWindowCount(): Int {
+        return behindLiveWindowCount
     }
 
 

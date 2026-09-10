@@ -144,6 +144,7 @@ class StreamInfoDialog : DialogFragment() {
                         measuredMbps = measuredMbps,
                         requiredMbps = requiredMbps,
                         errorType = PlayerManager.getStreamErrorType().name,
+                        behindLiveWindowCount = PlayerManager.getBehindLiveWindowCount(),
                         probe = probe,
                         device = device
                     )
@@ -368,6 +369,7 @@ class StreamInfoDialog : DialogFragment() {
                     row("Playback started", if (PlayerManager.hasEverStartedPlayback()) "Yes" else "No")
                     row("Rebuffers", PlayerManager.getRebufferCount().toString())
                     row("Total buffering", formatDuration(PlayerManager.getTotalBufferingMsIncludingActive()))
+                    row("Live-edge reloads", PlayerManager.getBehindLiveWindowCount().toString())
                     row("Error category", PlayerManager.getStreamErrorType().name)
                     row("Error details", PlayerManager.getLastErrorMessage().ifBlank { "None" })
                     row("Recovery", "Automatic recovery is ${if (PlayerManager.getLastError() == null) "not active" else "active or recently triggered"}")
