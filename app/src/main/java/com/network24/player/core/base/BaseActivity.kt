@@ -74,6 +74,14 @@ open class BaseActivity : AppCompatActivity() {
         navView.setNavigationItemSelectedListener { item ->
             drawerLayout.closeDrawer(GravityCompat.END)
             onMenuClick(item.itemId)
+            // Always report "not selected" - this menu is a one-shot action
+            // list (Home, Settings, Exit...), not a persistent destination
+            // indicator. Returning the action's own result here would let
+            // NavigationView mark that item permanently "checked", and on
+            // returning to this same Activity instance later, the checked
+            // item's text/icon render white with no matching background -
+            // invisible against the drawer's white background.
+            false
         }
     }
 
@@ -126,6 +134,7 @@ open class BaseActivity : AppCompatActivity() {
         drawerLayout.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
             override fun onDrawerOpened(drawerView: View) {
                 if (drawerView === navView) {
+                    DrawerFocusStyler.resetAll(navView)
                     navView.post { focusFirstFocusableDescendant(navView) }
                 }
             }

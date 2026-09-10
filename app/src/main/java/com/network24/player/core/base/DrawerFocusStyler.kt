@@ -27,6 +27,33 @@ object DrawerFocusStyler {
         }
     }
 
+    /**
+     * Forces every row back to its unfocused color. Call this each time the
+     * drawer opens. A row's color is set directly (see updateContent below)
+     * rather than through a state-list, so if a row's "lose focus" callback
+     * is ever missed - e.g. the activity is backgrounded (not just internally
+     * refocused) while a row is focused, which doesn't fire a global focus
+     * change - that row would otherwise stay stuck white (invisible on the
+     * white drawer background) the next time the drawer opens.
+     */
+    fun resetAll(navigationView: NavigationView) {
+        findRecyclerView(navigationView)?.let { recyclerView ->
+            for (index in 0 until recyclerView.childCount) {
+                updateContent(recyclerView.getChildAt(index), focused = false)
+            }
+        }
+    }
+
+    private fun findRecyclerView(view: View): RecyclerView? {
+        if (view is RecyclerView) return view
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                findRecyclerView(view.getChildAt(index))?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun itemContainer(navigationView: NavigationView, focusedView: View?): View? {
         var current = focusedView
         while (current != null && current !== navigationView) {
