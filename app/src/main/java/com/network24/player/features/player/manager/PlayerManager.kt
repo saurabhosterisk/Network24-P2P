@@ -518,10 +518,18 @@ object PlayerManager {
                                     ) {
 
 
+                                        // The minus sign MUST stay on the same line as the left
+                                        // operand - Kotlin treats a line-leading "-" as a new
+                                        // statement (unary minus on bufferingStartedAtMs,
+                                        // discarded), not a continuation of the subtraction.
+                                        // That previously left duration as the raw
+                                        // System.currentTimeMillis() epoch value, which always
+                                        // failed the "<= 300000L" sanity check below - so
+                                        // totalBufferingMs (and every diagnostic report reading
+                                        // it) was permanently stuck at 0 no matter how much
+                                        // actual buffering happened.
                                         val duration =
-                                            System.currentTimeMillis()
-                                        -
-                                        bufferingStartedAtMs
+                                            System.currentTimeMillis() - bufferingStartedAtMs
 
 
                                         if (

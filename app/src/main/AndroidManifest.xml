@@ -7,6 +7,14 @@
     <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Normal (no runtime prompt) permissions the in-app stream diagnostics
+         screen needs. Without these declared, ConnectivityManager and
+         WifiManager silently return redacted info on some OS versions - the
+         network type showed as "Other" instead of "WiFi", and WiFi signal
+         strength/link speed always came back unavailable. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
     <!-- Install APK support -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
