@@ -24,7 +24,6 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.ui.AspectRatioFrameLayout
 
 import coil.load
 import com.google.firebase.firestore.FirebaseFirestore
@@ -48,6 +47,7 @@ import com.network24.player.features.player.manager.PlayerManager
 import com.network24.player.features.player.multiview.MultiViewActivity
 import com.network24.player.features.player.state.PlayerState
 import com.network24.player.features.player.ui.dialogs.StreamInfoDialog
+import com.network24.player.features.vpn.util.FullscreenVpnToggle
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -205,7 +205,7 @@ class EpgChannelListActivity : BaseActivity() {
     private var isFullscreen = false
 
     private var fsSubtitleEnabled = false
-    private var fsAspectRatioIndex = 0
+    private lateinit var vpnToggle: FullscreenVpnToggle
 
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
@@ -471,6 +471,8 @@ class EpgChannelListActivity : BaseActivity() {
 
         setupStickyScrolling()
 
+        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn) { showFsUiWithTimeout() }
+        vpnToggle.register()
 
         setupFullscreenControls()
 
@@ -3589,38 +3591,6 @@ class EpgChannelListActivity : BaseActivity() {
     }
 
 
-    private fun fsCycleAspectRatio() {
-
-        fsAspectRatioIndex = (fsAspectRatioIndex + 1) % 4
-
-        val msg = when (fsAspectRatioIndex) {
-
-            0 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                "Aspect Ratio: Fit"
-            }
-
-            1 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
-                "Aspect Ratio: Fill"
-            }
-
-            2 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                "Aspect Ratio: Zoom"
-            }
-
-            else -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-                "Aspect Ratio: Fixed Width"
-            }
-        }
-
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        showFsUiWithTimeout()
-    }
-
-
     private fun setupFullscreenControls() {
 
         binding.fsBtnBack.setOnClickListener {
@@ -3660,10 +3630,6 @@ class EpgChannelListActivity : BaseActivity() {
             }
 
             showFsUiWithTimeout()
-        }
-
-        binding.fsBtnAspect.setOnClickListener {
-            fsCycleAspectRatio()
         }
 
         binding.fsBtnSubtitle.setOnClickListener {
@@ -4161,6 +4127,7 @@ class EpgChannelListActivity : BaseActivity() {
             ::binding.isInitialized
         ) {
 
+            vpnToggle.refresh()
 
             PlayerManager.attach(
 

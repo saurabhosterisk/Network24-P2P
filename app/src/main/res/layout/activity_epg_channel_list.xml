@@ -264,12 +264,12 @@
             <Space android:layout_width="8dp" android:layout_height="1dp"/>
 
             <ImageButton
-                android:id="@+id/fsBtnAspect"
+                android:id="@+id/fsBtnVpn"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:padding="10dp"
                 android:background="@drawable/bg_btn_focus_selector"
-                android:src="@drawable/ic_aspect"
+                android:src="@drawable/ic_vpn"
                 android:tint="#FFFFFF"
                 android:focusable="true"/>
 

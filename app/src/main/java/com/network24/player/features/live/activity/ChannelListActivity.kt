@@ -19,7 +19,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 
 import com.google.android.material.internal.NavigationMenuView
@@ -48,6 +47,7 @@ import com.network24.player.features.player.manager.PlayerManager
 import com.network24.player.features.player.multiview.MultiViewActivity
 import com.network24.player.features.player.state.PlayerState
 import com.network24.player.features.player.ui.dialogs.StreamInfoDialog
+import com.network24.player.features.vpn.util.FullscreenVpnToggle
 
 import kotlinx.coroutines.launch
 
@@ -98,7 +98,7 @@ class ChannelListActivity : BaseActivity() {
     private var isFullscreen = false
 
     private var fsSubtitleEnabled = false
-    private var fsAspectRatioIndex = 0
+    private lateinit var vpnToggle: FullscreenVpnToggle
 
     // How long STATE_BUFFERING can run uninterrupted before we tell the user
     // their connection looks slow, instead of leaving them staring at a
@@ -299,6 +299,9 @@ class ChannelListActivity : BaseActivity() {
 
 
         setupDrawerAndMenu()
+
+        vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn) { showFsUiWithTimeout() }
+        vpnToggle.register()
 
         setupFullscreenControls()
 
@@ -1611,38 +1614,6 @@ class ChannelListActivity : BaseActivity() {
     }
 
 
-    private fun fsCycleAspectRatio() {
-
-        fsAspectRatioIndex = (fsAspectRatioIndex + 1) % 4
-
-        val msg = when (fsAspectRatioIndex) {
-
-            0 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                "Aspect Ratio: Fit"
-            }
-
-            1 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
-                "Aspect Ratio: Fill"
-            }
-
-            2 -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                "Aspect Ratio: Zoom"
-            }
-
-            else -> {
-                binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-                "Aspect Ratio: Fixed Width"
-            }
-        }
-
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        showFsUiWithTimeout()
-    }
-
-
     private fun setupFullscreenControls() {
 
         binding.btnFullscreen.setOnClickListener {
@@ -1723,10 +1694,6 @@ class ChannelListActivity : BaseActivity() {
             }
 
             showFsUiWithTimeout()
-        }
-
-        binding.fsBtnAspect.setOnClickListener {
-            fsCycleAspectRatio()
         }
 
         binding.fsBtnSubtitle.setOnClickListener {
@@ -2100,7 +2067,7 @@ class ChannelListActivity : BaseActivity() {
 
         super.onResume()
 
-
+        vpnToggle.refresh()
 
         PlayerManager.attach(
             this,
