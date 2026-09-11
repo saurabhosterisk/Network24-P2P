@@ -158,7 +158,13 @@ class ChannelListActivity : BaseActivity() {
                 binding.progressLoading.visibility =
                     if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
 
-                if (playbackState == Player.STATE_BUFFERING) {
+                // Only warn about a slow connection for a real mid-stream stall
+                // - not the very first load of a channel, which routinely spends
+                // a few seconds in STATE_BUFFERING while the initial playback
+                // buffer fills (see bufferForPlaybackMs in PlayerManager). Firing
+                // "your connection looks slow" during completely normal channel
+                // opening made every channel look broken on first tune-in.
+                if (playbackState == Player.STATE_BUFFERING && PlayerManager.hasEverStartedPlayback()) {
                     slowBufferingHandler.removeCallbacks(slowBufferingRunnable)
                     slowBufferingHandler.postDelayed(slowBufferingRunnable, 15000L)
                 } else {
