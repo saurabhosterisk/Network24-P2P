@@ -22,6 +22,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 
+import com.network24.player.core.net.ConnectionTimingTracker
 import com.network24.player.core.net.StreamDataSourceFactory
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.features.live.models.LiveChannel
@@ -799,6 +800,8 @@ object PlayerManager {
 
             resetDiagnostics()
 
+            ConnectionTimingTracker.reset()
+
 
 
             isReplacingMediaItem = true
@@ -1518,6 +1521,14 @@ object PlayerManager {
     fun getBehindLiveWindowCount(): Int {
         return behindLiveWindowCount
     }
+
+    // DNS + TCP connect + TLS + response headers time for the current
+    // channel's HTTP requests - see ConnectionTimingTracker for why this
+    // exists. Distinct from buffering/rebuffer stats, which only cover
+    // time after a connection is already open.
+    fun getLastConnectSetupMs(): Long = ConnectionTimingTracker.lastOpenElapsedMs
+    fun getSlowConnectSetupCount(): Int = ConnectionTimingTracker.slowOpenCount
+    fun getSlowestConnectSetupMs(): Long = ConnectionTimingTracker.slowestOpenMs
 
 
 

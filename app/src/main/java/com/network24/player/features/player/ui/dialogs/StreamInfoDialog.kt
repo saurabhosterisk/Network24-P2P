@@ -158,7 +158,10 @@ class StreamInfoDialog : DialogFragment() {
                     row("Required throughput", if (required > 0f) formatMbps(required.toDouble()) else "-")
                     row("WiFi signal", device?.wifiRssiDbm?.let { "$it dBm" } ?: "Not available")
                     row("WiFi link speed", device?.wifiLinkSpeedMbps?.let { "$it Mbps" } ?: "Not available")
-                    row("Interpretation", "Weak WiFi or throughput below required quality points to the client network.")
+                    row("Last connection setup", formatDuration(PlayerManager.getLastConnectSetupMs()))
+                    row("Slowest connection setup", formatDuration(PlayerManager.getSlowestConnectSetupMs()))
+                    row("Slow connections (>1.5s)", PlayerManager.getSlowConnectSetupCount().toString())
+                    row("Interpretation", "Weak WiFi or throughput below required quality points to the client network. \"Connection setup\" is DNS+connect+TLS time before any data arrives - a high value here with a fast throughput points to the network path, not the WiFi link itself.")
                 }
                 SECTION_DEVICE -> {
                     row("Available RAM", "${device?.availableRamMb ?: 0} MB / ${device?.totalRamMb ?: 0} MB")

@@ -26,7 +26,13 @@ class CountingDataSource(
     override fun open(dataSpec: DataSpec): Long {
         windowBytes = 0L
         windowStartMs = SystemClock.elapsedRealtime()
-        return upstream.open(dataSpec)
+
+        val openStartMs = windowStartMs
+        val result = upstream.open(dataSpec)
+        val openElapsedMs = SystemClock.elapsedRealtime() - openStartMs
+        ConnectionTimingTracker.reportOpen(dataSpec.uri.path ?: dataSpec.uri.toString(), openElapsedMs)
+
+        return result
     }
 
     @Throws(IOException::class)
