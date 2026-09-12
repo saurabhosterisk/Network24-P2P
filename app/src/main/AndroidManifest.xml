@@ -106,13 +106,13 @@
         <activity
             android:name=".features.player.activity.PlayerActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
         <activity
             android:name=".features.player.multiview.MultiViewActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
 
@@ -121,43 +121,43 @@
         <activity
             android:name=".features.live.activity.ChannelListActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
         <activity
             android:name=".features.live.activity.EpgChannelListActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
 
         <activity
             android:name=".features.live.activity.MasterChannelSearchActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
         <activity
             android:name=".features.live.activity.FavoriteChannelsActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
         <activity
             android:name=".features.live.activity.LiveCategoryActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
         <activity
             android:name=".features.live.activity.RecentlyWatchedActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
         <activity
             android:name=".features.live.activity.ManageCategoriesActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
 
@@ -166,7 +166,7 @@
         <activity
             android:name=".features.login.activity.LoginActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
 
@@ -175,7 +175,7 @@
         <activity
             android:name=".features.dashboard.activity.DashboardActivity"
             android:exported="false"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="sensorLandscape" />
 
 
 
@@ -183,7 +183,8 @@
 
         <activity
             android:name=".features.settings.activity.SettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
 
 
 
@@ -195,7 +196,7 @@
 
             android:exported="true"
 
-            android:screenOrientation="landscape"
+            android:screenOrientation="sensorLandscape"
 
             android:banner="@drawable/tv_banner">
 
