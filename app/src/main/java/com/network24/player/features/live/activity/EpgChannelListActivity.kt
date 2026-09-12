@@ -228,6 +228,7 @@ class EpgChannelListActivity : BaseActivity() {
     // Saved so exitFullscreen() can put topCard back exactly where it was.
     private var topCardCornerRadius = 0f
     private var topCardElevation = 0f
+    private var topCardStrokeWidth = 0
     private var contentRootNormalConstraintSet: ConstraintSet? = null
     private var topCardInnerNormalConstraintSet: ConstraintSet? = null
 
@@ -3358,8 +3359,10 @@ class EpgChannelListActivity : BaseActivity() {
 
         topCardCornerRadius = topCard.radius
         topCardElevation = topCard.cardElevation
+        topCardStrokeWidth = topCard.strokeWidth
         topCard.radius = 0f
         topCard.cardElevation = 0f
+        topCard.strokeWidth = 0
         topCard.setContentPadding(0, 0, 0, 0)
 
         if (contentRootNormalConstraintSet == null) {
@@ -3446,6 +3449,7 @@ class EpgChannelListActivity : BaseActivity() {
 
         topCard.radius = topCardCornerRadius
         topCard.cardElevation = topCardElevation
+        topCard.strokeWidth = topCardStrokeWidth
         topCard.setContentPadding(0, 0, 0, 0)
 
         contentRootNormalConstraintSet?.applyTo(binding.contentRoot)
