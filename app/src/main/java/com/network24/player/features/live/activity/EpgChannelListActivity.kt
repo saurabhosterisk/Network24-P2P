@@ -3831,25 +3831,20 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
+    // "Currently playing channel" used to get a red border here that
+    // stayed lit regardless of focus - removed per direct feedback that
+    // it was confusing and unclear what it meant. The preview panel
+    // above the grid already shows what's currently playing, so the
+    // channel-logo cell now only ever reflects keyboard focus, same as
+    // every other cell in the grid.
     private fun channelBackground(
         channel: LiveChannel,
         focused: Boolean
     ): GradientDrawable {
 
-
-        val selected =
-
-            selectedChannel?.stream_id != null &&
-
-                    selectedChannel?.stream_id ==
-                    channel.stream_id
-
-
-
-
         return roundedBackground(
-            focused || selected,
-            selected
+            focused,
+            false
         )
     }
 
