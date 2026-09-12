@@ -3868,30 +3868,19 @@ class EpgChannelListActivity : BaseActivity() {
     ): GradientDrawable {
 
 
-        val selected =
-
-            selectedChannel?.stream_id != null &&
-
-                    selectedChannel?.stream_id ==
-                    channel.stream_id
-
-
-
-
-        // Focus and "this is the channel currently playing" always win,
-        // and use the exact same colors as every other cell in the grid
-        // (roundedBackground) - white for focus, dark red for playing -
-        // instead of a separate color language just for this one case.
-        // That keeps focus consistent with the rest of the app (see
-        // R.color.focus) and stops it from ever having to compete
-        // visually with the "airing now" treatment below.
+        // "This is the channel currently playing" (red) is shown on that
+        // channel's own logo cell only - see channelBackground(). Program
+        // cells used to inherit that same red across the channel's ENTIRE
+        // row (every timeslot, hours in both directions), which looked
+        // like a persistent warning/error banner rather than a "now
+        // playing" cue. Program cells only ever respond to focus here.
         if (
-            focused || selected
+            focused
         ) {
 
             return roundedBackground(
                 true,
-                selected
+                false
             )
         }
 
@@ -3940,8 +3929,8 @@ class EpgChannelListActivity : BaseActivity() {
 
 
         return roundedBackground(
-            focused || selected,
-            selected
+            false,
+            false
         )
     }
 
