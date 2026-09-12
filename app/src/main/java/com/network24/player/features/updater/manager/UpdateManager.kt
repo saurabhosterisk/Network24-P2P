@@ -3,6 +3,7 @@ package com.network24.player.features.updater.manager
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -176,8 +177,18 @@ object UpdateManager {
      */
     fun retryInstallAfterPermission(activity: Activity): Boolean {
         val apkFile = pendingApkFile ?: return false
-        if (!activity.packageManager.canRequestPackageInstalls()) return false
+        if (!canInstallUnknownApps(activity)) return false
         return installApk(activity, apkFile)
+    }
+
+    // canRequestPackageInstalls() is API 26+ - below that, "install from
+    // unknown sources" is a single device-wide toggle rather than a
+    // per-app runtime permission, so there is nothing to check here: the
+    // system itself blocks the install (and shows its own prompt) if the
+    // user has it disabled.
+    private fun canInstallUnknownApps(activity: Activity): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        return activity.packageManager.canRequestPackageInstalls()
     }
 
     /** Returns true if the real package installer was launched, false if we only opened the permission screen. */
@@ -185,7 +196,7 @@ object UpdateManager {
         activity: Activity,
         apkFile: File
     ): Boolean {
-        if (!activity.packageManager.canRequestPackageInstalls()) {
+        if (!canInstallUnknownApps(activity)) {
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${activity.packageName}")
