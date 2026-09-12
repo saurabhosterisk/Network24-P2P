@@ -1360,6 +1360,24 @@ class EpgChannelListActivity : BaseActivity() {
         preserveScroll: Boolean
     ) {
 
+        // The periodic now-line refresh (nowLineRunnable, every 60s) gets
+        // here with preserveScroll=true and rebuilds every cell from
+        // scratch to update live-program highlighting. removeAllViews()
+        // below destroys whatever the user currently has focused, and
+        // Android's default focus-recovery on a detached view does not
+        // reliably land back on the equivalent new cell - it can jump
+        // anywhere, which is what made up/down navigation feel like it
+        // randomly broke while browsing (more likely the longer someone
+        // lingers, e.g. scrolling toward the end of a long channel list).
+        // Capturing the real focus target first lets the existing
+        // restorePendingFocus() mechanism put it back exactly where it
+        // was. Gated to preserveScroll only so the unrelated initial-load
+        // path (which sets pendingFocusChannelId itself, e.g. after a
+        // category switch) is untouched.
+        if (preserveScroll) {
+            captureCurrentGridFocus()
+        }
+
 
         val savedX =
 
@@ -3005,6 +3023,58 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
+    // Finds whichever grid cell currently has keyboard focus (a program
+    // card or a channel-logo card) and records it via the same
+    // pendingFocusChannelId/pendingFocusProgramKey fields restorePendingFocus()
+    // already knows how to re-apply after a rebuild. Must run before
+    // renderGrid() tears down the current views.
+    private fun captureCurrentGridFocus() {
+
+        val focused =
+            currentFocus
+                ?: return
+
+        for (row in programFocusRows) {
+
+            val index =
+                row.indexOf(focused)
+
+            if (index >= 0) {
+
+                val tag =
+                    focused.tag as? String
+                        ?: return
+
+                val streamId =
+                    tag.substringBefore('|')
+                        .toIntOrNull()
+                        ?: return
+
+                pendingFocusChannelId =
+                    streamId
+
+                pendingFocusProgramKey =
+                    tag
+
+                return
+            }
+        }
+
+        val channelIndex =
+            channelFocusViews.indexOf(focused)
+
+        if (channelIndex >= 0) {
+
+            pendingFocusChannelId =
+                channels.getOrNull(channelIndex)
+                    ?.stream_id
+
+            pendingFocusProgramKey =
+                null
+        }
+    }
+
+
     private fun restorePendingFocus() {
 
 
@@ -3808,12 +3878,35 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
+        // Focus and "this is the channel currently playing" always win,
+        // and use the exact same colors as every other cell in the grid
+        // (roundedBackground) - white for focus, dark red for playing -
+        // instead of a separate color language just for this one case.
+        // That keeps focus consistent with the rest of the app (see
+        // R.color.focus) and stops it from ever having to compete
+        // visually with the "airing now" treatment below.
+        if (
+            focused || selected
+        ) {
+
+            return roundedBackground(
+                true,
+                selected
+            )
+        }
+
+
 
         if (
             isNow
         ) {
 
-
+            // A lightweight "airing now" cue - a dark amber tint and
+            // border, not a full bright block. The previous solid
+            // #FF8800 fill on every live cell made it impossible to
+            // tell "this is live" apart from "this is focused" at a
+            // glance, since focus was only a thin border on top of the
+            // same loud color.
             return GradientDrawable().apply {
 
 
@@ -3825,38 +3918,21 @@ class EpgChannelListActivity : BaseActivity() {
 
                 setColor(
                     Color.rgb(
-                        255,
-                        136,
-                        0
+                        46,
+                        36,
+                        20
                     )
                 )
 
 
 
                 setStroke(
-
-                    dp(
-                        if (
-                            focused || selected
-                        )
-                            3
-                        else
-                            2
-                    ),
-
-                    if (
-                        focused || selected
+                    dp(2),
+                    Color.rgb(
+                        255,
+                        193,
+                        7
                     )
-
-                        Color.WHITE
-
-                    else
-
-                        Color.rgb(
-                            255,
-                            193,
-                            7
-                        )
                 )
             }
         }
