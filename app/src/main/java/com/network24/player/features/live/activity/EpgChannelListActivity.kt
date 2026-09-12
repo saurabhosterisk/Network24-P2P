@@ -229,6 +229,10 @@ class EpgChannelListActivity : BaseActivity() {
     private var topCardCornerRadius = 0f
     private var topCardElevation = 0f
     private var topCardStrokeWidth = 0
+    private var topCardInnerPaddingLeft = 0
+    private var topCardInnerPaddingTop = 0
+    private var topCardInnerPaddingRight = 0
+    private var topCardInnerPaddingBottom = 0
     private var contentRootNormalConstraintSet: ConstraintSet? = null
     private var topCardInnerNormalConstraintSet: ConstraintSet? = null
 
@@ -3365,6 +3369,16 @@ class EpgChannelListActivity : BaseActivity() {
         topCard.strokeWidth = 0
         topCard.setContentPadding(0, 0, 0, 0)
 
+        // topCardInner's own 8dp android:padding (from the layout, meant
+        // to inset the compact preview) was left untouched here, leaving
+        // a visible black margin around the video even after topCard's
+        // own stroke/radius/padding were all zeroed above.
+        topCardInnerPaddingLeft = binding.topCardInner.paddingLeft
+        topCardInnerPaddingTop = binding.topCardInner.paddingTop
+        topCardInnerPaddingRight = binding.topCardInner.paddingRight
+        topCardInnerPaddingBottom = binding.topCardInner.paddingBottom
+        binding.topCardInner.setPadding(0, 0, 0, 0)
+
         if (contentRootNormalConstraintSet == null) {
             contentRootNormalConstraintSet = ConstraintSet().apply {
                 clone(binding.contentRoot)
@@ -3451,6 +3465,13 @@ class EpgChannelListActivity : BaseActivity() {
         topCard.cardElevation = topCardElevation
         topCard.strokeWidth = topCardStrokeWidth
         topCard.setContentPadding(0, 0, 0, 0)
+
+        binding.topCardInner.setPadding(
+            topCardInnerPaddingLeft,
+            topCardInnerPaddingTop,
+            topCardInnerPaddingRight,
+            topCardInnerPaddingBottom
+        )
 
         contentRootNormalConstraintSet?.applyTo(binding.contentRoot)
         topCardInnerNormalConstraintSet?.applyTo(binding.topCardInner)
