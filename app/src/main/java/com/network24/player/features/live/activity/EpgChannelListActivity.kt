@@ -30,6 +30,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 import com.network24.player.R
 import com.network24.player.common.models.FavoriteItemType
+import com.network24.player.common.utils.EpgTimeFormatter
 import com.network24.player.common.utils.LiveStreamUrlBuilder
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
@@ -3432,16 +3433,7 @@ class EpgChannelListActivity : BaseActivity() {
         binding.playerView.subtitleView?.visibility = View.VISIBLE
         fsToggleSubtitles(fsSubtitleEnabled)
 
-        val epgId = channel.epg_channel_id ?: channel.stream_id?.toString()
-        binding.fsTxtNowTitle.text =
-            epgByChannel[epgId.orEmpty()]
-                ?.firstOrNull {
-                    val now = System.currentTimeMillis()
-                    (it.startTimestamp ?: Long.MAX_VALUE) <= now &&
-                        (it.stopTimestamp ?: 0L) >= now
-                }
-                ?.title
-                ?: "No Program Info"
+        updateFullscreenNowNext(channel)
 
         showFsUiWithTimeout()
 
@@ -3598,16 +3590,69 @@ class EpgChannelListActivity : BaseActivity() {
             "$streamId${channel.name ?: "Unknown Channel"}"
         }
 
+        updateFullscreenNowNext(channel)
+    }
+
+
+    // Now/Next/progress bar - identical to every other screen's fullscreen
+    // player (ChannelListActivity, Favorites). This screen already has the
+    // whole grid's EPG loaded in epgByChannel, so no extra network call is
+    // needed the way those two screens need one.
+    private fun updateFullscreenNowNext(channel: LiveChannel) {
+
         val epgId = channel.epg_channel_id ?: channel.stream_id?.toString()
-        binding.fsTxtNowTitle.text =
-            epgByChannel[epgId.orEmpty()]
-                ?.firstOrNull {
-                    val now = System.currentTimeMillis()
-                    (it.startTimestamp ?: Long.MAX_VALUE) <= now &&
-                        (it.stopTimestamp ?: 0L) >= now
-                }
-                ?.title
-                ?: "No Program Info"
+        val now = System.currentTimeMillis()
+        val listings = epgByChannel[epgId.orEmpty()].orEmpty()
+
+        val nowEpg = listings.firstOrNull {
+            (it.startTimestamp ?: Long.MAX_VALUE) <= now &&
+                (it.stopTimestamp ?: 0L) >= now
+        }
+
+        val nextEpg = listings
+            .filter { (it.startTimestamp ?: Long.MAX_VALUE) > now }
+            .minByOrNull { it.startTimestamp ?: Long.MAX_VALUE }
+
+        if (nowEpg != null) {
+            binding.fsTxtNowTitle.text = nowEpg.title ?: "No Program Info"
+            binding.fsTxtNowTime.text =
+                "${EpgTimeFormatter.format(nowEpg.startTimestamp)} - ${EpgTimeFormatter.format(nowEpg.stopTimestamp)}"
+
+            val progress = calculateEpgProgress(nowEpg.startTimestamp, nowEpg.stopTimestamp)
+            binding.fsEpgTrack.post {
+                binding.fsEpgProgress.layoutParams =
+                    binding.fsEpgProgress.layoutParams.apply {
+                        width = (binding.fsEpgTrack.width * progress).toInt()
+                    }
+            }
+        } else {
+            binding.fsTxtNowTitle.text = "No Program Info"
+            binding.fsTxtNowTime.text = ""
+            binding.fsEpgProgress.layoutParams =
+                binding.fsEpgProgress.layoutParams.apply { width = 0 }
+        }
+
+        if (nextEpg != null) {
+            binding.fsTxtNextTitle.text = nextEpg.title ?: ""
+            binding.fsTxtNextTime.text =
+                "${EpgTimeFormatter.format(nextEpg.startTimestamp)} - ${EpgTimeFormatter.format(nextEpg.stopTimestamp)}"
+        } else {
+            binding.fsTxtNextTitle.text = ""
+            binding.fsTxtNextTime.text = ""
+        }
+    }
+
+
+    private fun calculateEpgProgress(startMs: Long?, stopMs: Long?): Float {
+
+        if (startMs == null || stopMs == null || stopMs <= startMs) {
+            return 0f
+        }
+
+        return (
+            (System.currentTimeMillis() - startMs).toFloat() /
+                (stopMs - startMs).toFloat()
+            ).coerceIn(0f, 1f)
     }
 
 

@@ -226,18 +226,100 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- Now-playing program line (this screen's EPG is the full -->
-        <!-- timeline grid, not a simple Now/Next card, so the fullscreen -->
-        <!-- overlay keeps a single current-program line instead). -->
-        <TextView
-            android:id="@+id/fsTxtNowTitle"
+        <!-- Now/Next/progress-bar layout kept identical to every other
+             screen's fullscreen player (ChannelListActivity, Favorites) -
+             the player must look the same everywhere regardless of which
+             screen it was opened from. -->
+
+        <!-- NOW row -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="No Program Info"
-            android:textColor="#DDDDDD"
-            android:textSize="13sp"/>
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Now:"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/fsTxtNowTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="No Program Info"
+                android:textColor="#DDDDDD"
+                android:textSize="13sp"/>
+
+            <TextView
+                android:id="@+id/fsTxtNowTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"/>
+        </LinearLayout>
+
+        <!-- Progress bar (EPG progress strip) -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="10dp">
+
+            <View
+                android:id="@+id/fsEpgTrack"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#333333"/>
+
+            <View
+                android:id="@+id/fsEpgProgress"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:background="#FFC107"/>
+        </FrameLayout>
+
+        <!-- NEXT row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Next:"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/fsTxtNextTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#DDDDDD"
+                android:textSize="13sp"/>
+
+            <TextView
+                android:id="@+id/fsTxtNextTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"/>
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"
