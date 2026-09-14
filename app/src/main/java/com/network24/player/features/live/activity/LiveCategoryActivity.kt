@@ -82,6 +82,13 @@ class LiveCategoryActivity : BaseActivity() {
         // setup. Defer that work until after the first UI traversal and do the
         // actual construction on IO; View creation remains on the main thread.
         binding.root.post { initializeDataAndLoad() }
+        // Pre-warm the right drawer's lazily-inflated NavigationView right
+        // after the first frame, not on the 3-dot tap. Inflating it inside
+        // the click handler made the very first open of this screen inflate
+        // + measure + layout the menu in the same frame it was told to
+        // start sliding in, dropping frames and making the drawer appear to
+        // jump/flicker in instead of sliding smoothly.
+        binding.root.post { ensureRightDrawerInflated() }
         logPerf("LiveCategory.onCreateScheduled", SystemClock.elapsedRealtime() - activityStartMs)
     }
 
