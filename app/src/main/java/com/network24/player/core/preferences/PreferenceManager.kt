@@ -16,6 +16,12 @@ class PreferenceManager(context: Context) {
         context.getSharedPreferences("network24", Context.MODE_PRIVATE)
 
     companion object {
+        // Main server. app.web24.live -> 185.134.22.131; op.web24.live ->
+        // 185.134.22.150 is the old name (see getServer()).
+        const val SERVER_HOST = "app.web24.live"
+        const val SERVER_URL = "http://$SERVER_HOST:8080"
+        private const val LEGACY_SERVER_HOST = "op.web24.live"
+
         private const val KEY_SERVER = "server"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
@@ -62,7 +68,17 @@ class PreferenceManager(context: Context) {
         editor.apply()
     }
 
-    fun getServer(): String = prefs.getString(KEY_SERVER, "") ?: ""
+    // Logins saved before the switch to app.web24.live still point at
+    // op.web24.live (185.134.22.150), which some ISPs throttle. Both names
+    // reach the same Main server, so move saved logins over without a
+    // re-login.
+    fun getServer(): String {
+        val saved = prefs.getString(KEY_SERVER, "") ?: ""
+        if (!saved.contains(LEGACY_SERVER_HOST)) return saved
+        val migrated = saved.replace(LEGACY_SERVER_HOST, SERVER_HOST)
+        prefs.edit().putString(KEY_SERVER, migrated).apply()
+        return migrated
+    }
     fun getUsername(): String = prefs.getString(KEY_USERNAME, "") ?: ""
     fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""
     fun isRememberMe(): Boolean = prefs.getBoolean(KEY_REMEMBER, false)

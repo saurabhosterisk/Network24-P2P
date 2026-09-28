@@ -57,7 +57,7 @@ class LoginActivity : BaseActivity() {
 
     private fun login() {
 
-        val server = "http://op.web24.live:8080"
+        val server = PreferenceManager.SERVER_URL
 
         val username = binding.edtUsername.text.toString().trim()
 

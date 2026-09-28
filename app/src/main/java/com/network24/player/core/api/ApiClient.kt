@@ -44,7 +44,11 @@ object ApiClient {
                 // connection - measured 78s for 8631 channels on a congested
                 // home WiFi. 90s left almost no margin and could time out a
                 // sync that was still genuinely in progress, not actually stuck.
-                .connectTimeout(150, TimeUnit.SECONDS)
+                // That is a read-time problem only: establishing the connection
+                // never needs minutes, and a 150s connect timeout left Secure
+                // Relay stuck on "Connecting..." for 2.5 min whenever the route
+                // to Main dropped packets - exactly when the relay is needed.
+                .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(150, TimeUnit.SECONDS)
                 .writeTimeout(150, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)

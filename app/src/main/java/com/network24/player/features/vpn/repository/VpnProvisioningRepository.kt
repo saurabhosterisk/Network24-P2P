@@ -23,8 +23,10 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
 
     companion object {
         // Main Server itself (not an LB) - vpn_servers/vpn_peers live in
-        // its DB and vpn_api.php runs there directly.
-        private const val VPN_API_BASE_URL = "http://185.134.22.150:8080/"
+        // its DB and vpn_api.php runs there directly. Uses the same host as
+        // login/streams (app.web24.live), not the 185.134.22.150 address
+        // that some ISPs throttle.
+        private const val VPN_API_BASE_URL = PreferenceManager.SERVER_URL + "/"
     }
 
     private fun ensureDeviceKeyPair(): Pair<String, String> {
