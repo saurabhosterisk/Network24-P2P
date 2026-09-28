@@ -373,7 +373,7 @@ class ChannelListActivity : BaseActivity() {
             runOnUiThread {
 
                 binding.txtPlayerError.text =
-                    "Network connection lost.\nReconnecting...\nAttempt $attempt/5"
+                    "Network connection lost.\nReconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
 
                 binding.txtPlayerError.visibility =
                     View.VISIBLE

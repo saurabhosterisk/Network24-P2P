@@ -255,11 +255,23 @@ object PlayerManager {
 
 
 
-    private const val LIVE_RECOVERY_WINDOW_MS =
-        30000L
+    // Standard: 5 attempts, ~1.5 min with the per-attempt watchdog.
+    // Fast: 3 attempts with shorter gaps, ~45s.
+    private const val STANDARD_RECOVERY_ATTEMPTS = 5
 
-    private const val FAST_LIVE_RECOVERY_WINDOW_MS =
-        15000L
+    private const val FAST_RECOVERY_ATTEMPTS = 3
+
+    private fun maxRecoveryAttempts(
+        mode: PreferenceManager.AutoReconnectMode
+    ): Int = when (mode) {
+        PreferenceManager.AutoReconnectMode.STANDARD -> STANDARD_RECOVERY_ATTEMPTS
+        PreferenceManager.AutoReconnectMode.FAST -> FAST_RECOVERY_ATTEMPTS
+        PreferenceManager.AutoReconnectMode.OFF -> 0
+    }
+
+    // Total attempts for the recovery in progress, shown as "Attempt x/N".
+    private var liveRecoveryMaxAttempts =
+        STANDARD_RECOVERY_ATTEMPTS
 
     private const val STREAM_SWITCH_SETTLE_MS =
         750L
@@ -1111,22 +1123,18 @@ object PlayerManager {
         }
 
 
-        val elapsed =
-            System.currentTimeMillis() -
-                    liveRecoveryStartedAtMs
+        // An attempt already in progress (including its watchdog wait) will
+        // schedule the next one itself.
+        if (
+            liveRecoveryJob?.isActive == true
+        ) return
 
-        val recoveryWindowMs = when (reconnectMode) {
-            PreferenceManager.AutoReconnectMode.STANDARD ->
-                LIVE_RECOVERY_WINDOW_MS
+        // Recovery is limited by a number of attempts, not a time window:
+        // with the per-attempt watchdog a 30s window only ever allowed 2-3
+        // attempts while the UI promised "Attempt x/5".
+        liveRecoveryMaxAttempts = maxRecoveryAttempts(reconnectMode)
 
-            PreferenceManager.AutoReconnectMode.FAST ->
-                FAST_LIVE_RECOVERY_WINDOW_MS
-
-            PreferenceManager.AutoReconnectMode.OFF ->
-                return
-        }
-
-        if (elapsed >= recoveryWindowMs) {
+        if (liveRecoveryAttempt >= liveRecoveryMaxAttempts) {
 
             if (
                 recoverySession != playbackSessionId
@@ -1143,16 +1151,6 @@ object PlayerManager {
 
             return
         }
-
-
-
-
-        if (
-            liveRecoveryJob?.isActive == true
-        ) return
-
-
-
 
 
         val delayTime = when (reconnectMode) {
@@ -1656,6 +1654,10 @@ object PlayerManager {
 
     fun getRecoveryAttempt(): Int {
         return liveRecoveryAttempt
+    }
+
+    fun getRecoveryMaxAttempts(): Int {
+        return liveRecoveryMaxAttempts
     }
 
 

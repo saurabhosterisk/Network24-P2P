@@ -272,7 +272,7 @@ class PlayerActivity : BaseActivity() {
 
                 binding.txtPlayerError.text =
                     if (attempt > 0) {
-                        "Reconnecting...\nAttempt $attempt/5"
+                        "Reconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
                     } else {
                         "Reconnecting..."
                     }
@@ -385,7 +385,7 @@ class PlayerActivity : BaseActivity() {
             runOnUiThread {
 
                 binding.txtPlayerError.text =
-                    "Reconnecting...\nAttempt $attempt/5"
+                    "Reconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
 
                 binding.txtPlayerError.visibility =
                     View.VISIBLE

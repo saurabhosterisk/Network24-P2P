@@ -201,8 +201,8 @@ class SettingsActivity : BaseActivity() {
         val modes = PreferenceManager.AutoReconnectMode.entries.toTypedArray()
         val labels = arrayOf(
             "Off — do not retry failed streams",
-            "Standard — retry over 30 seconds",
-            "Fast — retry over 15 seconds"
+            "Standard — up to 5 retries (about 1.5 minutes)",
+            "Fast — up to 3 quick retries (about 45 seconds)"
         )
         val selectedIndex = modes.indexOf(prefs.getAutoReconnectMode())
 
@@ -222,10 +222,10 @@ class SettingsActivity : BaseActivity() {
                 "Off — failed streams will not retry automatically"
 
             PreferenceManager.AutoReconnectMode.STANDARD ->
-                "Standard — retry over 30 seconds"
+                "Standard — up to 5 retries (about 1.5 minutes)"
 
             PreferenceManager.AutoReconnectMode.FAST ->
-                "Fast — retry over 15 seconds"
+                "Fast — up to 3 quick retries (about 45 seconds)"
         }
 
         findViewById<android.widget.TextView>(R.id.autoReconnectSummary).text = summary
