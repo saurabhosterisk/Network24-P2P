@@ -108,7 +108,7 @@ object UnsupportedDeviceGate {
                     box.visibility = View.GONE
                     Toast.makeText(
                         activity,
-                        "The download didn't work. Check your internet, or use the Downloader code 39643.",
+                        "The download didn't work. Check your internet, or use the Downloader code 39645.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -196,7 +196,7 @@ object UnsupportedDeviceGate {
         try {
             activity.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(activity, "This device can't open the installer. Use the Downloader code 39643.", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, "This device can't open the installer. Use the Downloader code 39645.", Toast.LENGTH_LONG).show()
         }
     }
 }
