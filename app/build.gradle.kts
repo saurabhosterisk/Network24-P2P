@@ -21,7 +21,7 @@ android {
         minSdk = 24
         targetSdk = 35
 
-        versionCode = 61
+        versionCode = 62
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -152,6 +152,8 @@ dependencies {
 
     // VPN (Secure Relay)
     implementation(libs.wireguard.tunnel)
+    // Scheduled channel + TV guide refresh (Settings > Auto Refresh)
+    implementation(libs.androidx.work.runtime.ktx)
 
 
     // Firebase

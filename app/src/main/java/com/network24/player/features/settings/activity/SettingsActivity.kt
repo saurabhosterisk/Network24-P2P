@@ -1,8 +1,6 @@
 package com.network24.player.features.settings.activity
 
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.TextView
@@ -16,9 +14,11 @@ import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.cache.memory.MemoryCache
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.core.sync.AutoRefreshWorker
 import com.network24.player.core.vpn.TunnelManager
 import com.network24.player.features.live.activity.ManageCategoriesActivity
 import com.network24.player.features.login.activity.LoginActivity
+import com.network24.player.features.login.repository.LoginRepository
 import com.network24.player.features.updater.manager.UpdateManager
 import com.network24.player.features.updater.models.UpdateResponse
 import com.network24.player.features.vpn.repository.VpnProvisioningRepository
@@ -50,6 +50,7 @@ class SettingsActivity : BaseActivity() {
     // overwriting the "Connecting..." text) before the async connect
     // has had a chance to finish.
     private var isConnecting = false
+    private var accountRefreshRunning = false
 
     // Same "install unknown apps" permission dance as SplashActivity - true
     // only while waiting to come back from that settings screen, so
@@ -92,7 +93,11 @@ class SettingsActivity : BaseActivity() {
 
         bindAccount()
         bindActions()
+        findViewById<android.widget.ImageButton>(R.id.btnRefreshAccount)
+            .setOnClickListener { refreshAccount() }
+        findViewById<TextView>(R.id.accountUpdated).text = "Tap refresh for the latest account details"
         updateAutoReconnectSummary()
+        updateAutoRefreshSummary()
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
             "Network24  •  Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
@@ -100,6 +105,8 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateAutoRefreshSummary()
+        updateAutoReconnectSummary()
         // Secure Relay turns itself off whenever the app leaves the
         // foreground (Network24App), so the switch needs to reflect that
         // on return - e.g. this Activity was merely paused (not
@@ -122,24 +129,117 @@ class SettingsActivity : BaseActivity() {
 
     private fun bindAccount() {
         val username = prefs.getUsername().ifBlank { "Network24 Account" }
-        findViewById<android.widget.TextView>(R.id.accountName).text = username
+        findViewById<TextView>(R.id.accountName).text = username
+        findViewById<TextView>(R.id.accountAvatar).text =
+            username.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "N"
+        findViewById<TextView>(R.id.accountPlan).text =
+            if (prefs.isTrial()) "Trial account" else "Premium account"
 
-        val expiry = prefs.getExpiry()
-        val expiryText = if (expiry > 0L) {
-            java.text.SimpleDateFormat(
-                "dd MMM yyyy",
-                java.util.Locale.getDefault()
-            ).format(java.util.Date(expiry * 1000L))
-        } else {
-            "Not available"
+        // Status pill: green when active, red when expired/banned/disabled,
+        // amber for anything else the server reports.
+        val status = prefs.getStatus().ifBlank { "Unknown" }
+        val statusColor = when (status.lowercase()) {
+            "active" -> getColor(R.color.success)
+            "expired", "banned", "disabled" -> getColor(R.color.error)
+            else -> getColor(R.color.warning)
+        }
+        findViewById<TextView>(R.id.accountStatusChip).apply {
+            text = "● ${status.replaceFirstChar { it.uppercase() }}"
+            setTextColor(statusColor)
+            background.mutate().setTint(
+                android.graphics.Color.argb(
+                    0x33,
+                    android.graphics.Color.red(statusColor),
+                    android.graphics.Color.green(statusColor),
+                    android.graphics.Color.blue(statusColor)
+                )
+            )
         }
 
-        val status = prefs.getStatus().ifBlank { "Unknown" }
-        val connections =
-            "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"
+        // Expiry tile. exp_date 0/null means the line has no end date.
+        val expiry = prefs.getExpiry()
+        val expiryValue = findViewById<TextView>(R.id.expiryValue)
+        val expirySub = findViewById<TextView>(R.id.expirySub)
+        if (expiry > 0L) {
+            val expiryMs = expiry * 1000L
+            expiryValue.text = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+                .format(java.util.Date(expiryMs))
+            val daysLeft = java.util.concurrent.TimeUnit.MILLISECONDS
+                .toDays(expiryMs - System.currentTimeMillis())
+            expirySub.text = when {
+                daysLeft < 0 -> "Expired"
+                daysLeft == 0L -> "Expires today"
+                daysLeft == 1L -> "1 day left"
+                else -> "$daysLeft days left"
+            }
+            expirySub.setTextColor(
+                getColor(if (daysLeft <= 7) R.color.warning else R.color.text_secondary)
+            )
+        } else {
+            expiryValue.text = "No expiry"
+            expirySub.text = "Ongoing"
+            expirySub.setTextColor(getColor(R.color.text_secondary))
+        }
 
-        findViewById<android.widget.TextView>(R.id.accountDetails).text =
-            "Status: $status\nExpiry: $expiryText\nConnections: $connections"
+        // Connections tile with a usage bar.
+        val active = prefs.getActiveConnections()
+        val max = prefs.getMaxConnections()
+        findViewById<TextView>(R.id.connectionsValue).text = if (max > 0) "$active / $max" else "$active"
+        findViewById<TextView>(R.id.connectionsSub).text = "in use now"
+        findViewById<com.google.android.material.progressindicator.LinearProgressIndicator>(R.id.connectionsBar)
+            .progress = if (max > 0) ((active * 100) / max).coerceIn(if (active > 0) 2 else 0, 100) else 0
+
+        bindRelayTile()
+    }
+
+    private fun bindRelayTile() {
+        val connected = TunnelManager.currentState(this) == Tunnel.State.UP
+        findViewById<TextView>(R.id.relayValue).apply {
+            text = if (connected) "Connected" else "Off"
+            setTextColor(getColor(if (connected) R.color.success else R.color.text_primary))
+        }
+        findViewById<TextView>(R.id.relaySub).text =
+            if (prefs.hasPersistentVpnAccess()) "Always available" else "Per session"
+    }
+
+    /** Re-reads the account from the server (same call the dashboard uses). */
+    private fun refreshAccount() {
+        if (accountRefreshRunning) return
+        val refreshButton = findViewById<android.widget.ImageButton>(R.id.btnRefreshAccount)
+        val updated = findViewById<TextView>(R.id.accountUpdated)
+        accountRefreshRunning = true
+        updated.text = "Updating..."
+        refreshButton.animate().rotationBy(360f).setDuration(600).start()
+        lifecycleScope.launch {
+            try {
+                val response = LoginRepository().login(
+                    server = prefs.getServer(),
+                    username = prefs.getUsername(),
+                    password = prefs.getPassword()
+                )
+                val userInfo = response.body()?.user_info
+                if (response.isSuccessful && userInfo?.auth == 1) {
+                    prefs.saveUserInfo(
+                        username = userInfo.username ?: prefs.getUsername(),
+                        status = userInfo.status ?: prefs.getStatus(),
+                        expiry = userInfo.exp_date?.toLongOrNull() ?: prefs.getExpiry(),
+                        activeConnections = userInfo.active_cons?.toIntOrNull() ?: prefs.getActiveConnections(),
+                        maxConnections = userInfo.max_connections?.toIntOrNull() ?: prefs.getMaxConnections(),
+                        isTrial = userInfo.is_trial == "1",
+                        vpnPersistentAccess = userInfo.vpn_access?.let { it == "1" } ?: prefs.hasPersistentVpnAccess()
+                    )
+                    bindAccount()
+                    updated.text = "Updated just now"
+                } else {
+                    updated.text = "Couldn't update right now - showing last known details"
+                }
+            } catch (_: Exception) {
+                // Keep the last known values when the server is unreachable.
+                updated.text = "Couldn't update right now - showing last known details"
+            } finally {
+                accountRefreshRunning = false
+            }
+        }
     }
 
     private fun bindActions() {
@@ -166,8 +266,11 @@ class SettingsActivity : BaseActivity() {
             startActivity(Intent(this, ManageCategoriesActivity::class.java))
         }
 
+        findViewById<android.view.View>(R.id.autoRefresh).setOnClickListener {
+            startActivity(Intent(this, AutoRefreshActivity::class.java))
+        }
         findViewById<android.view.View>(R.id.autoReconnect).setOnClickListener {
-            showAutoReconnectOptions()
+            startActivity(Intent(this, AutoReconnectActivity::class.java))
         }
 
         // The switch itself is no longer individually focusable/clickable
@@ -181,7 +284,7 @@ class SettingsActivity : BaseActivity() {
         }
 
         findViewById<android.view.View>(R.id.aboutDeviceInfo).setOnClickListener {
-            showAboutDeviceInfo()
+            startActivity(Intent(this, AboutDeviceActivity::class.java))
         }
 
         findViewById<android.view.View>(R.id.checkForUpdates).setOnClickListener {
@@ -197,23 +300,22 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
-    private fun showAutoReconnectOptions() {
-        val modes = PreferenceManager.AutoReconnectMode.entries.toTypedArray()
-        val labels = arrayOf(
-            "Off — do not retry failed streams",
-            "Standard — up to 5 retries (about 1.5 minutes)",
-            "Fast — up to 3 quick retries (about 45 seconds)"
-        )
-        val selectedIndex = modes.indexOf(prefs.getAutoReconnectMode())
-
-        showChoiceDialog(
-            title = "Auto Reconnect",
-            items = labels.toList(),
-            selectedIndex = selectedIndex
-        ) { which ->
-            prefs.setAutoReconnectMode(modes[which])
-            updateAutoReconnectSummary()
+    private fun updateAutoRefreshSummary() {
+        val hours = prefs.getAutoRefreshHours()
+        val interval = when (hours) {
+            0 -> "Off"
+            24 -> "Once a day"
+            else -> "Every $hours hours"
         }
+        val last = prefs.getLastDataRefreshMs()
+        val lastText = when {
+            last <= 0L -> ""
+            System.currentTimeMillis() - last < 60_000L -> " • last refreshed just now"
+            else -> " • last refreshed " + android.text.format.DateUtils.getRelativeTimeSpanString(
+                last, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS
+            ).toString().lowercase()
+        }
+        findViewById<TextView>(R.id.autoRefreshSummary).text = interval + lastText
     }
 
     private fun updateAutoReconnectSummary() {
@@ -229,57 +331,6 @@ class SettingsActivity : BaseActivity() {
         }
 
         findViewById<android.widget.TextView>(R.id.autoReconnectSummary).text = summary
-    }
-
-    private fun showAboutDeviceInfo() {
-        showInfoDialog(
-            title = "About / Device Information",
-            message = buildDeviceInfo()
-        )
-    }
-
-    private fun buildDeviceInfo(): String {
-        val isTvDevice = packageManager.hasSystemFeature(
-            PackageManager.FEATURE_LEANBACK
-        )
-        val manufacturer = Build.MANUFACTURER.orEmpty().ifBlank { "Unknown" }
-        val model = Build.MODEL.orEmpty().ifBlank { "Unknown" }
-        val deviceName = Build.DEVICE.orEmpty()
-            .ifBlank { Build.PRODUCT.orEmpty() }
-            .ifBlank { "Unknown" }
-        val isAmazon = manufacturer.equals("Amazon", ignoreCase = true)
-        val isFireTvModel = model.startsWith("AFT", ignoreCase = true) ||
-            deviceName.startsWith("AFT", ignoreCase = true)
-
-        val platform = when {
-            isAmazon && (isTvDevice || isFireTvModel) -> "Fire TV / Fire OS"
-            isTvDevice -> "Android TV"
-            else -> "Android Mobile"
-        }
-
-        val securityPatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Build.VERSION.SECURITY_PATCH.orEmpty().ifBlank { "Not available" }
-        } else {
-            "Not available"
-        }
-
-        return """
-            APPLICATION
-            App name: ${getString(R.string.app_name)}
-            App version: ${BuildConfig.VERSION_NAME}
-            Build number: ${BuildConfig.VERSION_CODE}
-
-            DEVICE
-            Platform: $platform
-            Manufacturer: $manufacturer
-            Device model: $model
-            Device name: $deviceName
-
-            OPERATING SYSTEM
-            Android version: ${Build.VERSION.RELEASE.orEmpty().ifBlank { "Unknown" }}
-            Android SDK version: ${Build.VERSION.SDK_INT}
-            Security patch level: $securityPatch
-        """.trimIndent()
     }
 
     private fun bindVpnToggle() {
@@ -368,12 +419,13 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun updateVpnSummary() {
+        bindRelayTile()
         val summaryView = findViewById<TextView>(R.id.vpnTunnelSummary)
         val error = vpnErrorMessage
         when {
             prefs.isVpnEnabled() -> {
                 summaryView.setTextColor(getColor(R.color.text_hint))
-                summaryView.text = "Connected — traffic routed through Secure Relay"
+                summaryView.text = "Connected — traffic routed through the in-app VPN"
             }
             error != null -> {
                 summaryView.setTextColor(getColor(R.color.error))

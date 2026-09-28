@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status pill in the Settings account card; colour is set from code. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#264CAF50" />
+    <corners android:radius="999dp" />
+</shape>

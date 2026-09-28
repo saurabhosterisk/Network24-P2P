@@ -339,6 +339,22 @@ open class BaseActivity : AppCompatActivity() {
             row
         }
 
+        // ScrollView ignores android:maxHeight, so on a short landscape phone a
+        // long list pushed the bottom button off screen. Cap the list to the
+        // space left after the title and the button.
+        val density = resources.displayMetrics.density
+        val maxListHeight = minOf(
+            (420 * density).toInt(),
+            resources.displayMetrics.heightPixels - (230 * density).toInt()
+        ).coerceAtLeast((120 * density).toInt())
+        container.measure(
+            View.MeasureSpec.makeMeasureSpec((552 * density).toInt(), View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        if (container.measuredHeight > maxListHeight) {
+            view.findViewById<View>(R.id.choiceScroll).layoutParams.height = maxListHeight
+        }
+
         val negativeView = view.findViewById<TextView>(R.id.dialogNegative)
         negativeView.text = negativeText
         negativeView.setOnClickListener {
@@ -544,6 +560,9 @@ open class BaseActivity : AppCompatActivity() {
 
             when (result) {
                 is SyncResult.Success -> {
+                    // Channels + guide were just refreshed by hand; Auto Refresh
+                    // counts its interval from here.
+                    PreferenceManager(this@BaseActivity).setLastDataRefreshMs(System.currentTimeMillis())
                     Toast.makeText(this@BaseActivity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
                     onTvGuideUpdated()
                     sendBroadcast(Intent(ACTION_EPG_UPDATED))

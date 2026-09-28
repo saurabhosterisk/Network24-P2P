@@ -1,5 +1,6 @@
 package com.network24.player.features.dashboard.activity
 
+import com.network24.player.core.sync.AutoRefreshWorker
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -75,6 +76,8 @@ class DashboardActivity : BaseActivity() {
         if (!hasCredentials()) { startActivity(Intent(this, LoginActivity::class.java)); finishAffinity(); return }
         loadDashboard()
         if (intent.getBooleanExtra(EXTRA_REFRESH_ACCOUNT, false)) refreshAccountInfo()
+        // Catch up if the scheduled Auto Refresh hasn't run for a whole interval.
+        AutoRefreshWorker.refreshIfDue(this)
         binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
     }
 

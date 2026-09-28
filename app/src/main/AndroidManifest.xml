@@ -185,6 +185,18 @@
             android:name=".features.settings.activity.SettingsActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name=".features.settings.activity.AutoRefreshActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name=".features.settings.activity.AutoReconnectActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name=".features.settings.activity.AboutDeviceActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
 
 
 

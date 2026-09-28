@@ -1,5 +1,6 @@
 package com.network24.player
 
+import com.network24.player.core.sync.AutoRefreshWorker
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -26,6 +27,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onCreate() {
         super.onCreate()
+        // Settings > Auto Refresh (channels + TV guide on a schedule)
+        AutoRefreshWorker.schedule(this)
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()

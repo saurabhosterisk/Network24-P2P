@@ -38,6 +38,10 @@ class PreferenceManager(context: Context) {
         private const val KEY_DISABLED_CATEGORIES = "disabled_live_category_ids"
         private const val KEY_DISABLED_CATEGORIES_CACHED = "disabled_live_category_ids_cached"
         private const val KEY_AUTO_RECONNECT_MODE = "auto_reconnect_mode"
+        private const val KEY_AUTO_REFRESH_HOURS = "auto_refresh_hours"
+        private const val KEY_LAST_DATA_REFRESH_MS = "last_data_refresh_ms"
+        // Settings > Auto Refresh default: every 8 hours (0 = off)
+        const val DEFAULT_AUTO_REFRESH_HOURS = 8
         private const val KEY_SUBTITLES_ENABLED = "subtitles_enabled"
 
         private const val KEY_VPN_ENABLED = "vpn_enabled"
@@ -179,6 +183,20 @@ class PreferenceManager(context: Context) {
     // -------------------------
     // Playback preferences
     // -------------------------
+
+    fun getAutoRefreshHours(): Int =
+        prefs.getInt(KEY_AUTO_REFRESH_HOURS, DEFAULT_AUTO_REFRESH_HOURS)
+
+    fun setAutoRefreshHours(hours: Int) {
+        prefs.edit().putInt(KEY_AUTO_REFRESH_HOURS, hours).apply()
+    }
+
+    /** When channels + TV guide were last fully refreshed (auto or manual). */
+    fun getLastDataRefreshMs(): Long = prefs.getLong(KEY_LAST_DATA_REFRESH_MS, 0L)
+
+    fun setLastDataRefreshMs(timeMs: Long) {
+        prefs.edit().putLong(KEY_LAST_DATA_REFRESH_MS, timeMs).apply()
+    }
 
     fun setAutoReconnectMode(mode: AutoReconnectMode) {
         prefs.edit().putString(KEY_AUTO_RECONNECT_MODE, mode.name).apply()
