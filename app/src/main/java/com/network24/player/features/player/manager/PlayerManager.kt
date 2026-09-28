@@ -264,8 +264,19 @@ object PlayerManager {
     private const val STREAM_SWITCH_SETTLE_MS =
         750L
 
+    // How long one recovery attempt may take to get back to READY before the
+    // next attempt starts on its own (see scheduleLiveChannelRecoveryIfNeeded).
+    private const val RECOVERY_ATTEMPT_WATCHDOG_MS =
+        12000L
+
+    // Our Xtream Codes servers cut HLS segments of 9-12s (TARGETDURATION 13)
+    // and keep a ~60s playlist window. At a 10s offset the player sat less than
+    // one segment behind the live edge, so any new segment arriving a little
+    // late drained the buffer and froze playback (NFL RedZone, Sep 2026) while
+    // the old TS-based N24 app kept playing. 30s = a bit over two segments of
+    // cushion and still well inside the 60s window.
     private const val LIVE_TARGET_OFFSET_MS =
-        10000L
+        30000L
 
 
 
@@ -279,7 +290,8 @@ object PlayerManager {
     // minBufferMs is kept below LIVE_TARGET_OFFSET_MS: on IPTV channels with a
     // short HLS DVR window, wanting more buffer than exists between the
     // playback position and the live edge makes BehindLiveWindowException
-    // more likely instead of less.
+    // more likely instead of less. 20s is two 9-12s segments, i.e. the player
+    // keeps fetching until it holds the next segment before it is needed.
     //
     // bufferForPlaybackAfterRebufferMs (the buffer needed to resume after a
     // stall) was 3s - on a fast connection with plenty of throughput that
@@ -295,7 +307,7 @@ object PlayerManager {
         DefaultLoadControl.Builder()
 
             .setBufferDurationsMs(
-                8_000,
+                20_000,
                 30_000,
                 3_000,
                 6_000
@@ -1234,8 +1246,30 @@ object PlayerManager {
                     }
                 }
 
+                // Calling scheduleLiveChannelRecoveryIfNeeded() straight away
+                // (as before) was a no-op: this job is still active, so the
+                // isActive guard returned immediately and the next attempt
+                // depended on the player reporting a new error - which, with
+                // the loader's own silent retries, could take minutes and left
+                // the UI stuck on "Attempt 1/5". Instead give this attempt a
+                // fixed time to reach READY (which cancels this job via
+                // cancelLiveRecovery()) and otherwise move on to the next one.
+                delay(RECOVERY_ATTEMPT_WATCHDOG_MS)
 
+                if (
+                    recoverySession != playbackSessionId ||
+                    exoPlayer?.playbackState == Player.STATE_READY
+                ) {
+                    return@launch
+                }
 
+                android.util.Log.d(
+                    "N24_RECOVERY",
+                    "Attempt $liveRecoveryAttempt did not recover within ${RECOVERY_ATTEMPT_WATCHDOG_MS}ms"
+                )
+
+                // Let the next attempt be scheduled from inside this job.
+                liveRecoveryJob = null
                 scheduleLiveChannelRecoveryIfNeeded()
             }
     }

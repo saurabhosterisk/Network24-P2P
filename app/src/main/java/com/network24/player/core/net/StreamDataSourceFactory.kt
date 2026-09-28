@@ -24,9 +24,13 @@ object StreamDataSourceFactory {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
             // Fire OS 6 can take longer to resolve/connect to IPTV hosts than
-            // newer phones. Avoid treating that initial delay as a dead stream.
-            .setConnectTimeoutMs(30_000)
-            .setReadTimeoutMs(30_000)
+            // newer phones, so this stays well above a normal connect time.
+            // It was 30s, but IptvLoadErrorHandlingPolicy retries a failed
+            // connection up to 6 more times before the player reports an
+            // error, so on a route that drops packets a 30s timeout meant
+            // ~3.5 minutes of silent spinner before any recovery could start.
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
 
         return DataSource.Factory {
