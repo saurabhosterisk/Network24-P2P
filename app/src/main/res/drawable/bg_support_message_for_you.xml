@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A message addressed to this customer (staff replied to them or wrote
+     @username): purple tint and a purple bar on the left, like Discord's
+     highlighted mentions. Keeps the white focus outline for the TV remote. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <layer-list>
+            <item><shape><solid android:color="@color/selection_surface"/><corners android:radius="10dp"/><stroke android:width="2dp" android:color="@color/selection_stroke"/></shape></item>
+            <item android:gravity="start" android:width="3dp"><shape><solid android:color="@color/primary_light"/></shape></item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item><shape><solid android:color="#266750A4"/><corners android:radius="10dp"/></shape></item>
+            <item android:gravity="start" android:width="3dp"><shape><solid android:color="@color/primary_light"/></shape></item>
+        </layer-list>
+    </item>
+</selector>

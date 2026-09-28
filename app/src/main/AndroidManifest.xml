@@ -3,6 +3,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- The app needs Android 7.0 (API 24) - WireGuard (in-app VPN) requires
+         it. minSdk is kept at 21 only so older devices can still install it
+         and see the "device not supported" screen (UnsupportedDeviceGate)
+         instead of Android's bare "App not installed". On those devices the
+         app stops before login, so no VPN code ever runs. -->
+    <uses-sdk tools:overrideLibrary="com.wireguard.android.tunnel" />
+
 
     <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -197,6 +204,11 @@
             android:name=".features.settings.activity.AboutDeviceActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name=".features.support.activity.LiveSupportActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
 
 

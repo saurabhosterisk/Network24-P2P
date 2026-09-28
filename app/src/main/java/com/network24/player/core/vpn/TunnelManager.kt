@@ -74,7 +74,7 @@ object TunnelManager : Tunnel {
             } catch (e: Exception) {
                 // Already down.
             }
-            throw IllegalStateException("VPN (In App) server did not answer the handshake")
+            throw IllegalStateException("VPN server did not answer the handshake")
         }
     }
 

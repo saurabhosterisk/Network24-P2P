@@ -27,6 +27,27 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
         // login/streams (app.web24.live), not the 185.134.22.150 address
         // that some ISPs throttle.
         private const val VPN_API_BASE_URL = PreferenceManager.SERVER_URL + "/"
+
+        // Backup route when a customer's ISP blocks Main: network24.biz
+        // (Hostinger, different network) forwards the same request to Main.
+        // Only used when Main can't be reached at all - the VPN is exactly
+        // what such a customer needs, and they can't get it through Main.
+        private const val VPN_API_BACKUP_URL = "https://network24.biz/app/"
+    }
+
+    /**
+     * Calls Main first; if Main can't be reached at all (blocked, timed
+     * out), tries the network24.biz backup. A reply from Main - even an
+     * error like a wrong password - is final.
+     */
+    private suspend fun <T> withFallback(
+        call: suspend (com.network24.player.core.api.VpnApiService) -> Response<T>
+    ): Response<T> {
+        return try {
+            call(ApiClient.vpnApi(VPN_API_BASE_URL))
+        } catch (e: java.io.IOException) {
+            call(ApiClient.vpnApi(VPN_API_BACKUP_URL))
+        }
     }
 
     private fun ensureDeviceKeyPair(): Pair<String, String> {
@@ -42,14 +63,24 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
         return privateKey to publicKey
     }
 
-    suspend fun provision(): Result<ProvisionedTunnel> {
+    suspend fun provision(): Result<ProvisionedTunnel> =
+        provision(prefs.getUsername(), prefs.getPassword())
+
+    /**
+     * With explicit credentials: the login screen turns the VPN on before
+     * the customer is signed in (for when their ISP blocks Main), using the
+     * username/password they just typed.
+     */
+    suspend fun provision(username: String, password: String): Result<ProvisionedTunnel> {
         val (privateKey, publicKey) = ensureDeviceKeyPair()
         val response = try {
-            ApiClient.vpnApi(VPN_API_BASE_URL).requestPeer(
-                username = prefs.getUsername(),
-                password = prefs.getPassword(),
-                publicKey = publicKey
-            )
+            withFallback { api ->
+                api.requestPeer(
+                    username = username,
+                    password = password,
+                    publicKey = publicKey
+                )
+            }
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -68,11 +99,13 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
     suspend fun rotate(): Result<ProvisionedTunnel> {
         val (privateKey, publicKey) = ensureDeviceKeyPair()
         val response = try {
-            ApiClient.vpnApi(VPN_API_BASE_URL).rotatePeer(
-                username = prefs.getUsername(),
-                password = prefs.getPassword(),
-                publicKey = publicKey
-            )
+            withFallback { api ->
+                api.rotatePeer(
+                    username = prefs.getUsername(),
+                    password = prefs.getPassword(),
+                    publicKey = publicKey
+                )
+            }
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -119,17 +152,20 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
         }
     }
 
-    suspend fun release() {
-        val username = prefs.getUsername()
-        val password = prefs.getPassword()
+    suspend fun release() = release(prefs.getUsername(), prefs.getPassword())
+
+    /** With explicit credentials, for the login screen (nothing saved yet). */
+    suspend fun release(username: String, password: String) {
         val publicKey = prefs.getVpnDevicePublicKey() ?: return
         if (username.isBlank() || password.isBlank()) return
         try {
-            ApiClient.vpnApi(VPN_API_BASE_URL).releasePeer(
-                username = username,
-                password = password,
-                publicKey = publicKey
-            )
+            withFallback { api ->
+                api.releasePeer(
+                    username = username,
+                    password = password,
+                    publicKey = publicKey
+                )
+            }
         } catch (e: Exception) {
             // Best-effort - the server prunes stale peers independently,
             // and the local tunnel is already brought down regardless.

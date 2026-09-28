@@ -425,7 +425,7 @@ class SettingsActivity : BaseActivity() {
         when {
             prefs.isVpnEnabled() -> {
                 summaryView.setTextColor(getColor(R.color.text_hint))
-                summaryView.text = "Connected — traffic routed through the in-app VPN"
+                summaryView.text = "Connected — traffic routed through the VPN"
             }
             error != null -> {
                 summaryView.setTextColor(getColor(R.color.error))

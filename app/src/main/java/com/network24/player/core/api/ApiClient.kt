@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 object ApiClient {
     private val apiCache = ConcurrentHashMap<String, ApiService>()
     private val vpnApiCache = ConcurrentHashMap<String, VpnApiService>()
+    private val supportApiCache = ConcurrentHashMap<String, SupportApiService>()
 
     fun get(baseUrl: String): ApiService {
         return apiCache.getOrPut(baseUrl) {
@@ -27,6 +28,12 @@ object ApiClient {
     fun vpnApi(baseUrl: String): VpnApiService {
         return vpnApiCache.getOrPut(baseUrl) {
             retrofit(baseUrl).create(VpnApiService::class.java)
+        }
+    }
+
+    fun supportApi(baseUrl: String): SupportApiService {
+        return supportApiCache.getOrPut(baseUrl) {
+            retrofit(baseUrl).create(SupportApiService::class.java)
         }
     }
 
@@ -113,5 +120,6 @@ object ApiClient {
     fun clear() {
         apiCache.clear()
         vpnApiCache.clear()
+        supportApiCache.clear()
     }
 }

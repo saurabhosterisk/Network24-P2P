@@ -38,6 +38,7 @@ class SplashActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (blockedByGate) return
         setContentView(R.layout.activity_splash)
 
         // If the installed build is newer than the one we last recorded, an
@@ -126,6 +127,7 @@ class SplashActivity : BaseActivity() {
     // 🔥 Naya method: Jab user Android install screen se wapas aaye
     override fun onResume() {
         super.onResume()
+        if (blockedByGate) return
         // Agar install command bheja gaya tha, aur app wapas onResume mein aa gayi iska matlab:
         // App update nahi hui (Ya toh user ne cancel kiya, ya purana version hone ki wajah se OS ne reject kar diya)
         if (isInstallingApk) {

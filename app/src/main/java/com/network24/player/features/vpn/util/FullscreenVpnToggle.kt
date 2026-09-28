@@ -129,11 +129,11 @@ class FullscreenVpnToggle(
 
     private fun startVpnTunnel() {
         isConnecting = true
-        toast("Connecting to VPN (In App)…")
+        toast("Connecting to VPN…")
         activity.lifecycleScope.launch {
             val result = vpnRepository.provision()
             result.onSuccess { tunnel ->
-                bringUpAndFinish(tunnel, "VPN (In App) connected")
+                bringUpAndFinish(tunnel, "VPN connected")
             }.onFailure {
                 handleFailure(it.message ?: VPN_UNREACHABLE_MESSAGE)
                 isConnecting = false
@@ -145,7 +145,7 @@ class FullscreenVpnToggle(
     private fun rotateVpnServer() {
         isConnecting = true
         pendingRotate = false
-        toast("Switching VPN (In App) server…")
+        toast("Switching VPN server…")
         activity.lifecycleScope.launch {
             // Local teardown first - vpn_api.php's rotate_peer releases
             // the old peer server-side regardless, but the local tunnel
@@ -158,7 +158,7 @@ class FullscreenVpnToggle(
             }
             val result = vpnRepository.rotate()
             result.onSuccess { tunnel ->
-                bringUpAndFinish(tunnel, "Connected to a different VPN (In App) server")
+                bringUpAndFinish(tunnel, "Connected to a different VPN server")
             }.onFailure {
                 handleFailure(it.message ?: VPN_UNREACHABLE_MESSAGE)
                 isConnecting = false
@@ -197,7 +197,7 @@ class FullscreenVpnToggle(
             vpnRepository.release()
             prefs.setVpnEnabled(false)
             refresh()
-            toast("VPN (In App) disconnected")
+            toast("VPN disconnected")
         }
     }
 

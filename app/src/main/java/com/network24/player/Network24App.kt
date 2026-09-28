@@ -1,5 +1,6 @@
 package com.network24.player
 
+import com.network24.player.core.compat.UnsupportedDeviceGate
 import com.network24.player.core.sync.AutoRefreshWorker
 import android.app.Activity
 import android.app.Application
@@ -27,6 +28,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
 
     override fun onCreate() {
         super.onCreate()
+        // Older than Android 7.0: only the "device not supported" screen runs.
+        if (UnsupportedDeviceGate.isUnsupported) return
         // Settings > Auto Refresh (channels + TV guide on a schedule)
         AutoRefreshWorker.schedule(this)
         if (BuildConfig.DEBUG) {

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Left accent bar for quoted replies. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="#1FFFFFFF"/><corners android:radius="6dp"/></shape></item>
+    <item android:gravity="start" android:width="3dp"><shape><solid android:color="@color/primary_light"/><corners android:radius="2dp"/></shape></item>
+</layer-list>

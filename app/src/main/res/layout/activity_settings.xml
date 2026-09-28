@@ -268,7 +268,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VPN (IN APP)"
+                        android:text="VPN"
                         android:textColor="@color/text_hint"
                         android:textSize="11sp"
                         android:textStyle="bold"
@@ -596,7 +596,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Virtual Private Network (In App)"
+                    android:text="Virtual Private Network"
                     android:textColor="@color/text_primary"
                     android:textSize="16sp"
                     android:textStyle="bold" />

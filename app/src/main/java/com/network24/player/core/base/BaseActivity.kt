@@ -1,5 +1,6 @@
 package com.network24.player.core.base
 
+import com.network24.player.core.compat.UnsupportedDeviceGate
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.BroadcastReceiver
@@ -39,8 +40,17 @@ import kotlinx.coroutines.launch
 
 open class BaseActivity : AppCompatActivity() {
 
+    /** True on devices older than Android 7.0: the "not supported" screen is showing instead. */
+    protected var blockedByGate = false
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (UnsupportedDeviceGate.isUnsupported) {
+            blockedByGate = true
+            UnsupportedDeviceGate.show(this)
+            return
+        }
         Network24CrashReporter.activityStarted(this)
         enableFullscreen()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

@@ -15,6 +15,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.io.IOException
+import androidx.activity.result.contract.ActivityResultContracts
+import com.network24.player.core.vpn.TunnelManager
+import com.network24.player.features.vpn.repository.VpnProvisioningRepository
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.network24.player.core.database.DatabaseProvider
@@ -26,15 +31,32 @@ class LoginActivity : BaseActivity() {
 
     private lateinit var repository: LoginRepository
     private lateinit var prefs: PreferenceManager
+    private lateinit var vpnRepository: VpnProvisioningRepository
+    private var vpnBusy = false
+
+    // Android's one-time "allow this app to set up a VPN" prompt.
+    private val vpnConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            startVpn()
+        } else {
+            vpnBusy = false
+            renderVpn()
+            Toast.makeText(this, "VPN permission was not granted", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (blockedByGate) return
 
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         repository = LoginRepository()
         prefs = PreferenceManager(this)
+        vpnRepository = VpnProvisioningRepository(prefs)
+        binding.loginVpnToggle.setOnClickListener { toggleVpn() }
+        renderVpn()
 
 
         // Login button par focus
@@ -179,11 +201,16 @@ Body: $body
 
                 setLoading(false)
 
+                // The usual reason in the field: the customer's internet
+                // provider blocks our server. Point them at the VPN.
+                val vpnOn = TunnelManager.currentState(this@LoginActivity) == Tunnel.State.UP
                 Toast.makeText(
                     this@LoginActivity,
-                    "Unable to connect to server, Please try again.",
+                    if (vpnOn) "Unable to connect to server, Please try again."
+                    else "Unable to connect to server. If your internet provider blocks Network24, turn on VPN and tap Login again.",
                     Toast.LENGTH_LONG
                 ).show()
+                if (!vpnOn) binding.loginVpnToggle.requestFocus()
 
             } catch (e: Exception) {
 
@@ -195,6 +222,100 @@ Body: $body
                     Toast.LENGTH_LONG
                 ).show()
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (blockedByGate) return
+        renderVpn()
+    }
+
+    // ---------------------------------------------------------------- VPN before sign-in
+
+    private fun toggleVpn() {
+        if (vpnBusy) return
+        if (TunnelManager.currentState(this) == Tunnel.State.UP) {
+            stopVpn()
+            return
+        }
+        val username = binding.edtUsername.text.toString().trim()
+        val password = binding.edtPassword.text.toString().trim()
+        if (username.isEmpty() || password.isEmpty()) {
+            // The VPN is set up with the customer's own login.
+            if (username.isEmpty()) binding.edtUsername.error = "Enter Username"
+            if (password.isEmpty()) binding.edtPassword.error = "Enter Password"
+            Toast.makeText(this, "Enter your username and password first, then turn on VPN.", Toast.LENGTH_LONG).show()
+            return
+        }
+        vpnBusy = true
+        renderVpn()
+        val consent = GoBackend.VpnService.prepare(this)
+        if (consent != null) vpnConsent.launch(consent) else startVpn()
+    }
+
+    private fun startVpn() {
+        val username = binding.edtUsername.text.toString().trim()
+        val password = binding.edtPassword.text.toString().trim()
+        lifecycleScope.launch {
+            val result = vpnRepository.provision(username, password)
+            result.onSuccess { tunnel ->
+                try {
+                    TunnelManager.bringUp(this@LoginActivity, tunnel.config)
+                    prefs.setVpnEnabled(true)
+                    Toast.makeText(this@LoginActivity, "VPN connected. You can sign in now.", Toast.LENGTH_SHORT).show()
+                    binding.btnLogin.requestFocus()
+                } catch (e: Exception) {
+                    prefs.setVpnEnabled(false)
+                    Toast.makeText(this@LoginActivity, "Couldn't Connect to VPN Servers.", Toast.LENGTH_LONG).show()
+                }
+            }.onFailure { error ->
+                prefs.setVpnEnabled(false)
+                // Server wording (vpn_api.php) when there is a reply; ours only
+                // when neither Main nor the backup route could be reached.
+                val message = when {
+                    error is IOException -> "Couldn't reach the VPN service. Check your internet connection and try again."
+                    error.message.isNullOrBlank() -> "Couldn't Connect to VPN Servers."
+                    error.message!!.contains("login", ignoreCase = true) -> "Username or password is incorrect."
+                    else -> error.message!!
+                }
+                Toast.makeText(this@LoginActivity, message, Toast.LENGTH_LONG).show()
+            }
+            vpnBusy = false
+            renderVpn()
+        }
+    }
+
+    private fun stopVpn() {
+        vpnBusy = true
+        renderVpn()
+        val username = binding.edtUsername.text.toString().trim()
+        val password = binding.edtPassword.text.toString().trim()
+        lifecycleScope.launch {
+            try {
+                TunnelManager.bringDown(this@LoginActivity)
+            } catch (e: Exception) {
+                // Already down.
+            }
+            vpnRepository.release(username, password)
+            prefs.setVpnEnabled(false)
+            vpnBusy = false
+            renderVpn()
+        }
+    }
+
+    private fun renderVpn() {
+        val on = TunnelManager.currentState(this) == Tunnel.State.UP
+        binding.loginVpnSwitch.isChecked = on || vpnBusy
+        binding.loginVpnLabel.text = when {
+            vpnBusy -> "VPN…"
+            on -> "VPN On"
+            else -> "VPN"
+        }
+        binding.loginVpnHint.text = when {
+            vpnBusy -> "Connecting to VPN…"
+            on -> "VPN connected. Tap Login."
+            else -> "Can't sign in? Turn on VPN, then tap Login."
         }
     }
 

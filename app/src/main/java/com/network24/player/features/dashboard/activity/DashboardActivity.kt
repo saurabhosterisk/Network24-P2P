@@ -40,6 +40,7 @@ import com.network24.player.features.live.repository.SyncCallback
 import com.network24.player.features.login.activity.LoginActivity
 import com.network24.player.features.login.repository.LoginRepository
 import com.network24.player.features.settings.activity.SettingsActivity
+import com.network24.player.features.support.activity.LiveSupportActivity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -158,7 +159,7 @@ class DashboardActivity : BaseActivity() {
         binding.cardLiveTv.setOnClickListener { startActivity(Intent(this, LiveCategoryActivity::class.java)) }
         binding.cardFavorites.setOnClickListener { startActivity(Intent(this, FavoriteChannelsActivity::class.java)) }
         binding.cardNotification.setOnClickListener { openCinemaPro3() }
-        binding.cardSupport.setOnClickListener { showDiscordJoin() }
+        binding.cardSupport.setOnClickListener { startActivity(Intent(this, LiveSupportActivity::class.java)) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, LiveCategoryActivity::class.java).apply { putExtra("epg_mode", true) }) }
         binding.btnRenew.setOnClickListener { showRenewPaymentQr() }

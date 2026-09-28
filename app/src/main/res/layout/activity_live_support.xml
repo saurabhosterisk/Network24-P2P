@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live Support: the N24 Discord support channels inside the app. Header
+     matches the other sub-screens (accent bar, title, subtitle). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_dashboard"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/supportBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_back_focus"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:padding="12dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/text_primary" />
+
+        <View
+            android:layout_width="3dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="12dp"
+            android:background="@color/primary_light" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="LIVE SUPPORT"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/supportSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Network24 community on Discord"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnMore"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_more_focus"
+            android:contentDescription="Open menu"
+            android:focusable="true"
+            android:padding="8dp"
+            android:src="@drawable/ic_more_vert"
+            android:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Channel list -->
+        <LinearLayout
+            android:id="@+id/channelColumn"
+            android:layout_width="220dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_settings_card"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="6dp"
+                android:letterSpacing="0.12"
+                android:text="CHANNELS"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channelList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:scrollbars="none" />
+        </LinearLayout>
+
+        <!-- Messages + composer -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_settings_card"
+            android:orientation="vertical"
+            android:paddingStart="6dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:id="@+id/channelTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="4dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/messageList"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingBottom="6dp"
+                    android:scrollbars="vertical" />
+
+                <TextView
+                    android:id="@+id/messageStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:textColor="@color/text_hint"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/messageProgress"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="center"
+                    android:indeterminateTint="@color/primary_light"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <!-- "Replying to ..." bar -->
+            <LinearLayout
+                android:id="@+id/replyBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/bg_support_quote"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/replyText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <ImageButton
+                    android:id="@+id/replyCancel"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_back_focus"
+                    android:contentDescription="Cancel reply"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_close"
+                    android:tint="@color/text_primary" />
+            </LinearLayout>
+
+            <!-- Picked picture waiting to be sent -->
+            <LinearLayout
+                android:id="@+id/imageBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:layout_marginBottom="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/imagePreview"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:contentDescription="Picture to send"
+                    android:scaleType="centerCrop" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="Picture ready to send"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <ImageButton
+                    android:id="@+id/imageCancel"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_back_focus"
+                    android:contentDescription="Remove picture"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_close"
+                    android:tint="@color/text_primary" />
+            </LinearLayout>
+
+            <!-- Composer -->
+            <LinearLayout
+                android:id="@+id/composer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/btnPickImage"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_support_round_button"
+                    android:contentDescription="Add a picture"
+                    android:focusable="true"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_image" />
+
+                <EditText
+                    android:id="@+id/messageInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_support_input"
+                    android:hint="Message"
+                    android:imeOptions="actionSend|flagNoExtractUi"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:maxLength="1800"
+                    android:maxLines="4"
+                    android:minHeight="44dp"
+                    android:paddingStart="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="10dp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:textSize="15sp" />
+
+                <ImageButton
+                    android:id="@+id/btnSend"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/bg_support_round_button"
+                    android:contentDescription="Send"
+                    android:focusable="true"
+                    android:padding="11dp"
+                    android:src="@drawable/ic_send" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/readOnlyNote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="10dp"
+                android:text="This channel is read-only. Pick another channel on the left to ask a question."
+                android:textColor="@color/text_hint"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

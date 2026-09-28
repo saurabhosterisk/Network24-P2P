@@ -14,14 +14,17 @@ android {
     defaultConfig {
         applicationId = "com.network24.player"
 
-        // Raised from 21 to 24: the WireGuard tunnel library (Secure
-        // Relay) needs 24+ to avoid a CompletableFuture crash on VPN
-        // teardown - confirmed live on an Android 9 (API 28) Fire TV.
-        // First-gen Fire TV Stick (API 21-22) no longer installs.
-        minSdk = 24
+        // The app really needs Android 7.0 (API 24): the WireGuard tunnel
+        // library (in-app VPN) needs 24+ to avoid a CompletableFuture crash
+        // on VPN teardown - confirmed live on an Android 9 (API 28) Fire TV.
+        // minSdk stays at 21 only so older devices (e.g. first-gen Fire TV
+        // Stick, API 21-22) can install it and see UnsupportedDeviceGate's
+        // "device not supported" screen instead of "App not installed".
+        // Nothing past that screen runs below API 24.
+        minSdk = 21
         targetSdk = 35
 
-        versionCode = 63
+        versionCode = 64
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -83,6 +86,13 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+
+    lint {
+        // minSdk is 21 only for the "device not supported" screen; below
+        // API 24 the app never gets past it (UnsupportedDeviceGate), so
+        // API 23/24 calls elsewhere are safe and must not fail the build.
+        disable += setOf("NewApi", "InlinedApi")
     }
 
 
