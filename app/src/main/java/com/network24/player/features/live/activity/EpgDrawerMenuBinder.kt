@@ -47,7 +47,7 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
                     true
                 }
                 R.id.action_refresh_all -> {
-                    activity.loadChannels()
+                    activity.refreshChannelsFromMenu()
                     true
                 }
                 R.id.action_refresh_guide -> {

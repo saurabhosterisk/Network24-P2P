@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 import androidx.activity.addCallback
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -51,12 +52,14 @@ import com.network24.player.features.player.state.PlayerState
 import com.network24.player.features.player.ui.dialogs.StreamInfoDialog
 import com.network24.player.features.vpn.util.FullscreenVpnToggle
 
+import com.network24.player.features.live.repository.SyncCallback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import kotlin.math.roundToInt
 import java.util.Locale
 
 
@@ -71,6 +74,50 @@ class EpgChannelListActivity : BaseActivity() {
 
     /** Called by the EPG screen's drawer binder. */
     internal fun refreshGuideFromMenu() = refreshTvGuide()
+
+    private var isRefreshingChannels = false
+
+    /**
+     * Drawer "Refresh Channels": download the catalogue from the server like
+     * the Live TV screens do, then rebuild this grid. It used to only re-read
+     * the local database, so nothing visibly happened.
+     */
+    internal fun refreshChannelsFromMenu() {
+        if (isRefreshingChannels) return
+        isRefreshingChannels = true
+        val msg = "Refreshing channels & categories…"
+        runCallbackSyncWithLoader(
+            loadingMessage = msg,
+            successMessage = "Channels Refreshed Successfully!"
+        ) { onSuccess, onError ->
+            repository.syncAllData(
+                server = prefs.getServer(),
+                username = prefs.getUsername(),
+                password = prefs.getPassword(),
+                callback = object : SyncCallback {
+                    override fun onSuccess() {
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            isRefreshingChannels = false
+                            prefs.setLastSyncTime(System.currentTimeMillis())
+                            onSuccess()
+                            loadChannels()
+                        }
+                    }
+
+                    override fun onError(message: String) {
+                        lifecycleScope.launch(Dispatchers.Main) {
+                            isRefreshingChannels = false
+                            onError("Failed to refresh: $message")
+                        }
+                    }
+
+                    override fun onProgress(percent: Int) {
+                        showLoader("$msg $percent%")
+                    }
+                }
+            )
+        }
+    }
 
 
 
@@ -132,8 +179,10 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
+    // Real dp (converted by minuteWidthPx()) so the guide has the same
+    // scale on phones and TVs; 4.5dp is the 9px/minute Fire TV always had.
     internal val minuteWidthDp =
-        9.0f
+        4.5f
 
 
 
@@ -500,6 +549,12 @@ class EpgChannelListActivity : BaseActivity() {
             FrameLayout(this).apply {
 
 
+                // contentRoot is cloned into a ConstraintSet for fullscreen,
+                // which throws unless every child has an id.
+                id =
+                    View.generateViewId()
+
+
                 setBackgroundColor(
                     Color.argb(
                         205,
@@ -709,13 +764,22 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-        (binding.root as ViewGroup)
+        // Inside contentRoot, not the DrawerLayout root: DrawerLayout treats
+        // every child without a gravity as content, and this mask (even
+        // once hidden) sat on top of the right drawer, so every tap on a
+        // menu item just closed the drawer and nothing ran.
+        binding.contentRoot
             .addView(
                 loadingMask,
-                ViewGroup.LayoutParams(
-                    -1,
-                    -1
-                )
+                ConstraintLayout.LayoutParams(
+                    0,
+                    0
+                ).apply {
+                    topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                    bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                    startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                    endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                }
             )
 
 
@@ -1545,6 +1609,13 @@ class EpgChannelListActivity : BaseActivity() {
             // whenever new guide data is rendered (not on the 60s now-line
             // tick, which must not replace a program the user focused).
             selectedChannel?.let { updateTopInfo(it) }
+
+            // That rebuild also removed the channel the first render had
+            // focused, so on a TV remote focus fell back to the Back button.
+            if (pendingFocusChannelId == null) {
+                pendingFocusChannelId =
+                    selectedChannel?.stream_id
+            }
         }
 
 
@@ -1748,8 +1819,8 @@ class EpgChannelListActivity : BaseActivity() {
                 label,
 
                 LinearLayout.LayoutParams(
-                    (30L * minuteWidthDp)
-                        .toInt(),
+                    timeToX(timelineStart + (elapsed + 30L) * 60_000L) -
+                            timeToX(timelineStart + elapsed * 60_000L),
 
                     dp(headerHeightDp)
                 )
@@ -1827,17 +1898,17 @@ class EpgChannelListActivity : BaseActivity() {
 
             LinearLayout.LayoutParams(
                 dp(channelWidthDp - 5),
-                dp(rowHeightDp - 6)
+                rowCardHeightPx()
             ).apply {
 
 
                 topMargin =
-                    dp(3)
+                    rowInsetPx()
 
 
 
                 bottomMargin =
-                    dp(3)
+                    rowInsetPx()
 
 
 
@@ -1902,6 +1973,9 @@ class EpgChannelListActivity : BaseActivity() {
                     stop > timelineStart &&
                             start < timelineEnd
                 }
+                .sortedBy {
+                    it.startTimestamp ?: Long.MAX_VALUE
+                }
 
 
 
@@ -1915,7 +1989,7 @@ class EpgChannelListActivity : BaseActivity() {
 
             addNoInformationBlock(
                 timeline,
-                timelineEnd - timelineStart
+                timeToX(timelineEnd) - timeToX(timelineStart)
             )
 
 
@@ -1932,6 +2006,8 @@ class EpgChannelListActivity : BaseActivity() {
             programs.forEach { program ->
 
 
+                // A listing that overlaps the previous one starts where that
+                // one ended, instead of pushing the rest of the row late.
                 val start =
 
                     (
@@ -1939,7 +2015,7 @@ class EpgChannelListActivity : BaseActivity() {
                                 ?: cursor
                             )
                         .coerceIn(
-                            timelineStart,
+                            cursor,
                             timelineEnd
                         )
 
@@ -1970,7 +2046,7 @@ class EpgChannelListActivity : BaseActivity() {
 
                     addEmptyBlock(
                         timeline,
-                        start - cursor
+                        timeToX(start) - timeToX(cursor)
                     )
 
 
@@ -1993,7 +2069,7 @@ class EpgChannelListActivity : BaseActivity() {
                             timeline,
                             channel,
                             program,
-                            stop - start
+                            timeToX(stop) - timeToX(start)
                         )
                     )
 
@@ -2014,7 +2090,7 @@ class EpgChannelListActivity : BaseActivity() {
 
                 addEmptyBlock(
                     timeline,
-                    timelineEnd - cursor
+                    timeToX(timelineEnd) - timeToX(cursor)
                 )
             }
         }
@@ -2040,7 +2116,7 @@ class EpgChannelListActivity : BaseActivity() {
 
             FrameLayout.LayoutParams(
                 -2,
-                dp(rowHeightDp)
+                rowPx()
             )
         )
 
@@ -2053,8 +2129,7 @@ class EpgChannelListActivity : BaseActivity() {
 
             addNowLine(
                 rowFrame,
-                timelineStart,
-                rowHeightDp
+                rowPx()
             )
         }
 
@@ -2066,7 +2141,7 @@ class EpgChannelListActivity : BaseActivity() {
 
             LinearLayout.LayoutParams(
                 -2,
-                dp(rowHeightDp)
+                rowPx()
             )
         )
     }
@@ -2299,19 +2374,8 @@ class EpgChannelListActivity : BaseActivity() {
 
     private fun addNoInformationBlock(
         parent: LinearLayout,
-        durationMs: Long
+        widthPx: Int
     ) {
-
-
-        val minutes =
-            (
-                    durationMs /
-                            60_000L
-                    )
-                .coerceAtLeast(
-                    5L
-                )
-
 
 
         val cardGap =
@@ -2320,15 +2384,8 @@ class EpgChannelListActivity : BaseActivity() {
 
 
         val cardWidth =
-            (
-                    minutes *
-                            minuteWidthDp
-                    )
-                .toInt()
-                .minus(cardGap)
-                .coerceAtLeast(
-                    dp(120)
-                )
+            (widthPx - cardGap)
+                .coerceAtLeast(1)
 
 
 
@@ -2398,22 +2455,23 @@ class EpgChannelListActivity : BaseActivity() {
 
             LinearLayout.LayoutParams(
                 cardWidth,
-                dp(rowHeightDp - 6)
+                rowCardHeightPx()
             ).apply {
 
 
+                // Card + gap always adds up to exactly widthPx.
                 marginEnd =
-                    cardGap
+                    widthPx - cardWidth
 
 
 
                 topMargin =
-                    dp(3)
+                    rowInsetPx()
 
 
 
                 bottomMargin =
-                    dp(3)
+                    rowInsetPx()
             }
         )
     }
@@ -2428,19 +2486,8 @@ class EpgChannelListActivity : BaseActivity() {
 
     private fun addEmptyBlock(
         parent: LinearLayout,
-        durationMs: Long
+        widthPx: Int
     ) {
-
-
-        val minutes =
-            (
-                    durationMs /
-                            60_000L
-                    )
-                .coerceAtLeast(
-                    5L
-                )
-
 
 
         parent.addView(
@@ -2449,27 +2496,21 @@ class EpgChannelListActivity : BaseActivity() {
 
             LinearLayout.LayoutParams(
 
-                (
-                        minutes *
-                                minuteWidthDp
-                        )
-                    .toInt()
-                    .coerceAtLeast(
-                        dp(18)
-                    ),
+                widthPx
+                    .coerceAtLeast(0),
 
-                dp(rowHeightDp - 6)
+                rowCardHeightPx()
 
             ).apply {
 
 
                 topMargin =
-                    dp(3)
+                    rowInsetPx()
 
 
 
                 bottomMargin =
-                    dp(3)
+                    rowInsetPx()
             }
         )
     }
@@ -2486,7 +2527,7 @@ class EpgChannelListActivity : BaseActivity() {
         parent: LinearLayout,
         channel: LiveChannel,
         program: EpgEntity,
-        durationMs: Long
+        widthPx: Int
     ): View {
 
 
@@ -2525,32 +2566,16 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-        val minutes =
-            (
-                    durationMs /
-                            60_000L
-                    )
-                .coerceAtLeast(
-                    5L
-                )
-
-
-
         val cardGap =
             dp(6)
 
 
 
+        // Exactly as wide as the program's time slot - no minimum width,
+        // which used to push every later cell in the row off its time.
         val cardWidth =
-            (
-                    minutes *
-                            minuteWidthDp
-                    )
-                .toInt()
-                .minus(cardGap)
-                .coerceAtLeast(
-                    dp(55)
-                )
+            (widthPx - cardGap)
+                .coerceAtLeast(1)
 
 
 
@@ -2698,6 +2723,15 @@ class EpgChannelListActivity : BaseActivity() {
 
                 isClickable =
                     false
+
+
+
+                // Too narrow for any readable text (a few-minute filler);
+                // the title still shows in the info panel on focus.
+                if (cardWidth < dp(28)) {
+                    visibility =
+                        View.INVISIBLE
+                }
             }
 
 
@@ -2725,22 +2759,23 @@ class EpgChannelListActivity : BaseActivity() {
 
             LinearLayout.LayoutParams(
                 cardWidth,
-                dp(rowHeightDp - 6)
+                rowCardHeightPx()
             ).apply {
 
 
+                // Card + gap always adds up to exactly widthPx.
                 marginEnd =
-                    cardGap
+                    widthPx - cardWidth
 
 
 
                 topMargin =
-                    dp(3)
+                    rowInsetPx()
 
 
 
                 bottomMargin =
-                    dp(3)
+                    rowInsetPx()
             }
         )
 
@@ -3976,12 +4011,9 @@ class EpgChannelListActivity : BaseActivity() {
             isNow
         ) {
 
-            // A lightweight "airing now" cue - a dark amber tint and
-            // border, not a full bright block. The previous solid
-            // #FF8800 fill on every live cell made it impossible to
-            // tell "this is live" apart from "this is focused" at a
-            // glance, since focus was only a thin border on top of the
-            // same loud color.
+            // A lightweight "airing now" cue in the app's purple - a dark
+            // tint and a lilac border, not a full bright block, so it
+            // still reads differently from focus (white border).
             return GradientDrawable().apply {
 
 
@@ -3993,9 +4025,9 @@ class EpgChannelListActivity : BaseActivity() {
 
                 setColor(
                     Color.rgb(
-                        46,
-                        36,
-                        20
+                        35,
+                        29,
+                        52
                     )
                 )
 
@@ -4003,11 +4035,7 @@ class EpgChannelListActivity : BaseActivity() {
 
                 setStroke(
                     dp(2),
-                    Color.rgb(
-                        255,
-                        193,
-                        7
-                    )
+                    getColor(R.color.primary_light)
                 )
             }
         }
@@ -4040,21 +4068,13 @@ class EpgChannelListActivity : BaseActivity() {
                 strong
             )
 
-                Color.rgb(
-                    81,
-                    45,
-                    49
-                )
+                getColor(R.color.selection_surface_pressed)
 
             else if (
                 active
             )
 
-                Color.rgb(
-                    58,
-                    37,
-                    40
-                )
+                getColor(R.color.selection_surface)
 
             else
 
@@ -4073,11 +4093,7 @@ class EpgChannelListActivity : BaseActivity() {
                 strong
             )
 
-                Color.rgb(
-                    215,
-                    25,
-                    32
-                )
+                getColor(R.color.primary)
 
             else if (
                 active
@@ -4246,6 +4262,27 @@ class EpgChannelListActivity : BaseActivity() {
 
 
     private val density by lazy { resources.displayMetrics.density }
+
+    internal fun minuteWidthPx(): Float =
+        minuteWidthDp * density
+
+    /**
+     * X position of a time in the guide. Every cell edge and the time header
+     * come from this one function, so a row can never drift away from the
+     * times above it (short programs used to be widened to a minimum size,
+     * which pushed the rest of that row late).
+     */
+    internal fun timeToX(timeMs: Long): Int =
+        ((timeMs - timelineStart) / 60_000f * minuteWidthPx()).roundToInt()
+
+    // Row sizes in whole pixels, shared by the channel column and the guide
+    // rows. dp(70) vs dp(64) + 2 * dp(3) differ by a pixel after rounding on
+    // some screens (e.g. 2.625 density), which added up row by row.
+    internal fun rowPx(): Int = dp(rowHeightDp)
+
+    private fun rowInsetPx(): Int = dp(3)
+
+    private fun rowCardHeightPx(): Int = rowPx() - 2 * rowInsetPx()
 
     internal fun dp(
         value: Int

@@ -15,7 +15,7 @@ import java.util.Locale
  * the already-large activity file.
  */
 fun EpgChannelListActivity.updateStickyDate(scrollX: Int) {
-    val safeMinuteWidth = minuteWidthDp.coerceAtLeast(1f)
+    val safeMinuteWidth = minuteWidthPx().coerceAtLeast(1f)
     val minutesFromStart = scrollX / safeMinuteWidth
     val end = timelineEnd
     val timestamp = timelineStart + (minutesFromStart * 60_000L).toLong()
@@ -30,20 +30,18 @@ fun EpgChannelListActivity.isTodayTimeline(): Boolean =
     timelineStart <= System.currentTimeMillis() &&
         timelineEnd > System.currentTimeMillis()
 
-fun EpgChannelListActivity.addNowLine(parent: FrameLayout, start: Long, heightDp: Int) {
+fun EpgChannelListActivity.addNowLine(parent: FrameLayout, heightPx: Int) {
     val now = System.currentTimeMillis()
-    val end = timelineEnd
-    if (now < start || now >= end) return
-    val minutes = ((now - start).coerceAtLeast(0L) / 60_000L).toFloat()
-    val left = (minutes * minuteWidthDp).toInt()
+    if (now < timelineStart || now >= timelineEnd) return
+    val left = timeToX(now)
     val line = View(this).apply {
-        setBackgroundColor(Color.rgb(255, 152, 0))
+        setBackgroundColor(getColor(R.color.primary_light))
         isFocusable = false
         isClickable = false
     }
     val params = FrameLayout.LayoutParams(
         dp(2),
-        dp(heightDp),
+        heightPx,
         Gravity.TOP or Gravity.START
     )
     params.leftMargin = left
