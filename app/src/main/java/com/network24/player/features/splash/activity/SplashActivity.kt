@@ -50,8 +50,10 @@ class SplashActivity : BaseActivity() {
         val currentVersion = BuildConfig.VERSION_CODE
         if (lastSeenVersion in 0 until currentVersion) {
             updatePrefs.edit().putInt("last_seen_version_code", currentVersion).apply()
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
+            // Same routing as a normal start: a remembered login goes straight
+            // to the dashboard instead of making TV users press Login again
+            // after every update.
+            routeNext()
             return
         }
         updatePrefs.edit().putInt("last_seen_version_code", currentVersion).apply()
@@ -80,6 +82,9 @@ class SplashActivity : BaseActivity() {
                 },
                 onUpdateAvailable = { update ->
                     runOnUiThread {
+                        // The 5s timeout already moved on to the app - don't
+                        // start a download from a splash screen that's gone.
+                        if (isRouted || isFinishing || isDestroyed) return@runOnUiThread
                         timeoutHandler.removeCallbacks(timeoutRunnable)
 
                         UpdateManager.downloadApk(

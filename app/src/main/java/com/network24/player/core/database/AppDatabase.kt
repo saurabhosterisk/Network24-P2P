@@ -19,7 +19,10 @@ import com.network24.player.core.database.entity.*
         SyncMetaEntity::class,
     ],
     version = 2,
-    exportSchema = false
+    // Schemas are exported to app/schemas so a future version bump can use
+    // @AutoMigration(from = 2, to = 3) instead of wiping history and
+    // continue-watching (see DatabaseProvider).
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao

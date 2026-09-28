@@ -1,10 +1,16 @@
 package com.network24.player.core.vpn
 
 import android.content.Context
+import android.os.SystemClock
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
 
 /**
  * GoBackend tracks tunnel state as instance fields, not shared/static
@@ -58,7 +64,49 @@ object TunnelManager : Tunnel {
             delay(400)
             getBackend(context).setState(this, Tunnel.State.UP, config)
         }
+
+        // The interface coming up says nothing about the relay server being
+        // reachable - without this the UI said "Secure Relay connected" even
+        // when no packet could get through. Require a WireGuard handshake.
+        if (!awaitHandshake(context)) {
+            try {
+                bringDown(context)
+            } catch (e: Exception) {
+                // Already down.
+            }
+            throw IllegalStateException("Secure Relay server did not answer the handshake")
+        }
     }
+
+    private suspend fun awaitHandshake(context: Context): Boolean = withContext(Dispatchers.IO) {
+        // WireGuard only handshakes once there is traffic to send; a tiny
+        // UDP packet into the tunnel starts it.
+        try {
+            DatagramSocket().use { socket ->
+                val probe = byteArrayOf(0)
+                socket.send(DatagramPacket(probe, probe.size, InetAddress.getByName("1.1.1.1"), 53))
+            }
+        } catch (e: Exception) {
+            // Only a trigger - the stats below decide.
+        }
+
+        val deadline = SystemClock.elapsedRealtime() + HANDSHAKE_TIMEOUT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val handshaked = try {
+                val stats = getBackend(context).getStatistics(this@TunnelManager)
+                stats.peers().any { key ->
+                    (stats.peer(key)?.latestHandshakeEpochMillis() ?: 0L) > 0L
+                }
+            } catch (e: Exception) {
+                false
+            }
+            if (handshaked) return@withContext true
+            delay(250)
+        }
+        false
+    }
+
+    private const val HANDSHAKE_TIMEOUT_MS = 8_000L
 
     @Throws(Exception::class)
     fun bringDown(context: Context) {

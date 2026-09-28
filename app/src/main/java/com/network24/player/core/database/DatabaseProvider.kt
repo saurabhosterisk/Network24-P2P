@@ -13,6 +13,10 @@ object DatabaseProvider {
                 AppDatabase::class.java,
                 "network24.db"
             )
+                // Last resort only. Bumping AppDatabase.version needs an
+                // @AutoMigration (schemas in app/schemas) - without one this
+                // silently wipes history and continue-watching; favorites
+                // come back from Firestore on the next login.
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { INSTANCE = it }

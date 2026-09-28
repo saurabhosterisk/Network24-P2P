@@ -30,6 +30,7 @@ import android.util.Xml
 import com.network24.player.core.database.entity.EpgEntity
 import okhttp3.ResponseBody
 import org.xmlpull.v1.XmlPullParser
+import java.io.File
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -370,11 +371,32 @@ class SyncManager(private val context: Context) {
                 advertisedContentLength
             )
 
-            // Insert in sizeable batches. Streaming avoids holding the XMLTV
-            // document in memory while reused formatters keep parsing cheap.
-            db.epgDao().deleteAll()
-            trackedBody.byteStream().use { input ->
-                parseAndInsertXmlTv(input)
+            // Download the whole XMLTV to a cache file before touching the
+            // database. It used to delete all EPG and then parse straight from
+            // the network, so a connection dropping mid-download (common on
+            // throttled routes) left the guide half-filled or empty until the
+            // next sync. Now a failed download keeps the previous guide.
+            val tmpFile = File(context.cacheDir, "xmltv.download")
+            try {
+                trackedBody.byteStream().use { input ->
+                    tmpFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                val expected = body.contentLength()
+                if (expected > 0 && tmpFile.length() != expected) {
+                    return@withContext SyncResult.Error(
+                        "XMLTV download incomplete: ${tmpFile.length()} of $expected bytes"
+                    )
+                }
+
+                // Insert in sizeable batches. Streaming from the file avoids
+                // holding the XMLTV document in memory while reused formatters
+                // keep parsing cheap.
+                db.epgDao().deleteAll()
+                tmpFile.inputStream().buffered().use { input ->
+                    parseAndInsertXmlTv(input)
+                }
+            } finally {
+                tmpFile.delete()
             }
             db.syncMetaDao().upsert(SyncMetaEntity(SyncKeys.FULL_EPG, System.currentTimeMillis()))
 

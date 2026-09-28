@@ -66,7 +66,6 @@ firebase-firestore-ktx = { module = "com.google.firebase:firebase-firestore-ktx"
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
-firebase-messaging-ktx = { module = "com.google.firebase:firebase-messaging-ktx" }
 
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 wireguard-tunnel = { group = "com.wireguard.android", name = "tunnel", version.ref = "wireguard" }

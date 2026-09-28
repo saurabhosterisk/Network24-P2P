@@ -34,8 +34,16 @@ object ConnectionTimingTracker {
         slowestOpenMs = 0L
     }
 
-    fun reportOpen(path: String, elapsedMs: Long) {
-        val isManifest = path.endsWith(".m3u8")
+    // Xtream paths carry the account in clear text (/live/<user>/<pass>/<id>.m3u8,
+    // and /hlsr/<token>/<user>/<pass>/... for segments), so never log them as-is.
+    private val CREDENTIAL_PATH = Regex("^/(live|movie|series|hlsr/[^/]+)/[^/]+/[^/]+/")
+
+    private fun redact(path: String): String =
+        CREDENTIAL_PATH.replace(path) { "/${it.groupValues[1].substringBefore('/')}/***/***/" }
+
+    fun reportOpen(rawPath: String, elapsedMs: Long) {
+        val isManifest = rawPath.endsWith(".m3u8")
+        val path = redact(rawPath)
 
         lastOpenElapsedMs = elapsedMs
         lastOpenWasManifest = isManifest
