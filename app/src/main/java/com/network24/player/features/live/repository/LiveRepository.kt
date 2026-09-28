@@ -303,8 +303,11 @@ class LiveRepository(private val context: Context) {
 
         val memKey = "epg_now_next_$epgChannelId"
 
-        MemoryCache.get<Pair<com.network24.player.core.database.entity.EpgEntity?, com.network24.player.core.database.entity.EpgEntity?>>(memKey)?.let {
-            return it
+        MemoryCache.get<Pair<com.network24.player.core.database.entity.EpgEntity?, com.network24.player.core.database.entity.EpgEntity?>>(memKey)?.let { cached ->
+            // Don't serve a programme that has already ended (the cache lives
+            // 2 min, which kept the old Now/Next up after a programme change).
+            val cachedStop = cached.first?.stopTimestamp
+            if (cachedStop == null || cachedStop > System.currentTimeMillis()) return cached
         }
 
         val now = System.currentTimeMillis()

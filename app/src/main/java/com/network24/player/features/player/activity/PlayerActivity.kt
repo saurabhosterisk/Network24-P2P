@@ -1,5 +1,7 @@
 package com.network24.player.features.player.activity
 
+import com.network24.player.features.player.ui.SubtitlePlacement
+import com.network24.player.features.vpn.util.FullscreenVpnToggle
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -19,7 +21,6 @@ import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
-import androidx.media3.ui.AspectRatioFrameLayout
 
 import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
@@ -94,7 +95,7 @@ class PlayerActivity : BaseActivity() {
 
 
     private var isSubtitleEnabled = false
-    private var currentAspectRatioIndex = 0
+    private lateinit var vpnToggle: FullscreenVpnToggle
 
 
     private val hideHandler =
@@ -102,6 +103,7 @@ class PlayerActivity : BaseActivity() {
 
 
     private val hideRunnable = Runnable {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         val d = 300L
 
@@ -126,14 +128,6 @@ class PlayerActivity : BaseActivity() {
             }
             .start()
 
-        binding.btnMore
-            .animate()
-            .alpha(0f)
-            .setDuration(d)
-            .withEndAction {
-                binding.btnMore.visibility = View.GONE
-            }
-            .start()
 
 
 
@@ -272,7 +266,7 @@ class PlayerActivity : BaseActivity() {
 
                 binding.txtPlayerError.text =
                     if (attempt > 0) {
-                        "Reconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
+                        PlayerManager.recoveryStatusText(attempt)
                     } else {
                         "Reconnecting..."
                     }
@@ -369,7 +363,7 @@ class PlayerActivity : BaseActivity() {
             PlayerState.currentChannel()
         )
 
-        PlayerManager.setRecoveryFailedListener {
+        PlayerManager.setRecoveryFailedListener(this@PlayerActivity) {
 
             runOnUiThread {
 
@@ -380,12 +374,12 @@ class PlayerActivity : BaseActivity() {
         }
 
 
-        PlayerManager.setRecoveryStatusListener { attempt ->
+        PlayerManager.setRecoveryStatusListener(this@PlayerActivity) { attempt ->
 
             runOnUiThread {
 
                 binding.txtPlayerError.text =
-                    "Reconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
+                    PlayerManager.recoveryStatusText(attempt)
 
                 binding.txtPlayerError.visibility =
                     View.VISIBLE
@@ -538,73 +532,10 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        binding.btnAspect.setOnClickListener {
-
-
-            currentAspectRatioIndex =
-                (currentAspectRatioIndex + 1) % 4
-
-
-
-            val msg =
-                when (currentAspectRatioIndex) {
-
-
-                    0 -> {
-
-                        binding.playerView.resizeMode =
-                            AspectRatioFrameLayout
-                                .RESIZE_MODE_FIT
-
-
-                        "Aspect Ratio: Fit"
-                    }
-
-
-                    1 -> {
-
-                        binding.playerView.resizeMode =
-                            AspectRatioFrameLayout
-                                .RESIZE_MODE_FILL
-
-
-                        "Aspect Ratio: Fill"
-                    }
-
-
-                    2 -> {
-
-                        binding.playerView.resizeMode =
-                            AspectRatioFrameLayout
-                                .RESIZE_MODE_ZOOM
-
-
-                        "Aspect Ratio: Zoom"
-                    }
-
-
-                    else -> {
-
-                        binding.playerView.resizeMode =
-                            AspectRatioFrameLayout
-                                .RESIZE_MODE_FIXED_WIDTH
-
-
-                        "Aspect Ratio: Fixed Width"
-                    }
-                }
-
-
-
-            Toast.makeText(
-                this,
-                msg,
-                Toast.LENGTH_SHORT
-            ).show()
-
-
-            showUiWithTimeout()
-        }
+        // Same Secure Relay controls as the Live TV / Favorites / EPG full-screen
+        // players (the aspect-ratio button was replaced there already).
+        vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
+        vpnToggle.register()
 
         binding.btnGrid.setOnClickListener {
 
@@ -754,9 +685,13 @@ class PlayerActivity : BaseActivity() {
 
 
     override fun onResume() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+        guideTickHandler.postDelayed(guideTickRunnable, GUIDE_REFRESH_MS)
+
 
 
         super.onResume()
+        if (::vpnToggle.isInitialized) vpnToggle.refresh()
 
 
 
@@ -856,6 +791,8 @@ class PlayerActivity : BaseActivity() {
     }
 
     override fun onPause() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+
 
         super.onPause()
 
@@ -877,10 +814,9 @@ class PlayerActivity : BaseActivity() {
 
     override fun onDestroy() {
 
-        PlayerManager.setRecoveryFailedListener(null)
+        PlayerManager.clearRecoveryListeners(this)
 
-        PlayerManager.setRecoveryStatusListener(null)
-
+        
         PlayerManager.detach(
             binding.playerView
         )
@@ -927,6 +863,7 @@ class PlayerActivity : BaseActivity() {
 
 
     private fun showUiWithTimeout() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = true)
 
 
         val d = 300L
@@ -957,12 +894,6 @@ class PlayerActivity : BaseActivity() {
                 .setDuration(d)
                 .start()
 
-            binding.btnMore.alpha = 0f
-            binding.btnMore.visibility = View.VISIBLE
-            binding.btnMore.animate()
-                .alpha(1f)
-                .setDuration(d)
-                .start()
 
 
 
@@ -1359,9 +1290,24 @@ class PlayerActivity : BaseActivity() {
         }
     }
 
+    private var guideEpgId: String? = null
+    // Now/Next and the progress bar were only loaded when a channel was
+    // selected, so while it kept playing the programme never moved on and the
+    // progress bar stood still. Refresh them every 30s while this screen is
+    // in the foreground.
+    private val guideTickHandler = Handler(Looper.getMainLooper())
+    private val guideTickRunnable = object : Runnable {
+        override fun run() {
+            guideEpgId?.let { loadEpg(it) }
+            guideTickHandler.postDelayed(this, GUIDE_REFRESH_MS)
+        }
+    }
+
     private fun loadEpg(
         epgId: String
     ) {
+
+        guideEpgId = epgId
 
 
         lifecycleScope.launch(
@@ -1632,3 +1578,5 @@ class PlayerActivity : BaseActivity() {
         showUiWithTimeout()
     }
 }
+
+private const val GUIDE_REFRESH_MS = 30_000L

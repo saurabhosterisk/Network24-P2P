@@ -79,9 +79,12 @@ class MultiPlayerManager(
                                 retryCounts[slot]++
                                 scheduleRetry(slot, url, retryCounts[slot])
                             } else {
+                                // Only the status code: the request path is
+                                // /live/<user>/<pass>/..., which must never be
+                                // shown on screen.
                                 listener?.onError(
                                     slot,
-                                    "HTTP ${httpError.first} from ${httpError.second}"
+                                    "Channel not available (HTTP ${httpError.first})"
                                 )
                             }
                             return
@@ -132,8 +135,7 @@ class MultiPlayerManager(
         var current: Throwable? = error
         while (current != null) {
             if (current is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
-                val uri = current.dataSpec.uri
-                return current.responseCode to "${uri.host}${uri.path}"
+                return current.responseCode to (current.dataSpec.uri.host ?: "")
             }
             current = current.cause
         }
@@ -182,6 +184,21 @@ class MultiPlayerManager(
     }
 
     fun getPlayer(slot: Int): ExoPlayer? = if (slot in 0..3) players[slot] else null
+
+    /**
+     * ExoPlayer keeps playing when its screen goes away, so without this the
+     * 4 windows kept streaming (and the focused one kept playing sound) after
+     * Home was pressed, using up the account's connections in the background.
+     */
+    fun pauseAll() {
+        for (i in 0..3) players[i]?.pause()
+    }
+
+    fun resumeAll() {
+        for (i in 0..3) {
+            if (urls[i] != null) players[i]?.play()
+        }
+    }
 
     fun release() {
         for (i in 0..3) {

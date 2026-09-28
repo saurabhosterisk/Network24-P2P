@@ -130,4 +130,21 @@ interface EpgDao {
         deleteAll()
         insertAll(epgs)
     }
+    // SQLite before Android 11 (many Fire TV models) allows at most 999 bound
+    // variables per query, so large channel lists are queried in chunks.
+    suspend fun getByEpgChannelIdsChunked(
+        epgChannelIds: List<String>,
+        fromTs: Long,
+        toTs: Long
+    ): List<EpgEntity> =
+        epgChannelIds.chunked(SQL_VARIABLE_CHUNK).flatMap { getByEpgChannelIds(it, fromTs, toTs) }
+
+    suspend fun getNowByEpgChannelIdsChunked(
+        epgChannelIds: List<String>,
+        nowTs: Long
+    ): List<EpgEntity> =
+        epgChannelIds.chunked(SQL_VARIABLE_CHUNK).flatMap { getNowByEpgChannelIds(it, nowTs) }
 }
+
+private const val SQL_VARIABLE_CHUNK = 900
+

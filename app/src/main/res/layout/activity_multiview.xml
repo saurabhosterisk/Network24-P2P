@@ -16,7 +16,6 @@
         android:contentDescription="Open menu"
         android:elevation="20dp"
         android:focusable="true"
-        android:focusableInTouchMode="true"
         android:padding="9dp"
         android:src="@drawable/ic_more_vert"
         android:tint="@android:color/white"

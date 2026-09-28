@@ -229,16 +229,20 @@ object PlayerManager {
     private var liveRecoveryAttempt =
         0
 
-    private var recoveryStatusListener:
-            ((Int) -> Unit)? = null
+    // Keyed by the screen that registered them, in registration order. Only
+    // the most recently registered (top) screen is notified. Previously each
+    // setter replaced a single global listener and PlayerActivity cleared it
+    // in onDestroy - which runs after the list screen underneath has already
+    // resumed - so after leaving the full-screen player the list screens
+    // never showed "Reconnecting..." or "Unable to play" again.
+    private val recoveryStatusListeners =
+        LinkedHashMap<Any, (Int) -> Unit>()
 
-    private var recoveryRecoveredListener:
-            (() -> Unit)? = null
-
-
+    private val recoveryRecoveredListeners =
+        LinkedHashMap<Any, () -> Unit>()
 
     private val recoveryFailedListeners =
-        mutableSetOf<() -> Unit>()
+        LinkedHashMap<Any, () -> Unit>()
 
 
 
@@ -260,6 +264,8 @@ object PlayerManager {
     private const val STANDARD_RECOVERY_ATTEMPTS = 5
 
     private const val FAST_RECOVERY_ATTEMPTS = 3
+
+    private const val SOURCE_ERROR_RECOVERY_ATTEMPTS = 2
 
     private fun maxRecoveryAttempts(
         mode: PreferenceManager.AutoReconnectMode
@@ -620,7 +626,7 @@ object PlayerManager {
                                                 "N24_RECOVERY",
                                                 "Playback recovered; clearing retry state"
                                             )
-                                            recoveryRecoveredListener?.invoke()
+                                            recoveryRecoveredListeners.values.lastOrNull()?.invoke()
                                         }
 
                                         cancelLiveRecovery()
@@ -1098,9 +1104,7 @@ object PlayerManager {
         ).getAutoReconnectMode()
 
         if (reconnectMode == PreferenceManager.AutoReconnectMode.OFF) {
-            recoveryFailedListeners.forEach { listener ->
-                listener.invoke()
-            }
+            recoveryFailedListeners.values.lastOrNull()?.invoke()
             cancelLiveRecovery()
             return
         }
@@ -1132,7 +1136,12 @@ object PlayerManager {
         // Recovery is limited by a number of attempts, not a time window:
         // with the per-attempt watchdog a 30s window only ever allowed 2-3
         // attempts while the UI promised "Attempt x/5".
-        liveRecoveryMaxAttempts = maxRecoveryAttempts(reconnectMode)
+        liveRecoveryMaxAttempts = maxRecoveryAttempts(reconnectMode).let { max ->
+            // 403/404/5xx: the channel itself isn't being served (e.g. a
+            // game-time channel outside its game). Retrying 5 times only
+            // delays telling the user.
+            if (streamErrorType == StreamErrorType.SOURCE) minOf(max, SOURCE_ERROR_RECOVERY_ATTEMPTS) else max
+        }
 
         if (liveRecoveryAttempt >= liveRecoveryMaxAttempts) {
 
@@ -1143,9 +1152,7 @@ object PlayerManager {
             }
 
 
-            recoveryFailedListeners.forEach { listener ->
-                listener.invoke()
-            }
+            recoveryFailedListeners.values.lastOrNull()?.invoke()
 
             cancelLiveRecovery()
 
@@ -1179,7 +1186,7 @@ object PlayerManager {
         liveRecoveryAttempt++
 
 
-        recoveryStatusListener?.invoke(
+        recoveryStatusListeners.values.lastOrNull()?.invoke(
             liveRecoveryAttempt
         )
 
@@ -1424,25 +1431,34 @@ object PlayerManager {
 
 
     fun setRecoveryFailedListener(
+        owner: Any,
         listener: (() -> Unit)?
     ) {
-        recoveryFailedListeners.clear()
-
-        if(listener != null) {
-            recoveryFailedListeners.add(listener)
-        }
+        recoveryFailedListeners.remove(owner)
+        if (listener != null) recoveryFailedListeners[owner] = listener
     }
 
     fun setRecoveryStatusListener(
+        owner: Any,
         listener: ((Int) -> Unit)?
     ) {
-        recoveryStatusListener = listener
+        recoveryStatusListeners.remove(owner)
+        if (listener != null) recoveryStatusListeners[owner] = listener
     }
 
     fun setRecoveryRecoveredListener(
+        owner: Any,
         listener: (() -> Unit)?
     ) {
-        recoveryRecoveredListener = listener
+        recoveryRecoveredListeners.remove(owner)
+        if (listener != null) recoveryRecoveredListeners[owner] = listener
+    }
+
+    /** Drops every recovery listener [owner] registered; call from onDestroy. */
+    fun clearRecoveryListeners(owner: Any) {
+        recoveryFailedListeners.remove(owner)
+        recoveryStatusListeners.remove(owner)
+        recoveryRecoveredListeners.remove(owner)
     }
 
 
@@ -1658,6 +1674,16 @@ object PlayerManager {
 
     fun getRecoveryMaxAttempts(): Int {
         return liveRecoveryMaxAttempts
+    }
+
+    /** Text for the "reconnecting" overlay, shared by every player screen. */
+    fun recoveryStatusText(attempt: Int): String {
+        val reason = if (streamErrorType == StreamErrorType.SOURCE) {
+            "This channel isn't available right now."
+        } else {
+            "Network connection lost."
+        }
+        return "$reason\nReconnecting...\nAttempt $attempt/$liveRecoveryMaxAttempts"
     }
 
 

@@ -1,6 +1,7 @@
 package com.network24.player.features.live.activity
 
 
+import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -102,6 +103,7 @@ class FavoriteChannelsActivity : BaseActivity() {
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
     private val fsHideRunnable = Runnable {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
         val d = 300L
 
         binding.fsTopTint.animate().alpha(0f).setDuration(d)
@@ -359,7 +361,7 @@ class FavoriteChannelsActivity : BaseActivity() {
          */
 
 
-        PlayerManager.setRecoveryFailedListener {
+        PlayerManager.setRecoveryFailedListener(this@FavoriteChannelsActivity) {
 
 
             runOnUiThread {
@@ -1047,6 +1049,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return
 
@@ -1108,6 +1111,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     private fun showFsUiWithTimeout() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = true)
 
         binding.fsBtnPlayPause.setImageResource(
             if (PlayerManager.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play
@@ -1850,9 +1854,24 @@ class FavoriteChannelsActivity : BaseActivity() {
     // a channel that isn't even selected anymore.
     private var epgRequestGeneration = 0
 
+    private var guideChannel: LiveChannel? = null
+    // Now/Next and the progress bar were only loaded when a channel was
+    // selected, so while it kept playing the programme never moved on and the
+    // progress bar stood still. Refresh them every 30s while this screen is
+    // in the foreground.
+    private val guideTickHandler = Handler(Looper.getMainLooper())
+    private val guideTickRunnable = object : Runnable {
+        override fun run() {
+            guideChannel?.let { loadProgramGuide(it) }
+            guideTickHandler.postDelayed(this, GUIDE_REFRESH_MS)
+        }
+    }
+
     private fun loadProgramGuide(
         channel: LiveChannel
     ) {
+
+        guideChannel = channel
 
 
         val epgId =
@@ -2081,6 +2100,9 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     override fun onResume() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+        guideTickHandler.postDelayed(guideTickRunnable, GUIDE_REFRESH_MS)
+
 
 
         super.onResume()
@@ -2133,6 +2155,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     override fun onPause() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+
 
 
         super.onPause()
@@ -2181,6 +2205,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
     override fun onDestroy() {
 
+        PlayerManager.clearRecoveryListeners(this)
 
         PlayerManager.detach(
 
@@ -2273,3 +2298,5 @@ class FavoriteChannelsActivity : BaseActivity() {
         return super.onKeyDown(keyCode, event)
     }
 }
+
+private const val GUIDE_REFRESH_MS = 30_000L

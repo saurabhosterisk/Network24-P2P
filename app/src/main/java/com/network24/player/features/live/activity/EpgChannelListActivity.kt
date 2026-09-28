@@ -1,5 +1,6 @@
 package com.network24.player.features.live.activity
 
+import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -211,6 +212,7 @@ class EpgChannelListActivity : BaseActivity() {
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
     private val fsHideRunnable = Runnable {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
         val d = 300L
 
         binding.fsTopTint.animate().alpha(0f).setDuration(d)
@@ -268,7 +270,11 @@ class EpgChannelListActivity : BaseActivity() {
                     )
                 }
 
-
+                // The full-screen Now/Next and progress bar were never
+                // refreshed while a channel kept playing.
+                if (isFullscreen) {
+                    playingChannel?.let { updateFullscreenNowNext(it) }
+                }
 
                 nowHandler.postDelayed(
                     this,
@@ -449,7 +455,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
 
-        PlayerManager.setRecoveryFailedListener {
+        PlayerManager.setRecoveryFailedListener(this@EpgChannelListActivity) {
 
 
             runOnUiThread {
@@ -1258,7 +1264,7 @@ class EpgChannelListActivity : BaseActivity() {
                     else
 
                         db.epgDao()
-                            .getByEpgChannelIds(
+                            .getByEpgChannelIdsChunked(
                                 ids,
                                 now,
                                 end
@@ -1278,8 +1284,12 @@ class EpgChannelListActivity : BaseActivity() {
                         SyncManager(
                             this@EpgChannelListActivity
                         )
+                            // Not forced: channels whose provider simply has
+                            // no listings used to trigger a full XMLTV
+                            // re-download on every visit. This only syncs when
+                            // the stored guide is stale.
                             .syncFullEpg(
-                                force = true
+                                force = false
                             )
 
 
@@ -1292,7 +1302,7 @@ class EpgChannelListActivity : BaseActivity() {
 
                         listings =
                             db.epgDao()
-                                .getByEpgChannelIds(
+                                .getByEpgChannelIdsChunked(
                                     ids,
                                     now,
                                     end
@@ -1526,6 +1536,15 @@ class EpgChannelListActivity : BaseActivity() {
                     channels.first()
                         .stream_id
             }
+        } else if (
+            !preserveScroll
+        ) {
+            // The first render happens before the guide data has loaded and
+            // already sets selectedChannel, so the header kept showing
+            // "No current program" after the listings arrived. Refresh it
+            // whenever new guide data is rendered (not on the 60s now-line
+            // tick, which must not replace a program the user focused).
+            selectedChannel?.let { updateTopInfo(it) }
         }
 
 
@@ -3444,6 +3463,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return
 
@@ -3492,6 +3512,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
     private fun showFsUiWithTimeout() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = true)
 
         binding.fsBtnPlayPause.setImageResource(
             if (PlayerManager.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play
@@ -4382,9 +4403,7 @@ class EpgChannelListActivity : BaseActivity() {
     override fun onDestroy() {
 
 
-        PlayerManager.setRecoveryFailedListener(
-            null
-        )
+        PlayerManager.clearRecoveryListeners(this)
 
 
 

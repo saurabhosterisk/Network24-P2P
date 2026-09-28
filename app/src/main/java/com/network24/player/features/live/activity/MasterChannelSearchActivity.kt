@@ -176,7 +176,7 @@ class MasterChannelSearchActivity : BaseActivity() {
         if (epgChannelIds.isEmpty()) return@withContext emptyMap()
 
         database.epgDao()
-            .getNowByEpgChannelIds(epgChannelIds, System.currentTimeMillis())
+            .getNowByEpgChannelIdsChunked(epgChannelIds, System.currentTimeMillis())
             .asSequence()
             .filter { !it.title.isNullOrBlank() && !it.epgChannelId.isNullOrBlank() }
             .distinctBy { it.epgChannelId }

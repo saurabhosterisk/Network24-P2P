@@ -120,8 +120,21 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
 
     override fun onReady(slot: Int) {
         runOnUiThread {
-            if (slot in 0..3) progressBars[slot].visibility = android.view.View.GONE
+            if (slot !in 0..3) return@runOnUiThread
+            progressBars[slot].visibility = android.view.View.GONE
+            // A retry can recover after onError() replaced the name.
+            selected[slot]?.let { labels[slot].text = it.name ?: "Unknown Channel" }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        multiPlayer.resumeAll()
+    }
+
+    override fun onStop() {
+        multiPlayer.pauseAll()
+        super.onStop()
     }
 
     override fun onError(slot: Int, message: String) {

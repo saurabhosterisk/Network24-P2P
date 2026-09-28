@@ -69,7 +69,6 @@
         android:background="@drawable/bg_back_focus"
         android:contentDescription="Back"
         android:focusable="true"
-        android:focusableInTouchMode="true"
         android:padding="12dp"
         android:src="@drawable/ic_back"
         app:tint="@android:color/white"
@@ -92,6 +91,8 @@
         app:layout_constraintStart_toEndOf="@id/btnBack"
         app:layout_constraintEnd_toStartOf="@id/btnMore" />
 
+    <!-- Hidden: no full-screen player has a menu button (same as the Live TV,
+         Favorites and EPG full screen); Back returns to a screen that has one. -->
     <ImageButton
         android:id="@+id/btnMore"
         android:layout_width="52dp"
@@ -100,7 +101,6 @@
         android:background="@drawable/bg_more_focus"
         android:contentDescription="Open menu"
         android:focusable="true"
-        android:focusableInTouchMode="true"
         android:padding="12dp"
         android:src="@drawable/ic_more_vert"
         android:tint="@android:color/white"
@@ -233,34 +233,52 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Info Button -->
-            <ImageButton
-                android:id="@+id/btnInfo"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:padding="10dp"
-                android:background="@drawable/bg_btn_focus_selector"
-                android:src="@drawable/ic_info"
-                android:tint="#FFFFFF"
-                android:focusable="true" />
-
-            <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-            <!-- Aspect Ratio Button -->
-            <ImageButton
-                android:id="@+id/btnAspect"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:padding="10dp"
-                android:background="@drawable/bg_btn_focus_selector"
-                android:src="@drawable/ic_aspect"
-                android:tint="#FFFFFF"
-                android:focusable="true" />
-
-            <View
+            <!-- equal-width side groups keep the playback buttons centred
+                 even when Secure Relay's server button appears -->
+            <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="start|center_vertical">
+
+                <!-- Info Button -->
+                <ImageButton
+                    android:id="@+id/btnInfo"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_info"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+
+                <Space android:layout_width="8dp" android:layout_height="1dp" />
+
+                <!-- Secure Relay (same as the Live TV / Favorites / EPG full screen) -->
+                <ImageButton
+                    android:id="@+id/btnVpn"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_vpn"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+
+                <Space android:layout_width="8dp" android:layout_height="1dp" />
+
+                <ImageButton
+                    android:id="@+id/btnVpnRotate"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_refresh"
+                    android:tint="#FFFFFF"
+                    android:visibility="gone"
+                    android:focusable="true" />
+            </LinearLayout>
 
             <!-- Center Controls (Prev, Play, Next) -->
             <LinearLayout
@@ -304,36 +322,37 @@
                     android:focusable="true" />
             </LinearLayout>
 
-            <View
+            <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="end|center_vertical">
 
+                <Space android:layout_width="8dp" android:layout_height="1dp" />
 
+                <!-- CC (Subtitle) Button -->
+                <ImageButton
+                    android:id="@+id/btnSubtitle"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_cc_on"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
 
-            <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-            <!-- CC (Subtitle) Button -->
-            <ImageButton
-                android:id="@+id/btnSubtitle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:padding="10dp"
-                android:background="@drawable/bg_btn_focus_selector"
-                android:src="@drawable/ic_cc_on"
-                android:tint="#FFFFFF"
-                android:focusable="true" />
-
-            <!-- Grid Button -->
-            <ImageButton
-                android:id="@+id/btnGrid"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:padding="10dp"
-                android:background="@drawable/bg_btn_focus_selector"
-                android:src="@drawable/ic_grid"
-                android:tint="#FFFFFF"
-                android:focusable="true" />
+                <!-- Grid Button -->
+                <ImageButton
+                    android:id="@+id/btnGrid"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_grid"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 

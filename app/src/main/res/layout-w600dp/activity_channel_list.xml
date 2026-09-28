@@ -42,7 +42,6 @@
                     android:layout_marginStart="12dp"
                     android:background="@drawable/bg_back_focus"
                     android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:src="@drawable/ic_back"
                     app:tint="@android:color/white"
                     app:layout_constraintStart_toStartOf="parent"
@@ -405,7 +404,6 @@
             android:background="@drawable/bg_back_focus"
             android:contentDescription="Back"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:padding="12dp"
             android:src="@drawable/ic_back"
             app:tint="@android:color/white"
@@ -546,45 +544,50 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <ImageButton
-                    android:id="@+id/fsBtnInfo"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_info"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
-
-                <Space android:layout_width="8dp" android:layout_height="1dp"/>
-
-                <ImageButton
-                    android:id="@+id/fsBtnVpn"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_vpn"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
-
-                <Space android:layout_width="8dp" android:layout_height="1dp"/>
-
-                <ImageButton
-                    android:id="@+id/fsBtnVpnRotate"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_refresh"
-                    android:tint="#FFFFFF"
-                    android:visibility="gone"
-                    android:focusable="true"/>
-
-                <View
+                <!-- equal-width side groups keep the playback buttons centred
+                     even when Secure Relay's server button appears -->
+                <LinearLayout
                     android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1"/>
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="start|center_vertical">
+
+                    <ImageButton
+                        android:id="@+id/fsBtnInfo"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_info"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+    
+                    <Space android:layout_width="8dp" android:layout_height="1dp"/>
+    
+                    <ImageButton
+                        android:id="@+id/fsBtnVpn"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_vpn"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+    
+                    <Space android:layout_width="8dp" android:layout_height="1dp"/>
+    
+                    <ImageButton
+                        android:id="@+id/fsBtnVpnRotate"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_refresh"
+                        android:tint="#FFFFFF"
+                        android:visibility="gone"
+                        android:focusable="true"/>
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -627,32 +630,35 @@
                         android:focusable="true"/>
                 </LinearLayout>
 
-                <View
+                <LinearLayout
                     android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1"/>
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="end|center_vertical">
 
-                <Space android:layout_width="8dp" android:layout_height="1dp"/>
-
-                <ImageButton
-                    android:id="@+id/fsBtnSubtitle"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_cc_on"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
-
-                <ImageButton
-                    android:id="@+id/fsBtnGrid"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_grid"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
+                    <Space android:layout_width="8dp" android:layout_height="1dp"/>
+    
+                    <ImageButton
+                        android:id="@+id/fsBtnSubtitle"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_cc_on"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+    
+                    <ImageButton
+                        android:id="@+id/fsBtnGrid"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_grid"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,5 +1,6 @@
 package com.network24.player.features.live.activity
 
+import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -114,6 +115,7 @@ class ChannelListActivity : BaseActivity() {
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
     private val fsHideRunnable = Runnable {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
         val d = 300L
 
         binding.fsTopTint.animate().alpha(0f).setDuration(d)
@@ -321,7 +323,7 @@ class ChannelListActivity : BaseActivity() {
          * Retry is handled only by PlayerManager.
          */
 
-        PlayerManager.setRecoveryFailedListener {
+        PlayerManager.setRecoveryFailedListener(this@ChannelListActivity) {
 
             runOnUiThread {
 
@@ -334,8 +336,11 @@ class ChannelListActivity : BaseActivity() {
 
                     PlayerManager.StreamErrorType.NETWORK -> {
 
+                        // Recovery has given up at this point - saying
+                        // "Reconnecting..." left users waiting for a retry
+                        // that would never come.
                         binding.txtPlayerError.text =
-                            "Network connection lost.\nReconnecting..."
+                            "Network connection lost.\nCheck your internet, then select the channel again."
 
                         binding.txtPlayerError.visibility =
                             View.VISIBLE
@@ -368,12 +373,12 @@ class ChannelListActivity : BaseActivity() {
         }
 
 
-        PlayerManager.setRecoveryStatusListener { attempt ->
+        PlayerManager.setRecoveryStatusListener(this@ChannelListActivity) { attempt ->
 
             runOnUiThread {
 
                 binding.txtPlayerError.text =
-                    "Network connection lost.\nReconnecting...\nAttempt $attempt/${PlayerManager.getRecoveryMaxAttempts()}"
+                    PlayerManager.recoveryStatusText(attempt)
 
                 binding.txtPlayerError.visibility =
                     View.VISIBLE
@@ -381,7 +386,7 @@ class ChannelListActivity : BaseActivity() {
             }
         }
 
-        PlayerManager.setRecoveryRecoveredListener {
+        PlayerManager.setRecoveryRecoveredListener(this@ChannelListActivity) {
             runOnUiThread {
                 binding.txtPlayerError.visibility =
                     View.GONE
@@ -1381,6 +1386,7 @@ class ChannelListActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return
 
@@ -1442,6 +1448,7 @@ class ChannelListActivity : BaseActivity() {
 
 
     private fun showFsUiWithTimeout() {
+        SubtitlePlacement.update(binding.playerView, controlsVisible = true)
 
         binding.fsBtnPlayPause.setImageResource(
             if (PlayerManager.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play
@@ -1752,9 +1759,24 @@ class ChannelListActivity : BaseActivity() {
     // a channel that isn't even selected anymore.
     private var epgRequestGeneration = 0
 
+    private var guideChannel: LiveChannel? = null
+    // Now/Next and the progress bar were only loaded when a channel was
+    // selected, so while it kept playing the programme never moved on and the
+    // progress bar stood still. Refresh them every 30s while this screen is
+    // in the foreground.
+    private val guideTickHandler = Handler(Looper.getMainLooper())
+    private val guideTickRunnable = object : Runnable {
+        override fun run() {
+            guideChannel?.let { loadProgramGuide(it) }
+            guideTickHandler.postDelayed(this, GUIDE_REFRESH_MS)
+        }
+    }
+
     private fun loadProgramGuide(
         channel: LiveChannel
     ) {
+
+        guideChannel = channel
 
 
         val epgId =
@@ -2069,6 +2091,9 @@ class ChannelListActivity : BaseActivity() {
 
 
     override fun onResume() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+        guideTickHandler.postDelayed(guideTickRunnable, GUIDE_REFRESH_MS)
+
 
 
         super.onResume()
@@ -2161,6 +2186,8 @@ class ChannelListActivity : BaseActivity() {
 
 
     override fun onPause() {
+        guideTickHandler.removeCallbacks(guideTickRunnable)
+
         super.onPause()
 
         fsHideHandler.removeCallbacks(fsHideRunnable)
@@ -2249,20 +2276,14 @@ class ChannelListActivity : BaseActivity() {
     override fun onDestroy() {
 
 
-        PlayerManager.setRecoveryFailedListener(
-            null
-        )
+        PlayerManager.clearRecoveryListeners(this)
 
-        PlayerManager.setRecoveryStatusListener(
-            null
-        )
 
-        PlayerManager.setRecoveryRecoveredListener(
-            null
-        )
 
 
 
         super.onDestroy()
     }
 }
+
+private const val GUIDE_REFRESH_MS = 30_000L
