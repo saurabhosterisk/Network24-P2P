@@ -46,6 +46,7 @@ class PreferenceManager(context: Context) {
 
         private const val KEY_VPN_ENABLED = "vpn_enabled"
         private const val KEY_AI_ASSISTANT = "ai_assistant_enabled"
+        private const val KEY_AUTO_VOLUME = "auto_volume_enabled"
         private const val KEY_VPN_DEVICE_PRIVATE_KEY = "vpn_device_private_key"
         private const val KEY_VPN_DEVICE_PUBLIC_KEY = "vpn_device_public_key"
     }
@@ -223,6 +224,14 @@ class PreferenceManager(context: Context) {
     // -------------------------
 
     fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, false)
+
+    // Auto Volume Leveling (Settings > Special features / full-screen button), off by default.
+    fun isAutoVolumeEnabled(): Boolean = prefs.getBoolean(KEY_AUTO_VOLUME, false)
+
+    fun setAutoVolumeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_VOLUME, enabled).apply()
+        com.network24.player.core.audio.AutoVolume.enabled = enabled
+    }
 
     // AI Support Assistant button in the full-screen player (Settings > Special features), off by default.
     fun isAiAssistantEnabled(): Boolean = prefs.getBoolean(KEY_AI_ASSISTANT, false)

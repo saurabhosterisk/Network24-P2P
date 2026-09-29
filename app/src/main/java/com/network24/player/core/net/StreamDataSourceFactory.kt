@@ -6,6 +6,10 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import com.network24.player.core.audio.AutoVolumeProcessor
+import com.network24.player.core.player.N24CodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
@@ -47,16 +51,35 @@ object StreamDataSourceFactory {
     }
 
     fun createRenderersFactory(context: Context): DefaultRenderersFactory {
-        return DefaultRenderersFactory(context.applicationContext).apply {
+        return object : DefaultRenderersFactory(context.applicationContext) {
+            // Same sink Media3 builds by default, plus Auto Volume Leveling. It
+            // also serves the FFmpeg audio renderer, so every decoded track goes
+            // through it.
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessorChain(DefaultAudioSink.DefaultAudioProcessorChain(AutoVolumeProcessor()))
+                .build()
+        }.apply {
             setEnableDecoderFallback(true)
+            // Settings / full-screen "Software Decoding" (never saved; off after a restart).
+            setMediaCodecSelector(N24CodecSelector)
+            // FFmpeg audio decoders as a fallback only: the device's own decoder is
+            // still used whenever it can play the track. Needed for channels whose
+            // audio the device can't decode at all - e.g. MP2 on Fire TV played
+            // with picture but no sound.
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         }
     }
 
     /**
      * Kept as a separate entry point for MultiView so its renderer strategy can
-     * be changed later without touching the player manager. The FFmpeg
-     * extension is currently not included in this project, so this uses the
-     * standard Media3 renderer selection for now.
+     * be changed later without touching the player manager. Uses the same
+     * renderers (with the FFmpeg audio fallback) for now.
      */
     fun createSoftwareRenderersFactory(context: Context): DefaultRenderersFactory {
         return createRenderersFactory(context)

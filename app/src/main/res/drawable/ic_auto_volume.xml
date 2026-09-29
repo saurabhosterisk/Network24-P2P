@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Volume Leveling: a speaker with three even bars (every channel at one level). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,9v6h4l5,5V4L6,9H2z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,7.2h8v1.8h-8z M14,11.1h8v1.8h-8z M14,15h8v1.8h-8z" />
+</vector>

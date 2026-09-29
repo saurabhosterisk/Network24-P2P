@@ -586,6 +586,19 @@
                     android:gravity="start|center_vertical">
 
                     <ImageButton
+                        android:id="@+id/fsBtnProgram"
+                        android:contentDescription="What's playing"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_program_info"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+
+                    <Space android:layout_width="8dp" android:layout_height="1dp"/>
+
+                    <ImageButton
                         android:id="@+id/fsBtnInfo"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
@@ -680,7 +693,32 @@
                         android:src="@drawable/ic_cc_on"
                         android:tint="#FFFFFF"
                         android:focusable="true"/>
+
+                    <ImageButton
+                        android:id="@+id/fsBtnAutoVolume"
+                        android:contentDescription="Auto Volume Leveling"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_auto_volume"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
+
+                    <ImageButton
+                        android:id="@+id/fsBtnDecoder"
+                        android:contentDescription="Hardware / software decoding"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_btn_focus_selector"
+                        android:src="@drawable/ic_decoder"
+                        android:tint="#FFFFFF"
+                        android:focusable="true"/>
     
+                    <!-- gap: audio/video settings | navigation + help -->
+                    <Space android:layout_width="20dp" android:layout_height="1dp"/>
+
                     <ImageButton
                         android:id="@+id/fsBtnGrid"
                         android:layout_width="48dp"

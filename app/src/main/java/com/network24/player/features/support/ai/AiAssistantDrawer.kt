@@ -12,6 +12,9 @@ import android.text.style.StyleSpan
 import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
 import android.view.Gravity
+import android.view.KeyEvent
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -76,7 +79,8 @@ class AiAssistantDrawer(
     private var pollJob: Job? = null
     private var lastId = 0
     private var sending = false
-    private var isOpen = false
+    var isOpen = false
+        private set
 
     private val back = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = close()
@@ -98,18 +102,47 @@ class AiAssistantDrawer(
         })
     }
 
+    /** Called when the panel opens (the screen closes the "What's playing" panel). */
+    var onOpen: () -> Unit = {}
+
     fun open() {
+        onOpen()
         val panel = host ?: build().also { host = it }
         panel.visibility = View.VISIBLE
+        slideIn(panel)
         isOpen = true
         // Re-add so this callback wins over the player's own back handling.
         back.remove()
         activity.onBackPressedDispatcher.addCallback(activity, back)
         back.isEnabled = true
-        if (!panel.isInTouchMode) {
-            panel.findViewById<LinearLayout>(R.id.aiChips).getChildAt(0)?.requestFocus()
-        }
+        if (!panel.isInTouchMode) panel.post { focusNewest() }
         startPolling()
+    }
+
+    /** Remote keys the open panel handles itself instead of the player screen. */
+    fun handlesKey(keyCode: Int): Boolean = isOpen && keyCode in NAV_KEYS
+
+    /** TV remote: put focus on the newest answer's buttons, else on the first quick button. */
+    private fun focusNewest() {
+        val panel = host ?: return
+        val list = panel.findViewById<LinearLayout>(R.id.aiMessages)
+        for (i in list.childCount - 1 downTo 0) {
+            val box = list.getChildAt(i).findViewWithTag<ViewGroup>(CHOICES_TAG)
+            if (box != null && box.visibility == View.VISIBLE && box.childCount > 0) {
+                box.getChildAt(0).requestFocus()
+                return
+            }
+        }
+        panel.findViewById<LinearLayout>(R.id.aiChips).getChildAt(0)?.requestFocus()
+    }
+
+    private fun isInside(frame: ViewGroup, view: View): Boolean {
+        var v: View? = view
+        while (v != null) {
+            if (v === frame) return true
+            v = v.parent as? View
+        }
+        return false
     }
 
     fun close() {
@@ -121,8 +154,39 @@ class AiAssistantDrawer(
                 ContextCompat.getSystemService(activity, InputMethodManager::class.java)
                     ?.hideSoftInputFromWindow(input.windowToken, 0)
             }
-            panel.visibility = View.GONE
+            slideOut(panel)
         }
+    }
+
+    // ---------------------------------------------------------------- animation
+
+    /** The see-through panel slides in from the right edge and fades in. */
+    private fun slideIn(frame: FrameLayout) {
+        val panel = frame.getChildAt(0) ?: return
+        panel.animate().cancel()
+        val distance = panel.width.takeIf { it > 0 } ?: panel.layoutParams.width
+        panel.translationX = distance.toFloat()
+        panel.alpha = 0f
+        panel.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(ANIM_MS)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction(null)
+            .start()
+    }
+
+    /** Slides back out to the right, then hides; reopening mid-way just reverses it. */
+    private fun slideOut(frame: FrameLayout) {
+        val panel = frame.getChildAt(0) ?: run { frame.visibility = View.GONE; return }
+        panel.animate().cancel()
+        panel.animate()
+            .translationX(panel.width.toFloat())
+            .alpha(0f)
+            .setDuration(ANIM_MS)
+            .setInterpolator(AccelerateInterpolator())
+            .withEndAction { if (!isOpen) frame.visibility = View.GONE }
+            .start()
     }
 
     private fun build(): FrameLayout {
@@ -133,12 +197,30 @@ class AiAssistantDrawer(
 
         // Pass-through frame: only the panel itself takes touches, the rest of
         // the screen still reaches the player.
-        val frame = FrameLayout(activity).apply { elevation = 100f }
+        // Keeps D-pad focus inside the panel: the player's own (hidden) controls
+        // sit underneath and would otherwise take it.
+        val frame = object : FrameLayout(activity) {
+            override fun focusSearch(focused: View?, direction: Int): View? {
+                // Chat buttons sit in one column: LEFT/RIGHT must not drop down into the
+                // quick buttons (an OK press there would start a fix by mistake).
+                val messages = findViewById<View>(R.id.aiMessages)
+                if (focused != null && messages != null && isInside(messages as ViewGroup, focused)
+                    && (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT)
+                ) {
+                    return focused
+                }
+                val next = super.focusSearch(focused, direction)
+                return if (next == null || isInside(this, next)) next else focused
+            }
+        }.apply { elevation = 100f }
         val panel = LayoutInflater.from(activity).inflate(R.layout.layout_ai_drawer, frame, false)
         frame.addView(panel, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
         root.addView(frame, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
-        panel.findViewById<View>(R.id.aiClose).setOnClickListener { close() }
+        panel.findViewById<View>(R.id.aiClose).apply {
+            setOnClickListener { close() }
+            nextFocusRightId = R.id.aiClose     // nothing to its right; don't jump into the chat
+        }
         panel.findViewById<View>(R.id.aiClear).setOnClickListener { clearChat() }
         val input = panel.findViewById<EditText>(R.id.aiInput)
         panel.findViewById<View>(R.id.aiSend).setOnClickListener { sendTyped(input) }
@@ -189,7 +271,7 @@ class AiAssistantDrawer(
      * One button per channel the AI suggested. Only channels in this
      * customer's package (the app's channel list) are shown.
      */
-    private fun channelBox(channels: List<AiChannel>): LinearLayout {
+    private fun channelBox(channels: List<AiChannel>, focusFirst: Boolean): LinearLayout {
         val density = activity.resources.displayMetrics.density
         val box = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         activity.lifecycleScope.launch {
@@ -209,7 +291,16 @@ class AiAssistantDrawer(
             shown.forEach { c ->
                 box.addView(channelButton(c) { goToChannel(shown.mapNotNull { owned[it.id] }, c.id) })
             }
-            host?.findViewById<ScrollView>(R.id.aiScroll)?.let { s -> s.post { s.fullScroll(View.FOCUS_DOWN) } }
+            // TV remote: a new answer with channels puts focus on its first channel
+            // (not while typing, not for older messages loaded when the panel opens).
+            val row = box.parent as? View
+            val list = row?.parent as? ViewGroup
+            val newest = list != null && list.indexOfChild(row) == list.childCount - 1
+            if (focusFirst && isOpen && newest && !box.isInTouchMode && activity.currentFocus !is EditText) {
+                box.post { box.getChildAt(0)?.requestFocus() }
+            } else {
+                host?.findViewById<ScrollView>(R.id.aiScroll)?.let { s -> s.post { s.scrollTo(0, s.getChildAt(0).height) } }
+            }
         }
         return box
     }
@@ -374,7 +465,9 @@ class AiAssistantDrawer(
                 if (m.id > lastId) {
                     // After the first load, the customer's own questions are
                     // already on screen (added when sent) - only add answers.
-                    if (m.fromBot || firstLoad) addBubble(m)
+                    // Only answers that arrive now may take remote focus - not the old
+                    // chat loaded when the panel opens (its channel buttons stole focus).
+                    if (m.fromBot || firstLoad) addBubble(m, live = !firstLoad)
                     if (m.fromBot && !firstLoad) answered = true
                     lastId = m.id
                 }
@@ -424,7 +517,7 @@ class AiAssistantDrawer(
         }
     }
 
-    private fun addBubble(m: AiMessage) {
+    private fun addBubble(m: AiMessage, live: Boolean = true) {
         val panel = host ?: return
         val list = panel.findViewById<LinearLayout>(R.id.aiMessages)
         val density = activity.resources.displayMetrics.density
@@ -441,6 +534,9 @@ class AiAssistantDrawer(
             autoLinkMask = Linkify.WEB_URLS
             movementMethod = LinkMovementMethod.getInstance()
             setLinkTextColor(ContextCompat.getColor(activity, R.color.primary_light))
+            // LinkMovementMethod makes the text focusable; on a TV remote that is an
+            // invisible stop. Without it UP/DOWN scroll a long answer instead.
+            isFocusable = false
         }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -454,7 +550,7 @@ class AiAssistantDrawer(
         ).apply { if (m.fromBot) marginEnd = (36 * density).toInt() else marginStart = (36 * density).toInt() })
 
         val channels = m.channels.orEmpty()
-        if (m.fromBot && channels.isNotEmpty()) row.addView(channelBox(channels))
+        if (m.fromBot && channels.isNotEmpty()) row.addView(channelBox(channels, focusFirst = live))
 
         val choices = m.choices.orEmpty()
         if (m.fromBot && choices.isNotEmpty()) {
@@ -468,11 +564,17 @@ class AiAssistantDrawer(
                 })
             }
             row.addView(box)
-            if (!box.isInTouchMode) box.getChildAt(0)?.requestFocus()
         }
         list.addView(row)
+        // Remote: move to the new answer's buttons, but never away from the text box while typing.
+        if (live && m.fromBot && choices.isNotEmpty() && !row.isInTouchMode
+            && activity.currentFocus !is EditText
+        ) {
+            row.post { row.findViewWithTag<ViewGroup>(CHOICES_TAG)?.getChildAt(0)?.requestFocus() }
+        }
         panel.findViewById<ScrollView>(R.id.aiScroll).post {
-            panel.findViewById<ScrollView>(R.id.aiScroll).fullScroll(View.FOCUS_DOWN)
+            // scrollTo, not fullScroll(FOCUS_DOWN): fullScroll also moves focus to the last button.
+            panel.findViewById<ScrollView>(R.id.aiScroll).let { it.scrollTo(0, it.getChildAt(0).height) }
         }
     }
 
@@ -480,5 +582,10 @@ class AiAssistantDrawer(
         private const val POLL_MS = 2_000L
         private const val PLAN = "plan"
         private const val CHOICES_TAG = "ai_choices"
+        private const val ANIM_MS = 220L
+        private val NAV_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER
+        )
     }
 }

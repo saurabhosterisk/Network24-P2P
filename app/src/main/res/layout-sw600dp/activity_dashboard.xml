@@ -563,6 +563,27 @@
                         android:textStyle="bold"/>
                 </LinearLayout>
 
+                <!-- VPN: N24 VPN on / off, or another VPN app (e.g. Speedify) routing the device -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="VPN"
+                        android:textColor="#BDBDBD"/>
+                    <TextView
+                        android:id="@+id/txtVpnStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Off"
+                        android:textColor="@color/text_hint"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
                 <View
                     android:layout_width="0dp"
                     android:layout_height="0dp"

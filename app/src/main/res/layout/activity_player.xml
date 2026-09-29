@@ -244,6 +244,19 @@
 
                 <!-- Info Button -->
                 <ImageButton
+                    android:id="@+id/btnProgram"
+                    android:contentDescription="What's playing"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_program_info"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+
+                <Space android:layout_width="8dp" android:layout_height="1dp"/>
+
+                <ImageButton
                     android:id="@+id/btnInfo"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
@@ -342,7 +355,32 @@
                     android:tint="#FFFFFF"
                     android:focusable="true" />
 
+                <ImageButton
+                    android:id="@+id/btnAutoVolume"
+                    android:contentDescription="Auto Volume Leveling"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_auto_volume"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+
+                <ImageButton
+                    android:id="@+id/btnDecoder"
+                    android:contentDescription="Hardware / software decoding"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="10dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:src="@drawable/ic_decoder"
+                    android:tint="#FFFFFF"
+                    android:focusable="true" />
+
                 <!-- Grid Button -->
+                <!-- gap: audio/video settings | navigation + help -->
+                <Space android:layout_width="20dp" android:layout_height="1dp"/>
+
                 <ImageButton
                     android:id="@+id/btnGrid"
                     android:layout_width="48dp"

@@ -7,6 +7,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.navigation.NavigationView
 
@@ -25,6 +26,36 @@ object DrawerFocusStyler {
             itemContainer(navigationView, oldFocus)?.let { updateContent(it, false) }
             itemContainer(navigationView, newFocus)?.let { updateContent(it, true) }
         }
+
+        // A menu action often opens a dialog ("Updating TV Guide...") in its own
+        // window: the row never gets a "lost focus" callback and stayed white,
+        // invisible on the white drawer, the next time the drawer opened. Reset
+        // every row whenever this drawer opens or closes, then restyle the row
+        // that really has focus.
+        navigationView.post {
+            drawerLayoutOf(navigationView)?.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() {
+                override fun onDrawerOpened(drawerView: View) {
+                    if (drawerView !== navigationView) return
+                    resetAll(navigationView)
+                    navigationView.post {
+                        itemContainer(navigationView, navigationView.findFocus())?.let { updateContent(it, true) }
+                    }
+                }
+
+                override fun onDrawerClosed(drawerView: View) {
+                    if (drawerView === navigationView) resetAll(navigationView)
+                }
+            })
+        }
+    }
+
+    private fun drawerLayoutOf(view: View): DrawerLayout? {
+        var current = view.parent
+        while (current != null) {
+            if (current is DrawerLayout) return current
+            current = current.parent
+        }
+        return null
     }
 
     /**

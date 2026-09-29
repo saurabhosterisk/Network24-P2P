@@ -1,5 +1,8 @@
 package com.network24.player.core.sync
 
+import java.io.FilterInputStream
+import android.os.Looper
+import android.os.Handler
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
@@ -312,7 +315,15 @@ class SyncManager(private val context: Context) {
      * opening Live With EPG while the dashboard is syncing cannot download and
      * parse the same guide twice.
      */
-    suspend fun syncFullEpg(force: Boolean = false, onProgress: (Int) -> Unit = {}): SyncResult {
+    /**
+     * [onProgress] = download %, [onSaving] = % of the downloaded guide written to
+     * the database (the long second step; both are called on the main thread).
+     */
+    suspend fun syncFullEpg(
+        force: Boolean = false,
+        onProgress: (Int) -> Unit = {},
+        onSaving: (Int) -> Unit = {}
+    ): SyncResult {
         if (!force && isFullEpgFresh()) {
             return SyncResult.Success
         }
@@ -320,7 +331,7 @@ class SyncManager(private val context: Context) {
         val runningSync = fullEpgSyncMutex.withLock {
             activeFullEpgSync?.takeIf { it.isActive } ?: run {
                 val newSync = fullEpgSyncScope.async {
-                    syncFullEpgInternal(onProgress)
+                    syncFullEpgInternal(onProgress, onSaving)
                 }
                 activeFullEpgSync = newSync
                 newSync.invokeOnCompletion {
@@ -348,7 +359,10 @@ class SyncManager(private val context: Context) {
         return System.currentTimeMillis() - lastSync < FULL_EPG_FRESH_MS
     }
 
-    private suspend fun syncFullEpgInternal(onProgress: (Int) -> Unit): SyncResult = withContext(Dispatchers.IO) {
+    private suspend fun syncFullEpgInternal(
+        onProgress: (Int) -> Unit,
+        onSaving: (Int) -> Unit
+    ): SyncResult = withContext(Dispatchers.IO) {
         try {
             val creds = PreferenceManager(context).getLoginCredentials()
                 ?: return@withContext SyncResult.Error("Missing login credentials")
@@ -392,9 +406,32 @@ class SyncManager(private val context: Context) {
                 // holding the XMLTV document in memory while reused formatters
                 // keep parsing cheap.
                 db.epgDao().deleteAll()
-                tmpFile.inputStream().buffered().use { input ->
+                // Report how much of the file has been saved: this step took
+                // long enough that the dialog sat on "100%" of the download
+                // and looked stuck.
+                val total = tmpFile.length().coerceAtLeast(1)
+                val mainHandler = Handler(Looper.getMainLooper())
+                var lastPercent = -1
+                mainHandler.post { onSaving(0) }
+                val counting = object : FilterInputStream(tmpFile.inputStream()) {
+                    private var read = 0L
+                    private fun count(n: Long) {
+                        if (n <= 0) return
+                        read += n
+                        val percent = (read * 100 / total).toInt().coerceAtMost(99)
+                        if (percent != lastPercent) {
+                            lastPercent = percent
+                            mainHandler.post { onSaving(percent) }
+                        }
+                    }
+                    override fun read(): Int = super.read().also { if (it >= 0) count(1) }
+                    override fun read(b: ByteArray, off: Int, len: Int): Int =
+                        super.read(b, off, len).also { count(it.toLong()) }
+                }
+                counting.buffered().use { input ->
                     parseAndInsertXmlTv(input)
                 }
+                mainHandler.post { onSaving(100) }
             } finally {
                 tmpFile.delete()
             }

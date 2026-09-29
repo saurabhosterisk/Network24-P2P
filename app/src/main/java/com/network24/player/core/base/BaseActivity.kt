@@ -563,9 +563,11 @@ open class BaseActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val result = syncManager.syncFullEpg(force = true) { percent ->
-                showLoader("$loadingMessage $percent%")
-            }
+            val result = syncManager.syncFullEpg(
+                force = true,
+                onProgress = { percent -> showLoader("$loadingMessage $percent%") },
+                onSaving = { percent -> showLoader("Saving TV Guide… This can take a minute. $percent%") }
+            )
             hideLoader()
 
             when (result) {

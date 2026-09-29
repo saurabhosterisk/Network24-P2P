@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TV remote: outline the chat area when it has focus (UP/DOWN then scroll the answers). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <stroke android:width="2dp" android:color="@color/primary_light" />
+        </shape>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

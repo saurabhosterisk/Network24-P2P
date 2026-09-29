@@ -105,6 +105,9 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        findViewById<SwitchMaterial>(R.id.autoVolumeSwitch)?.isChecked = prefs.isAutoVolumeEnabled()
+        findViewById<SwitchMaterial>(R.id.softwareDecodingSwitch)?.isChecked =
+            com.network24.player.core.player.SoftwareDecoding.enabled
         updateAutoRefreshSummary()
         updateAutoReconnectSummary()
         // Secure Relay turns itself off whenever the app leaves the
@@ -288,6 +291,20 @@ class SettingsActivity : BaseActivity() {
         findViewById<android.view.View>(R.id.aiAssistant).setOnClickListener {
             aiSwitch.isChecked = !aiSwitch.isChecked
             prefs.setAiAssistantEnabled(aiSwitch.isChecked)
+        }
+
+        val autoVolumeSwitch = findViewById<SwitchMaterial>(R.id.autoVolumeSwitch)
+        findViewById<android.view.View>(R.id.autoVolume).setOnClickListener {
+            autoVolumeSwitch.isChecked = !autoVolumeSwitch.isChecked
+            prefs.setAutoVolumeEnabled(autoVolumeSwitch.isChecked)
+        }
+
+        // Not saved on purpose: software decoding is a troubleshooting switch and is
+        // off again after the app restarts.
+        val softwareDecodingSwitch = findViewById<SwitchMaterial>(R.id.softwareDecodingSwitch)
+        findViewById<android.view.View>(R.id.softwareDecoding).setOnClickListener {
+            softwareDecodingSwitch.isChecked = !softwareDecodingSwitch.isChecked
+            com.network24.player.core.player.SoftwareDecoding.enabled = softwareDecodingSwitch.isChecked
         }
 
         findViewById<android.view.View>(R.id.aboutDeviceInfo).setOnClickListener {

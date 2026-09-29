@@ -401,6 +401,10 @@
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Connections" android:textColor="#BDBDBD"/>
                     <TextView android:id="@+id/txtConnections" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 / 1" android:textColor="@android:color/white" android:textStyle="bold"/>
                 </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="VPN" android:textColor="#BDBDBD"/>
+                    <TextView android:id="@+id/txtVpnStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Off" android:textColor="@color/text_hint" android:textStyle="bold"/>
+                </LinearLayout>
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRenew"
                     android:layout_width="match_parent"

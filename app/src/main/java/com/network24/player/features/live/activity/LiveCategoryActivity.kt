@@ -33,6 +33,7 @@ import com.network24.player.features.live.repository.SyncCallback
 import com.network24.player.features.login.activity.LoginActivity
 import com.network24.player.features.settings.activity.SettingsActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -152,11 +153,19 @@ class LiveCategoryActivity : BaseActivity() {
         // eventual forceRefreshData() loader below was unreachable (the
         // sync already succeeded and returned non-empty by the time we'd
         // get there).
-        showLoader("Loading categories…")
+        //
+        // Only when the read is slow, though: from the saved list it takes
+        // ~120 ms, and showing the loader anyway just flashed it on screen
+        // every time Live TV was opened.
+        val slowLoader = lifecycleScope.launch {
+            delay(LOADER_DELAY_MS)
+            showLoader("Loading categories…")
+        }
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val categories = repository.getCategories(server = prefs.getServer(), username = prefs.getUsername(), password = prefs.getPassword(), forceRefresh = false)
                 withContext(Dispatchers.Main) {
+                    slowLoader.cancel()
                     logPerf("LiveCategory.initialCategoryRead", SystemClock.elapsedRealtime() - startMs)
                     if (categories.isNotEmpty()) {
                         hideLoader()
@@ -169,6 +178,7 @@ class LiveCategoryActivity : BaseActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    slowLoader.cancel()
                     hideLoader()
                     Toast.makeText(this@LiveCategoryActivity, e.message ?: "Initial load failed", Toast.LENGTH_LONG).show()
                 }
@@ -368,3 +378,6 @@ class LiveCategoryActivity : BaseActivity() {
         private const val PERF_TAG = "N24-PERF"
     }
 }
+
+// Loader only for a slow first read (first login download), not the ~120 ms read from the saved list.
+private const val LOADER_DELAY_MS = 400L

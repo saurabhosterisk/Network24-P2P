@@ -24,7 +24,7 @@ android {
         minSdk = 21
         targetSdk = 35
 
-        versionCode = 66
+        versionCode = 67
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -149,6 +149,7 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ffmpeg.decoder)
 
 
     // Image Loading

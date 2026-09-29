@@ -6,6 +6,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import com.network24.player.core.vpn.TunnelManager
+import com.wireguard.android.backend.Tunnel
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -80,6 +84,33 @@ class DashboardActivity : BaseActivity() {
         // Catch up if the scheduled Auto Refresh hasn't run for a whole interval.
         AutoRefreshWorker.refreshIfDue(this)
         binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!isFinishing) updateVpnStatus()
+    }
+
+    /**
+     * Account card "VPN" row: On = the N24 VPN tunnel is up; Other VPN = another
+     * app (e.g. Speedify) routes the device, which support needs to know (some
+     * sites time out through it); otherwise Off. The WireGuard backend is only
+     * touched when the N24 VPN is switched on, so the dashboard stays fast.
+     */
+    private fun updateVpnStatus() {
+        val ourTunnelUp = prefs.isVpnEnabled() &&
+            TunnelManager.currentState(this) == Tunnel.State.UP
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val deviceVpn = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            cm?.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        val (text, colorRes) = when {
+            ourTunnelUp -> "On" to R.color.success
+            deviceVpn -> "Other VPN" to R.color.warning
+            else -> "Off" to R.color.text_hint
+        }
+        binding.txtVpnStatus.text = text
+        binding.txtVpnStatus.setTextColor(ContextCompat.getColor(this, colorRes))
     }
 
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }

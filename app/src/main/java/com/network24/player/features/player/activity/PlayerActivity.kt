@@ -98,6 +98,7 @@ class PlayerActivity : BaseActivity() {
     private var isSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
     private lateinit var aiDrawer: AiAssistantDrawer
+    private lateinit var programDrawer: com.network24.player.features.player.program.ProgramInfoDrawer
 
 
     private val hideHandler =
@@ -538,6 +539,10 @@ class PlayerActivity : BaseActivity() {
         // players (the aspect-ratio button was replaced there already).
         vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
         aiDrawer = AiAssistantDrawer(this, binding.btnAi)
+        programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.btnProgram) { aiDrawer.close() }
+        aiDrawer.onOpen = { programDrawer.close() }
+        com.network24.player.core.audio.AutoVolumeButton.bind(this, binding.btnAutoVolume) { showUiWithTimeout() }
+        com.network24.player.core.player.SoftwareDecodingButton.bind(this, binding.btnDecoder) { showUiWithTimeout() }
         vpnToggle.register()
 
         binding.btnGrid.setOnClickListener {
@@ -1124,8 +1129,13 @@ class PlayerActivity : BaseActivity() {
         keyCode: Int,
         event: KeyEvent?
     ): Boolean {
-
-
+        // AI assistant open: the remote's arrows/OK move inside the chat panel
+        // (otherwise UP/DOWN here would show the controls or change channel).
+        if ((::aiDrawer.isInitialized && aiDrawer.handlesKey(keyCode)) ||
+            (::programDrawer.isInitialized && programDrawer.handlesKey(keyCode))
+        ) {
+            return super.onKeyDown(keyCode, event)
+        }
 
         if (binding.bottomOverlay.visibility != View.VISIBLE) {
 

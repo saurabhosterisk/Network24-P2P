@@ -102,6 +102,7 @@ class ChannelListActivity : BaseActivity() {
     private var fsSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
     private lateinit var aiDrawer: AiAssistantDrawer
+    private lateinit var programDrawer: com.network24.player.features.player.program.ProgramInfoDrawer
 
     // How long STATE_BUFFERING can run uninterrupted before we tell the user
     // their connection looks slow, instead of leaving them staring at a
@@ -312,6 +313,10 @@ class ChannelListActivity : BaseActivity() {
 
         vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
         aiDrawer = AiAssistantDrawer(this, binding.fsBtnAi)
+        programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.fsBtnProgram) { aiDrawer.close() }
+        aiDrawer.onOpen = { programDrawer.close() }
+        com.network24.player.core.audio.AutoVolumeButton.bind(this, binding.fsBtnAutoVolume) { showFsUiWithTimeout() }
+        com.network24.player.core.player.SoftwareDecodingButton.bind(this, binding.fsBtnDecoder) { showFsUiWithTimeout() }
         vpnToggle.register()
 
         setupFullscreenControls()
@@ -1390,6 +1395,7 @@ class ChannelListActivity : BaseActivity() {
 
     private fun exitFullscreen() {
         if (::aiDrawer.isInitialized) aiDrawer.close()
+        if (::programDrawer.isInitialized) programDrawer.close()
         SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return
@@ -2206,6 +2212,13 @@ class ChannelListActivity : BaseActivity() {
         keyCode: Int,
         event: KeyEvent?
     ): Boolean {
+        // AI assistant open: the remote's arrows/OK move inside the chat panel
+        // (otherwise UP/DOWN here would show the controls or change channel).
+        if ((::aiDrawer.isInitialized && aiDrawer.handlesKey(keyCode)) ||
+            (::programDrawer.isInitialized && programDrawer.handlesKey(keyCode))
+        ) {
+            return super.onKeyDown(keyCode, event)
+        }
 
         if (!isFullscreen) {
             return super.onKeyDown(keyCode, event)
