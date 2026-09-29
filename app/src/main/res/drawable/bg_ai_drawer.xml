@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AI assistant panel: dark but see-through, so the channel stays visible. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:angle="180" android:startColor="#E6100E18" android:endColor="#B3100E18" />
+    <corners android:topLeftRadius="18dp" android:bottomLeftRadius="18dp" />
+</shape>

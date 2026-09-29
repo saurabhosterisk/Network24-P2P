@@ -45,6 +45,7 @@ class PreferenceManager(context: Context) {
         private const val KEY_SUBTITLES_ENABLED = "subtitles_enabled"
 
         private const val KEY_VPN_ENABLED = "vpn_enabled"
+        private const val KEY_AI_ASSISTANT = "ai_assistant_enabled"
         private const val KEY_VPN_DEVICE_PRIVATE_KEY = "vpn_device_private_key"
         private const val KEY_VPN_DEVICE_PUBLIC_KEY = "vpn_device_public_key"
     }
@@ -222,6 +223,13 @@ class PreferenceManager(context: Context) {
     // -------------------------
 
     fun isVpnEnabled(): Boolean = prefs.getBoolean(KEY_VPN_ENABLED, false)
+
+    // AI Support Assistant button in the full-screen player (Settings > Special features), off by default.
+    fun isAiAssistantEnabled(): Boolean = prefs.getBoolean(KEY_AI_ASSISTANT, false)
+
+    fun setAiAssistantEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AI_ASSISTANT, enabled).apply()
+    }
 
     fun setVpnEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_VPN_ENABLED, enabled).apply()

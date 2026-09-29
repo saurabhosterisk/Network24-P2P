@@ -1,5 +1,6 @@
 package com.network24.player.features.player.activity
 
+import com.network24.player.features.support.ai.AiAssistantDrawer
 import com.network24.player.features.player.ui.SubtitlePlacement
 import com.network24.player.features.vpn.util.FullscreenVpnToggle
 import android.content.Intent
@@ -96,6 +97,7 @@ class PlayerActivity : BaseActivity() {
 
     private var isSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
+    private lateinit var aiDrawer: AiAssistantDrawer
 
 
     private val hideHandler =
@@ -535,6 +537,7 @@ class PlayerActivity : BaseActivity() {
         // Same Secure Relay controls as the Live TV / Favorites / EPG full-screen
         // players (the aspect-ratio button was replaced there already).
         vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
+        aiDrawer = AiAssistantDrawer(this, binding.btnAi)
         vpnToggle.register()
 
         binding.btnGrid.setOnClickListener {
@@ -988,6 +991,11 @@ class PlayerActivity : BaseActivity() {
 
             showUiWithTimeout()
         }
+    }
+
+    /** The AI assistant filled PlayerState with channels to go to: play the selected one. */
+    fun playSelectedChannel() {
+        PlayerState.currentChannel()?.let(::switchToChannel)
     }
 
     private fun switchToChannel(

@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.google.gson.Gson
+import com.network24.player.common.models.AiAskResponse
+import com.network24.player.common.models.AiPollResponse
 import com.network24.player.common.models.SupportChannel
 import com.network24.player.common.models.SupportError
 import com.network24.player.common.models.SupportMessage
@@ -53,6 +55,34 @@ class SupportRepository(private val prefs: PreferenceManager) {
     suspend fun older(channelId: String, beforeId: String): Result<List<SupportMessage>> = call {
         api.older(prefs.getUsername(), prefs.getPassword(), channelId, beforeId)
     }.map { it.messages.orEmpty() }
+
+    // ---------------------------------------------------------------- AI assistant
+
+    suspend fun aiPoll(after: Int): Result<AiPollResponse> = call {
+        api.aiPoll(prefs.getUsername(), prefs.getPassword(), after)
+    }
+
+    suspend fun aiClear(): Result<Unit> = call {
+        api.aiClear(prefs.getUsername(), prefs.getPassword())
+    }.map { }
+
+    /** quick = a fix mode ("buffering"...) for the ready-made buttons, "" for typed questions. */
+    suspend fun aiAsk(text: String, quick: String, streamId: Int, streamName: String): Result<AiAskResponse> = call {
+        api.aiAsk(prefs.getUsername(), prefs.getPassword(), text, quick, streamId, streamName, accountSummary())
+    }
+
+    /** What the AI may use to answer account questions (no password). */
+    private fun accountSummary(): String {
+        val expiry = prefs.getExpiry()
+        val expiryText = if (expiry > 0L) {
+            java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US).format(java.util.Date(expiry * 1000L))
+        } else {
+            "no expiry date"
+        }
+        val plan = if (prefs.isTrial()) "trial" else "premium"
+        return "status ${prefs.getStatus()}, $plan, expires $expiryText, " +
+            "${prefs.getActiveConnections()} of ${prefs.getMaxConnections()} connections in use"
+    }
 
     suspend fun send(
         context: Context,

@@ -352,6 +352,19 @@
                     android:src="@drawable/ic_grid"
                     android:tint="#FFFFFF"
                     android:focusable="true" />
+
+                <!-- AI assistant (see-through chat panel over the playing channel) -->
+                <ImageButton
+                    android:id="@+id/btnAi"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:padding="11dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:contentDescription="AI assistant"
+                    android:src="@drawable/ic_ai"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

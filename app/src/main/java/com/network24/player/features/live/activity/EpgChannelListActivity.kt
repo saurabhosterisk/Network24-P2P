@@ -1,5 +1,6 @@
 package com.network24.player.features.live.activity
 
+import com.network24.player.features.support.ai.AiAssistantDrawer
 import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.graphics.Color
@@ -257,6 +258,7 @@ class EpgChannelListActivity : BaseActivity() {
 
     private var fsSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
+    private lateinit var aiDrawer: AiAssistantDrawer
 
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
@@ -533,6 +535,7 @@ class EpgChannelListActivity : BaseActivity() {
         setupStickyScrolling()
 
         vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
+        aiDrawer = AiAssistantDrawer(this, binding.fsBtnAi)
         vpnToggle.register()
 
         setupFullscreenControls()
@@ -3498,6 +3501,7 @@ class EpgChannelListActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        if (::aiDrawer.isInitialized) aiDrawer.close()
         SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return

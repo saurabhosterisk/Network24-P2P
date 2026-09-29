@@ -1,5 +1,6 @@
 package com.network24.player.features.live.activity
 
+import com.network24.player.features.support.ai.AiAssistantDrawer
 import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -100,6 +101,7 @@ class ChannelListActivity : BaseActivity() {
 
     private var fsSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
+    private lateinit var aiDrawer: AiAssistantDrawer
 
     // How long STATE_BUFFERING can run uninterrupted before we tell the user
     // their connection looks slow, instead of leaving them staring at a
@@ -309,6 +311,7 @@ class ChannelListActivity : BaseActivity() {
         setupDrawerAndMenu()
 
         vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
+        aiDrawer = AiAssistantDrawer(this, binding.fsBtnAi)
         vpnToggle.register()
 
         setupFullscreenControls()
@@ -1386,6 +1389,7 @@ class ChannelListActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        if (::aiDrawer.isInitialized) aiDrawer.close()
         SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return

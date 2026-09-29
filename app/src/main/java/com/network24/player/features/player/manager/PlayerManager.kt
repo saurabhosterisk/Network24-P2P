@@ -49,6 +49,14 @@ object PlayerManager {
 
     private var currentUrl: String? = null
 
+    /**
+     * Stream id of the channel playing now - the full-screen AI assistant
+     * sends it along, so "this channel is buffering" needs no channel name.
+     */
+    @Volatile
+    var currentStreamId: Int = 0
+        private set
+
 
     private var lastStreamUrl: String? = null
 
@@ -795,6 +803,7 @@ object PlayerManager {
     ) {
 
         playbackSessionId++
+        currentStreamId = streamId?.toIntOrNull() ?: 0
 
 
         cancelLiveRecovery()
@@ -903,6 +912,9 @@ object PlayerManager {
 
 
 
+
+    /** The stream loaded right now, or null when stopped. */
+    fun currentStreamUrl(): String? = currentUrl
 
     fun retryCurrent() {
 

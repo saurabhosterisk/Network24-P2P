@@ -1,5 +1,7 @@
 package com.network24.player.core.api
 
+import com.network24.player.common.models.AiAskResponse
+import com.network24.player.common.models.AiPollResponse
 import com.network24.player.common.models.SupportChannelsResponse
 import com.network24.player.common.models.SupportMessagesResponse
 import com.network24.player.common.models.SupportSendResponse
@@ -41,6 +43,36 @@ interface SupportApiService {
         @Field("before") before: String,
         @Field("action") action: String = "older"
     ): Response<SupportMessagesResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun aiPoll(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("after") after: Int,
+        @Field("action") action: String = "ai_poll"
+    ): Response<AiPollResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun aiClear(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("action") action: String = "ai_clear"
+    ): Response<AiAskResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun aiAsk(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("text") text: String,
+        @Field("quick") quick: String,
+        @Field("stream_id") streamId: Int,
+        @Field("stream_name") streamName: String,
+        @Field("account") account: String,
+        @Field("action") action: String = "ai_ask"
+    ): Response<AiAskResponse>
 
     @Multipart
     @POST("support_api.php")

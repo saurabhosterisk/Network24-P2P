@@ -283,6 +283,13 @@ class SettingsActivity : BaseActivity() {
             switch.isChecked = !switch.isChecked
         }
 
+        val aiSwitch = findViewById<SwitchMaterial>(R.id.aiAssistantSwitch)
+        aiSwitch.isChecked = prefs.isAiAssistantEnabled()
+        findViewById<android.view.View>(R.id.aiAssistant).setOnClickListener {
+            aiSwitch.isChecked = !aiSwitch.isChecked
+            prefs.setAiAssistantEnabled(aiSwitch.isChecked)
+        }
+
         findViewById<android.view.View>(R.id.aboutDeviceInfo).setOnClickListener {
             startActivity(Intent(this, AboutDeviceActivity::class.java))
         }

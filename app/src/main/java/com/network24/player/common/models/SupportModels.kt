@@ -77,6 +77,41 @@ data class SupportSendResponse(
     val message: SupportMessage?
 )
 
+/** One line of the full-screen AI assistant chat (support_api.php ai_*). */
+data class AiMessage(
+    val id: Int,
+    val from: String,
+    val text: String?,
+    val time: Long?,
+    // Tap-able answers the bot offers ("1. Yes, it's fixed", channel list).
+    val choices: List<String>?,
+    // "Go to channel" buttons (search results, a channel that was just fixed).
+    val channels: List<AiChannel>? = null
+) {
+    val fromBot: Boolean get() = from == "bot"
+}
+
+data class AiChannel(
+    val id: Int,
+    val name: String?,
+    // "Now: <programme> (ends in 20 min)", or the channel's category.
+    val info: String?
+)
+
+data class AiPollResponse(
+    val result: Boolean,
+    val online: Boolean,
+    // idle / queued / reading / typing - shown as the bot's status line.
+    val state: String?,
+    val messages: List<AiMessage>?
+)
+
+data class AiAskResponse(
+    val result: Boolean,
+    val online: Boolean,
+    val message: AiMessage?
+)
+
 /** Error body shape shared by every support_api.php failure. */
 data class SupportError(
     val result: Boolean?,

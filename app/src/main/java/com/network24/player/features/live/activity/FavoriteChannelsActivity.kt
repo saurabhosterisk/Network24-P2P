@@ -1,6 +1,7 @@
 package com.network24.player.features.live.activity
 
 
+import com.network24.player.features.support.ai.AiAssistantDrawer
 import com.network24.player.features.player.ui.SubtitlePlacement
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -99,6 +100,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
     private var fsSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
+    private lateinit var aiDrawer: AiAssistantDrawer
 
     private val fsHideHandler = Handler(Looper.getMainLooper())
 
@@ -406,6 +408,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
         vpnToggle = FullscreenVpnToggle(this, binding.fsBtnVpn, binding.fsBtnVpnRotate) { showFsUiWithTimeout() }
+        aiDrawer = AiAssistantDrawer(this, binding.fsBtnAi)
         vpnToggle.register()
 
         // playerView's click listener (touch-open-fullscreen, plus
@@ -1049,6 +1052,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
     private fun exitFullscreen() {
+        if (::aiDrawer.isInitialized) aiDrawer.close()
         SubtitlePlacement.update(binding.playerView, controlsVisible = false)
 
         if (!isFullscreen) return
