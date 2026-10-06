@@ -32,6 +32,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         if (UnsupportedDeviceGate.isUnsupported) return
         // Settings > Auto Refresh (channels + TV guide on a schedule)
         AutoRefreshWorker.schedule(this)
+        // Events & Scores > My teams: alert 5 minutes before a followed team's game
+        com.network24.player.features.discover.TeamAlerts.schedule(this)
         // Settings > Auto Volume Leveling (read by the player's audio processor)
         com.network24.player.core.audio.AutoVolume.enabled =
             com.network24.player.core.preferences.PreferenceManager(this).isAutoVolumeEnabled()

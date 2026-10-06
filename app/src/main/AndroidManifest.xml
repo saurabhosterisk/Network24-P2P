@@ -257,6 +257,9 @@
         <receiver
             android:name=".features.reminders.ReminderReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".features.discover.TeamGameReceiver"
+            android:exported="false" />
 
 
 

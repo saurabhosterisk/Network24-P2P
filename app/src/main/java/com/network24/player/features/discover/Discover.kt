@@ -96,6 +96,8 @@ class EventsActivity : FeatureListActivity() {
         load()
     }
 
+    companion object { const val EXTRA_GAME = "game_json" }
+
     private fun tabs() = chips(listOf("events" to "Live events", "scores" to "Scores", "teams" to "My teams"), tab) { tab = it; league = ""; render() }
 
     private fun load() {
@@ -106,11 +108,33 @@ class EventsActivity : FeatureListActivity() {
             events = withContext(Dispatchers.Default) { EventParser.parse(all, replay) }
             games = runCatching { Web24Api.objects(Web24Api(this@EventsActivity).support("scores").optJSONArray("games")) }.getOrDefault(emptyList())
             loading(false)
+            TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) })
             render()
+            Game.fromJson(intent.getStringExtra(EXTRA_GAME))?.let { g ->
+                intent.removeExtra(EXTRA_GAME)
+                tab = "scores"; tabs(); render(); openGame(g)
+            }
         }
     }
 
     private fun teamName(t: JSONObject) = t.optString("short").ifBlank { t.optString("name") }
+
+    /** Finds the channels showing this game: one -> plays it, several -> pick one, none -> says so. */
+    private fun openGame(game: Game) {
+        loading(true)
+        lifecycleScope.launch {
+            val chans = GameChannels.find(this@EventsActivity, game)
+            loading(false)
+            when {
+                chans.isEmpty() -> toast(
+                    if (game.state == "post") "${game.title} has ended."
+                    else "No channel lists ${game.title} yet. Event channels usually add it shortly before the start."
+                )
+                chans.size == 1 -> play(chans, chans[0])
+                else -> pickOne("Watch ${game.title} on", chans.map { it.name.orEmpty() }, 0) { play(chans, chans[it]) }
+            }
+        }
+    }
 
     private fun render() {
         val now = System.currentTimeMillis()
@@ -147,7 +171,7 @@ class EventsActivity : FeatureListActivity() {
                         g.optString("detail"), if (followed) "★ A team you follow" else "", showIcon = false, lead = g.optString("league"),
                         badge = when (state) { "in" -> "LIVE"; "post" -> "Final"; else -> Fmt.clock(g.optLong("start") * 1000) },
                         badgeColor = if (state == "in") LIVE else 0) {
-                        startActivity(Intent(this, ShowSearchActivity::class.java).putExtra(ShowSearchActivity.EXTRA_QUERY, teamName(home)))
+                        Game.parse(g)?.let { openGame(it) }
                     }
                 }
                 show(rows, "No scores right now.")
@@ -156,10 +180,11 @@ class EventsActivity : FeatureListActivity() {
                 val all = games.flatMap { g -> Web24Api.objects(g.optJSONArray("teams")).map { teamName(it) } }.filter { it.isNotBlank() }.distinct().sorted()
                 show(all.map { t ->
                     val on = t in teams
-                    Row("team:$t", t, if (on) "Following - its games are marked in Scores" else "Select to follow", showIcon = false,
+                    Row("team:$t", t, if (on) "Following - games marked in Scores, alert 5 minutes before each game" else "Select to follow", showIcon = false,
                         badge = if (on) "Following" else "Follow", badgeColor = if (on) GOOD else 0) {
                         if (on) teams.remove(t) else teams.add(t)
                         getSharedPreferences("n24_teams", MODE_PRIVATE).edit().putStringSet("teams", teams.toSet()).apply()
+                        TeamAlerts.update(this, games.mapNotNull { Game.parse(it) })
                         lifecycleScope.launch { runCatching { Web24Api(this@EventsActivity).support("web_state_set", "key" to "teams", *teams.mapIndexed { i, x -> "value[$i]" to x }.toTypedArray()) } }
                         render()
                     }
