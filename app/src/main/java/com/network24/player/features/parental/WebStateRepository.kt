@@ -47,46 +47,13 @@ class WebStateRepository(context: Context) {
             if (!force && System.currentTimeMillis() - lastSyncMs < SYNC_EVERY_MS) return@withLock false
             val state = call { api.webState(user(), pass()) }.getOrNull() ?: return@withLock false
             lastSyncMs = System.currentTimeMillis()
-            val changed = saveLock(state.lock)
-            runCatching { mergeRecent(state.recent.orEmpty(), state.recent_cleared ?: 0L) }
-            changed
+            // only the parental lock comes from the account; recently watched is this device's own list
+            saveLock(state.lock)
         }
     }
 
     private fun saveLock(lock: WebLock?): Boolean =
         ParentalLock.save(appContext, lock?.enabled == true, lock?.cats.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }, lock?.custom_pin == true)
-
-    /**
-     * The account's list on Main is the one list for every device: this device's list becomes exactly that (so a
-     * channel removed or a list cleared on any device or the web player goes everywhere). Only an account that never
-     * had a list (never cleared, nothing saved) gets this device's list sent up once.
-     */
-    private suspend fun mergeRecent(serverIds: List<Int>, clearedAt: Long) {
-        val history = LiveHistoryRepository(appContext)
-        if (serverIds.isEmpty() && clearedAt <= 0L) {
-            history.localRecentIds().take(15).reversed().forEach { id -> runCatching { api.recentAdd(user(), pass(), id.toString()) } }
-            return
-        }
-        history.replaceWith(serverIds)
-    }
-
-    /** Empties the recently watched list on this device and for the account (other devices follow on their next sync). */
-    suspend fun clearRecent(): Result<Unit> = withContext(Dispatchers.IO) {
-        LiveHistoryRepository(appContext).clearLocal()
-        call { api.recentClear(user(), pass()) }.map { }
-    }
-
-    /** Removes one channel from the recently watched list here and for the account. */
-    suspend fun removeRecent(streamId: Int): Result<Unit> = withContext(Dispatchers.IO) {
-        LiveHistoryRepository(appContext).removeLocal(streamId)
-        call { api.recentRemove(user(), pass(), streamId.toString()) }.map { }
-    }
-
-    /** Tells Main this channel was just watched (called from the watch-history recorder, off the main thread). */
-    suspend fun addRecent(streamId: Int) {
-        if (user().isBlank()) return
-        runCatching { api.recentAdd(user(), pass(), streamId.toString()) }
-    }
 
     suspend fun verifyPin(pin: String): Result<Unit> = withContext(Dispatchers.IO) {
         call { api.lockVerify(user(), pass(), pin) }.map { }

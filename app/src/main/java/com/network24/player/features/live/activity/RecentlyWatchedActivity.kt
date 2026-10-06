@@ -14,7 +14,6 @@ import com.network24.player.core.database.entity.MasterChannelSearchResult
 import com.network24.player.core.database.repository.LiveHistoryRepository
 import com.network24.player.databinding.ActivityRecentlyWatchedBinding
 import com.network24.player.features.live.adapter.MasterChannelSearchAdapter
-import com.network24.player.features.parental.WebStateRepository
 import com.network24.player.features.player.activity.PlayerActivity
 import com.network24.player.features.player.state.PlayerState
 import kotlinx.coroutines.Dispatchers
@@ -48,17 +47,13 @@ class RecentlyWatchedActivity : BaseActivity() {
     private fun confirmClearAll() {
         showConfirmDialog(
             "Clear recently watched?",
-            "Removes every channel from this list on all your devices and the web player.",
+            "Removes every channel from this list on this device.",
             "Clear all",
             onPositive = {
                 lifecycleScope.launch {
-                    val result = WebStateRepository(this@RecentlyWatchedActivity).clearRecent()
+                    historyRepository.clearLocal()
                     loadRecentlyWatched()
-                    android.widget.Toast.makeText(
-                        this@RecentlyWatchedActivity,
-                        if (result.isSuccess) "Recently watched cleared" else "Cleared here; your other devices update when the server can be reached",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
+                    android.widget.Toast.makeText(this@RecentlyWatchedActivity, "Recently watched cleared", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -71,7 +66,7 @@ class RecentlyWatchedActivity : BaseActivity() {
             "Remove",
             onPositive = {
                 lifecycleScope.launch {
-                    WebStateRepository(this@RecentlyWatchedActivity).removeRecent(selected.streamId)
+                    historyRepository.removeLocal(selected.streamId)
                     loadRecentlyWatched()
                 }
             }

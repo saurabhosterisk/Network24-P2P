@@ -129,9 +129,7 @@ data class WebLock(
 
 data class WebStateResponse(
     val ok: Boolean?,
-    val recent: List<Int>?,
-    val lock: WebLock?,
-    val recent_cleared: Long? = null
+    val lock: WebLock?
 )
 
 data class WebLockResponse(

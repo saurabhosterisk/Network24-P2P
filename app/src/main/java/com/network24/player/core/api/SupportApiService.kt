@@ -102,32 +102,6 @@ interface SupportApiService {
 
     @FormUrlEncoded
     @POST("support_api.php")
-    suspend fun recentAdd(
-        @Field("username") username: String,
-        @Field("password") password: String,
-        @Field("id") id: String,
-        @Field("action") action: String = "recent_add"
-    ): Response<WebOkResponse>
-
-    @FormUrlEncoded
-    @POST("support_api.php")
-    suspend fun recentClear(
-        @Field("username") username: String,
-        @Field("password") password: String,
-        @Field("action") action: String = "recent_clear"
-    ): Response<WebOkResponse>
-
-    @FormUrlEncoded
-    @POST("support_api.php")
-    suspend fun recentRemove(
-        @Field("username") username: String,
-        @Field("password") password: String,
-        @Field("id") id: String,
-        @Field("action") action: String = "recent_remove"
-    ): Response<WebOkResponse>
-
-    @FormUrlEncoded
-    @POST("support_api.php")
     suspend fun lockVerify(
         @Field("username") username: String,
         @Field("password") password: String,

@@ -83,12 +83,51 @@ class DashboardActivity : BaseActivity() {
         if (intent.getBooleanExtra(EXTRA_REFRESH_ACCOUNT, false)) refreshAccountInfo()
         // Catch up if the scheduled Auto Refresh hasn't run for a whole interval.
         AutoRefreshWorker.refreshIfDue(this)
-        binding.cardLiveTv.post { binding.cardLiveTv.requestFocus() }; setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
+        setupDrawerAndMenu(); setClickListeners(); setupDashboardCardInteractions(); handler.post(clockRunnable); syncInitialData(false)
+        setupHome()
+    }
+
+    private lateinit var home: com.network24.player.features.dashboard.home.HomeScreen
+    private var homeLoadedAt = 0L
+    private var accountCheckedAt = 0L
+
+    /** The new home (live billboard + rows) in place of the old 3 x 3 grid; the old views stay (hidden) for the account / sync code. */
+    private fun setupHome() {
+        fun open(cls: Class<*>, extra: (Intent.() -> Unit)? = null) = startActivity(Intent(this, cls).apply { extra?.invoke(this) })
+        val tabs = listOf<Pair<String, () -> Unit>>(
+            "Home" to {},
+            "Live TV" to { open(LiveCategoryActivity::class.java) },
+            "Sports" to { open(com.network24.player.features.discover.EventsActivity::class.java) },
+            "Guide" to { open(LiveCategoryActivity::class.java) { putExtra("epg_mode", true) } },
+            "Catch-up" to { open(com.network24.player.features.catchup.CatchupActivity::class.java) },
+        )
+        home = com.network24.player.features.dashboard.home.HomeScreen(this, openMenu = { openRightDrawer(binding.drawerLayout) }, renew = { showRenewPaymentQr() },
+            openAccount = { open(com.network24.player.features.account.AccountActivity::class.java) }, tabs = tabs, support = { open(LiveSupportActivity::class.java) })
+        binding.headerCard.visibility = View.GONE; binding.menuContainer.visibility = View.GONE; binding.accountCard.visibility = View.GONE
+        binding.contentRoot.setPadding(0, 0, 0, 0)
+        binding.contentRoot.addView(home.root, androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(0, 0).apply {
+            topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID; bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID; endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+        })
+        home.refreshAccount()
+    }
+
+    override fun onStart() { super.onStart(); if (::home.isInitialized) home.onStart() }
+    override fun onStop() { if (::home.isInitialized) home.onStop(); super.onStop() }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_DOWN && ::home.isInitialized
+            && !binding.drawerLayout.isDrawerOpen(binding.rightNav) && home.handleBack()) return true
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onResume() {
         super.onResume()
         if (!isFinishing) updateVpnStatus()
+        // expiry / plan from the server (a renewal shows at once instead of the old "Renew" chip), at most every 2 min
+        if (!isFinishing && hasCredentials() && System.currentTimeMillis() - accountCheckedAt > 120_000) { accountCheckedAt = System.currentTimeMillis(); refreshAccountInfo() }
+        // rows again after watching something (Continue watching changed), at most every 20 s
+        if (::home.isInitialized && System.currentTimeMillis() - homeLoadedAt > 20_000) { homeLoadedAt = System.currentTimeMillis(); home.load() }
         // recently watched + parental lock shared with play.web24.live (at most every 30 s)
         lifecycleScope.launch { com.network24.player.features.parental.WebStateRepository(this@DashboardActivity).sync() }
     }
@@ -118,7 +157,7 @@ class DashboardActivity : BaseActivity() {
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults) }
     private fun hasCredentials() = prefs.getServer().isNotBlank() && prefs.getUsername().isNotBlank() && prefs.getPassword().isNotBlank()
-    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val expired = expiryDate.time <= System.currentTimeMillis(); val remainingDays = com.network24.player.core.util.ExpiryDays.from(expiryDate.time); binding.txtRemaining.text = when { expired -> "Expired"; remainingDays == 0L -> "Ends today"; remainingDays == 1L -> "1 Day"; else -> "$remainingDays Days" }; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE } }
+    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val expired = expiryDate.time <= System.currentTimeMillis(); val remainingDays = com.network24.player.core.util.ExpiryDays.from(expiryDate.time); binding.txtRemaining.text = when { expired -> "Expired"; remainingDays == 0L -> "Ends today"; remainingDays == 1L -> "1 Day"; else -> "$remainingDays Days" }; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE }; if (::home.isInitialized) home.refreshAccount() }
 
     private fun refreshAccountInfo() {
         if (isAccountRefreshRunning || !hasCredentials()) return
@@ -369,5 +408,5 @@ class DashboardActivity : BaseActivity() {
         }
     }
 
-    override fun onDestroy() { super.onDestroy(); handler.removeCallbacks(clockRunnable) }
+    override fun onDestroy() { super.onDestroy(); handler.removeCallbacks(clockRunnable); if (::home.isInitialized) home.onDestroy() }
 }

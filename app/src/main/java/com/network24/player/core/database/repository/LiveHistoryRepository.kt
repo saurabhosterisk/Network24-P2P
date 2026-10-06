@@ -7,7 +7,6 @@ import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.core.parental.ParentalLock
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.features.live.models.LiveChannel
-import com.network24.player.features.parental.WebStateRepository
 
 class LiveHistoryRepository(context: Context) {
 
@@ -28,41 +27,6 @@ class LiveHistoryRepository(context: Context) {
             )
         )
         db.historyDao().trimToRecent(itemType, MAX_RECENT_CHANNELS)
-        // the account's list on Main (shared with play.web24.live and the customer's other devices)
-        WebStateRepository(appContext).addRecent(streamId)
-    }
-
-    /** This device's recently watched stream ids, newest first. */
-    suspend fun localRecentIds(): List<Int> {
-        val itemType = liveItemType() ?: return emptyList()
-        return db.historyDao().getRecentByType(itemType, MAX_RECENT_CHANNELS).mapNotNull { it.itemId.toIntOrNull() }
-    }
-
-    /**
-     * Puts the account's list (newest first, from Main - it includes what was watched on the web player and other
-     * devices) on top, in that order. Channels only watched on this device keep their place below.
-     */
-    suspend fun mergeServerOrder(serverIds: List<Int>) {
-        val itemType = liveItemType() ?: return
-        val now = System.currentTimeMillis()
-        serverIds.take(MAX_RECENT_CHANNELS).forEachIndexed { index, streamId ->
-            db.historyDao().upsert(
-                HistoryEntity(
-                    key = "$itemType:$streamId",
-                    itemType = itemType,
-                    itemId = streamId.toString(),
-                    updatedAtMs = now - index * 1000L
-                )
-            )
-        }
-        db.historyDao().trimToRecent(itemType, MAX_RECENT_CHANNELS)
-    }
-
-    /** Makes this device's list exactly the account's list (newest first). */
-    suspend fun replaceWith(serverIds: List<Int>) {
-        val itemType = liveItemType() ?: return
-        db.historyDao().deleteByType(itemType)
-        mergeServerOrder(serverIds)
     }
 
     suspend fun clearLocal() {
