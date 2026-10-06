@@ -84,10 +84,10 @@ class HomeScreen(
     private val tabs: List<Pair<String, () -> Unit>>,
     private val support: () -> Unit,
 ) {
-    // the page is laid out for a screen at least 880 x 400 dp (TV, big phones in landscape); smaller screens
+    // the page is laid out for a screen at least 960 x 400 dp (TV, big phones in landscape); smaller screens
     // (16:9 phones, small tablets) get the same page scaled down evenly, so the top bar and billboard never
     // squeeze or run off the edge. Text follows the same scale; the system font size counts up to +15%.
-    private val uiScale = act.resources.displayMetrics.let { m -> minOf(1f, m.widthPixels / m.density / 880f, m.heightPixels / m.density / 400f) }
+    private val uiScale = act.resources.displayMetrics.let { m -> minOf(1f, m.widthPixels / m.density / 960f, m.heightPixels / m.density / 400f) }
     private val d = act.resources.displayMetrics.density * uiScale
     private val fontD = d * act.resources.configuration.fontScale.coerceIn(0.85f, 1.15f)
     private fun dp(v: Int) = (v * d).toInt()
@@ -128,7 +128,7 @@ class HomeScreen(
     private lateinit var btnWatch: View
     private lateinit var btnMulti: View
     private lateinit var clock: TextView
-    private lateinit var chip: TextView
+    private lateinit var chip: ImageView
     private lateinit var rows: LinearLayout
     private lateinit var scroll: ScrollView
 
@@ -268,9 +268,9 @@ class HomeScreen(
             act.startActivity(Intent(act, com.network24.player.features.live.activity.MasterChannelSearchActivity::class.java))
         })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") { support() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        chip = text("", 13f, weight = 700).apply { setPadding(dp(16), dp(10), dp(16), dp(10)); setOnClickListener { if (renewSoon()) renew() else openAccount() } }
-        focusable(chip, 20f, 1.04f)
-        addView(chip, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
+        // account: a round icon like its neighbours (keeps room for the tabs); opens the user info page
+        chip = iconButton(R.drawable.ic_h_account, "Account") { openAccount() }
+        addView(chip, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_more_vert, "Menu") { openMenu() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 
@@ -749,6 +749,28 @@ class HomeScreen(
         val server = prefs.getServer().trim().trimEnd('/')
         p.setMediaItem(MediaItem.fromUri("$server/live/${prefs.getUsername().trim()}/${prefs.getPassword().trim()}/${ch.streamId}.m3u8"))
         p.prepare(); p.playWhenReady = true
+        idle = false; armIdle()
+    }
+
+    // The preview must not hold one of the account's connections while nobody uses the app: after 20 s without
+    // a key or touch it stops (the connection is freed) and the programme's banner stays; any key or touch
+    // starts it again.
+    private var idle = false
+    private val idleStop = Runnable { stopForIdle() }
+    private fun armIdle() { handler.removeCallbacks(idleStop); handler.postDelayed(idleStop, IDLE_MS) }
+
+    fun userActive() {
+        if (!started) return
+        if (idle) heroChannel?.let { playingId = -1; startVideo(it) } else if (playingId != -1) armIdle()
+    }
+
+    private fun stopForIdle() {
+        if (!started || playingId == -1) return
+        idle = true; playingId = -1
+        soundOn = false; fadeSound()
+        // the banner (programme artwork) shows through as the picture fades; no artwork -> the channel's logo
+        if (backdrop.alpha < 0.5f) poster.animate().alpha(0.9f).setDuration(600).start()
+        video.animate().alpha(0f).setDuration(600).withEndAction { if (idle) player?.stop() }.start()
     }
 
     // billboard sound: rises softly when the picture starts, fades out while the page is scrolled down to the rows
@@ -779,17 +801,20 @@ class HomeScreen(
     private fun daysLeft(): Long? = prefs.getExpiry().takeIf { it > 0 }?.let { com.network24.player.core.util.ExpiryDays.from(it * 1000) }
     private fun renewSoon() = (daysLeft() ?: 999) <= 15
 
-    /** Account chip: name and days left; gold "Renew" from 15 days before the end, red once it has ended. */
+    /** Account icon: plain normally, gold from 15 days before the end, red once it has ended (details on its page). */
     fun refreshAccount() {
         val left = daysLeft()
         val expired = prefs.getExpiry().let { it > 0 && it * 1000 <= System.currentTimeMillis() }
         when {
-            expired -> { chip.text = "Expired · Renew"; chip.setTextColor(Color.WHITE); chip.background = shape(live, 20f) }
+            expired -> { chip.setColorFilter(Color.WHITE); chip.background = shape(live, 21f); chip.contentDescription = "Account, expired" }
             left != null && left <= 15 -> {
-                chip.text = "Renew · " + when (left) { 0L -> "ends today"; 1L -> "1 day left"; else -> "$left days left" }
-                chip.setTextColor(bg); chip.background = shape(gold, 20f)
+                chip.setColorFilter(bg); chip.background = shape(gold, 21f)
+                chip.contentDescription = "Account, " + when (left) { 0L -> "ends today"; 1L -> "1 day left"; else -> "$left days left" }
             }
-            else -> { chip.text = prefs.getUsername() + (left?.let { "  ·  $it days" } ?: ""); chip.setTextColor(textMain); chip.background = shape(0x1AFFFFFF, 20f) }
+            else -> {
+                chip.setColorFilter(textMain); chip.background = shape(0x1AFFFFFF, 21f)
+                chip.contentDescription = "Account, " + prefs.getUsername() + (left?.let { ", $it days left" } ?: "")
+            }
         }
     }
 
@@ -803,6 +828,7 @@ class HomeScreen(
     fun onStop() {
         started = false
         handler.removeCallbacks(tick); pendingHero?.let { handler.removeCallbacks(it) }
+        handler.removeCallbacks(idleStop); idle = false
         soundOn = false; volumeAnim?.cancel(); volumeTarget = 0f; player?.volume = 0f
         player?.stop(); playingId = -1; video.alpha = 0f
     }
@@ -831,5 +857,5 @@ class HomeScreen(
         return true
     }
 
-    private companion object { val NO_NEXT = EpgEntity(id = "", streamId = 0); const val MAX_ROW = 20 }
+    private companion object { val NO_NEXT = EpgEntity(id = "", streamId = 0); const val MAX_ROW = 20; const val IDLE_MS = 20_000L }
 }

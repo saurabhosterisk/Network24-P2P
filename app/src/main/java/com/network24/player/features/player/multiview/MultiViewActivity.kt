@@ -26,6 +26,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import coil.load
 import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
@@ -44,6 +45,10 @@ import kotlinx.coroutines.launch
  * window, full screen, remove); UP from the top windows reaches the control bar (Back, Channels, Layout).
  * Touch: tap = sound from that window, double tap = big window / back to the grid, hold = options, tap on an
  * empty window = channel picker. The control bar hides after a few seconds and comes back with any key or tap.
+ *
+ * Connection limit: only as many windows stream as the plan has connections. The others still hold their
+ * channel but show its logo with "Connection Limit Reached"; their options offer "Play this window live", which
+ * moves a live slot there.
  */
 class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
     private lateinit var binding: ActivityMultiviewBinding
@@ -65,6 +70,14 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
     private val playerViews by lazy { arrayOf(binding.playerView1, binding.playerView2, binding.playerView3, binding.playerView4) }
     private val progressBars by lazy { arrayOf(binding.progress1, binding.progress2, binding.progress3, binding.progress4) }
     private val speakers = arrayOfNulls<ImageView>(4)
+
+    /** How many windows may stream (connections left on the plan) and which ones do. */
+    private var allowed = 4
+    private val live = BooleanArray(4)
+    private val locks = arrayOfNulls<FrameLayout>(4)
+    private val lockLogos = arrayOfNulls<ImageView>(4)
+    /** Set when "Watch full screen" left the windows; they play again when the player is closed. */
+    private var awayFullScreen = false
 
     private lateinit var bar: LinearLayout
     private lateinit var barSub: TextView
@@ -97,6 +110,8 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
 
         // the Live TV player behind MultiView would keep streaming (an extra connection) and hold the decoder
         PlayerManager.pause()
+        // as many live windows as the plan has connections (saved at sign-in, refreshed with the account)
+        allowed = planWindows(prefs.getMaxConnections())
         PlayerState.currentChannel()?.let { setSlot(0, it) }
 
         slots.forEachIndexed { index, slot ->
@@ -116,7 +131,11 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
                     override fun onDown(e: MotionEvent) = true
                     override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                         showBar()
-                        if (selected[index] == null) showChannelPicker(index) else setAudio(index)
+                        when {
+                            selected[index] == null -> showChannelPicker(index)
+                            !live[index] -> windowMenu(index)
+                            else -> setAudio(index)
+                        }
                         return true
                     }
                     override fun onDoubleTap(e: MotionEvent): Boolean { if (selected[index] != null) toggleBig(index); return true }
@@ -233,11 +252,85 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
         selected[slot] = channel
         failed[slot] = false
         labels[slot].text = "${slot + 1} · ${channel.name ?: "Unknown Channel"}"
+        // a window that already streams keeps streaming; a new one only while connections are left
+        if (live[slot] || live.count { it } < allowed) startLive(slot) else lock(slot)
+        if (selected.count { it != null } == 1 || !live[audioSlot]) audioSlot = slot.takeIf { live[it] } ?: audioSlot
+        refreshAudio()
+    }
+
+    private fun startLive(slot: Int) {
+        val ch = selected[slot] ?: return
+        live[slot] = true
+        locks[slot]?.visibility = View.GONE
+        playerViews[slot].visibility = View.VISIBLE
         progressBars[slot].visibility = View.VISIBLE
         multiPlayer.attach(slot, playerViews[slot])
-        multiPlayer.play(slot, buildStreamUrl(channel))
-        if (selected.count { it != null } == 1) audioSlot = slot
+        multiPlayer.play(slot, buildStreamUrl(ch))
+    }
+
+    /** The window keeps its channel but does not stream: logo + "Connection Limit Reached". */
+    private fun lock(slot: Int) {
+        live[slot] = false
+        // no player and no video surface left in a locked window: a stopped video surface under the card made
+        // the Fire TV compose the screen on the GPU, where the live windows' hardware video came out black
+        playerViews[slot].player = null
+        playerViews[slot].visibility = View.GONE
+        multiPlayer.releaseSlot(slot)
+        progressBars[slot].visibility = View.GONE
+        val box = locks[slot] ?: buildLock(slot)
+        lockLogos[slot]?.load(selected[slot]?.stream_icon?.takeIf { it.isNotBlank() }) { crossfade(true) }
+        box.visibility = View.VISIBLE
+    }
+
+    private fun buildLock(slot: Int): FrameLayout {
+        val box = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#F20B0D12")); isClickable = false; isFocusable = false }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(16), dp(8), dp(16), dp(8)) }
+        val logo = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER; alpha = 0.55f }
+        col.addView(logo, LinearLayout.LayoutParams(dp(120), dp(56)).apply { bottomMargin = dp(10) })
+        col.addView(ImageView(this).apply { setImageResource(R.drawable.ic_lock); setColorFilter(Color.parseColor("#FFC107")) },
+            LinearLayout.LayoutParams(dp(22), dp(22)).apply { bottomMargin = dp(6) })
+        // full width so the lines are never cut to the logo's width; they wrap only in a very small window
+        col.addView(TextView(this).apply {
+            text = "Connection Limit Reached"; textSize = 16f; setTextColor(Color.WHITE); setTypeface(typeface, Typeface.BOLD); gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+        col.addView(TextView(this).apply {
+            text = "Upgrade your plan to unlock more screens."; textSize = 12f; setTextColor(Color.parseColor("#B3FFFFFF")); gravity = Gravity.CENTER
+            setPadding(0, dp(3), 0, 0)
+        }, LinearLayout.LayoutParams(-1, -2))
+        box.addView(col, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+        // over the picture, under the window's name and the speaker badge
+        slots[slot].addView(box, 1, FrameLayout.LayoutParams(-1, -1))
+        locks[slot] = box; lockLogos[slot] = logo
+        return box
+    }
+
+    /** Windows that may stream = the plan's connections (1 to 4); unknown or unlimited plans get all four. */
+    private fun planWindows(max: Int) = if (max <= 0) 4 else max.coerceIn(1, 4)
+
+    /** A smaller limit locks the extra windows (never the one with the sound); a bigger one unlocks them. */
+    private fun applyLimit(n: Int) {
+        if (isFinishing) return
+        allowed = n
+        val liveNow = (0..3).filter { live[it] }.sortedByDescending { if (it == audioSlot) -1 else it }
+        liveNow.drop(allowed).forEach { lock(it) }
+        (0..3).filter { selected[it] != null && !live[it] }.take((allowed - live.count { it }).coerceAtLeast(0)).forEach { startLive(it) }
+        if (!live[audioSlot]) (0..3).firstOrNull { live[it] }?.let { audioSlot = it }
         refreshAudio()
+    }
+
+    /** "Play this window live": with no connection free, the user picks which live window gives its place. */
+    private fun makeLive(slot: Int) {
+        val liveNow = (0..3).filter { live[it] }
+        fun swap(off: Int?) {
+            off?.let { lock(it) }
+            startLive(slot); setAudio(slot)
+        }
+        when {
+            liveNow.size < allowed -> swap(null)
+            liveNow.size == 1 -> swap(liveNow[0])
+            else -> showChoiceDialog(title = "Stop which window?", items = liveNow.map { "Window ${it + 1} · ${selected[it]?.name.orEmpty()}" },
+                selectedIndex = -1, focusIndex = 0) { which -> swap(liveNow[which]) }
+        }
     }
 
     private fun clearSlot(slot: Int) {
@@ -246,25 +339,30 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
         labels[slot].text = emptyText(slot)
         progressBars[slot].visibility = View.GONE
         multiPlayer.clear(slot)
+        locks[slot]?.visibility = View.GONE
+        playerViews[slot].visibility = View.VISIBLE
+        val wasLive = live[slot]; live[slot] = false
         if (bigSlot == slot) toggleBig(slot)
         // the sound moves to another window that still plays
-        if (audioSlot == slot) audioSlot = selected.indexOfFirst { it != null }.coerceAtLeast(0)
-        refreshAudio()
+        if (audioSlot == slot) audioSlot = (0..3).firstOrNull { live[it] } ?: 0
+        // its connection is free again: a locked window takes it
+        if (wasLive) applyLimit(allowed) else refreshAudio()
     }
 
     private fun firstEmpty(): Int? = selected.indexOfFirst { it == null }.takeIf { it >= 0 }
 
     private fun setAudio(slot: Int) {
-        if (selected[slot] == null) return
+        if (selected[slot] == null || !live[slot]) return
         audioSlot = slot
         refreshAudio()
     }
 
     private fun refreshAudio() {
         multiPlayer.setAudioFocus(audioSlot)
-        speakers.forEachIndexed { i, v -> v?.visibility = if (i == audioSlot && selected[i] != null) View.VISIBLE else View.GONE }
-        val ch = selected[audioSlot]
-        if (::barSub.isInitialized) barSub.text = (if (ch != null) "Sound: window ${audioSlot + 1} · ${ch.name}   ·   " else "") +
+        speakers.forEachIndexed { i, v -> v?.visibility = if (i == audioSlot && selected[i] != null && live[i]) View.VISIBLE else View.GONE }
+        val ch = selected[audioSlot]?.takeIf { live[audioSlot] }
+        val plan = if (allowed < 4) "Your plan: $allowed live ${if (allowed == 1) "window" else "windows"}   ·   " else ""
+        if (::barSub.isInitialized) barSub.text = plan + (if (ch != null) "Sound: window ${audioSlot + 1} · ${ch.name}   ·   " else "") +
             if (touch) "tap a window for its sound · double-tap = big · hold = options" else "move to a window for its sound · OK = options"
     }
 
@@ -315,25 +413,39 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
     private fun windowMenu(slot: Int) {
         val ch = selected[slot] ?: run { showChannelPicker(slot); return }
         val items = mutableListOf<Pair<String, () -> Unit>>()
+        if (!live[slot]) items += "Play this window live" to { makeLive(slot) }
         if (failed[slot]) items += "Try again" to { setSlot(slot, ch) }
         items += "Change channel" to { showChannelPicker(slot) }
-        if (touch || audioSlot != slot) items += "Sound from this window" to { setAudio(slot) }
+        if (live[slot] && (touch || audioSlot != slot)) items += "Sound from this window" to { setAudio(slot) }
         items += (if (bigSlot == slot) "Back to the grid" else "Big window") to { toggleBig(slot) }
         items += "Watch full screen" to { fullScreen(ch) }
         items += "Remove from MultiView" to { clearSlot(slot) }
-        showChoiceDialog(title = "Window ${slot + 1} · ${ch.name.orEmpty()}", items = items.map { it.first }, selectedIndex = -1, focusIndex = 0) { which -> items[which].second() }
+        val title = "Window ${slot + 1} · ${ch.name.orEmpty()}" + if (live[slot]) "" else " · Connection Limit Reached"
+        showChoiceDialog(title = title, items = items.map { it.first }, selectedIndex = -1, focusIndex = 0) { which -> items[which].second() }
     }
 
-    /** Leaves MultiView and plays this channel full screen. */
+    /**
+     * Plays this channel full screen on top of MultiView. The windows stop streaming (their connections are needed)
+     * but keep their channels, layout and sound; BACK from the player brings MultiView back as it was.
+     */
     private fun fullScreen(ch: LiveChannel) {
         val id = ch.stream_id ?: return
         lifecycleScope.launch {
             val entity = DatabaseProvider.get(this@MultiViewActivity).channelDao().getByStreamIds(listOf(id)).firstOrNull()
             if (entity == null) { Toast.makeText(this@MultiViewActivity, "This channel is not available.", Toast.LENGTH_SHORT).show(); return@launch }
             multiPlayer.release()
+            awayFullScreen = true
             ChannelLauncher.play(this@MultiViewActivity, listOf(entity), entity)
-            finish()
         }
+    }
+
+    /** Back from full screen: the Live TV player gives up its connection again and the windows play as before. */
+    private fun backFromFullScreen() {
+        awayFullScreen = false
+        PlayerManager.pause()
+        (0..3).filter { live[it] && selected[it] != null }.forEach { startLive(it) }
+        refreshAudio()
+        if (bigSlot >= 0) slots[bigSlot].requestFocus() else slots[audioSlot].requestFocus()
     }
 
     /** Every category and its channels; the picked channel plays in this window (see [MultiViewPicker]). */
@@ -367,7 +479,7 @@ class MultiViewActivity : BaseActivity(), MultiPlayerManager.Listener {
 
     override fun onStart() {
         super.onStart()
-        multiPlayer.resumeAll()
+        if (awayFullScreen) backFromFullScreen() else multiPlayer.resumeAll()
     }
 
     override fun onStop() {

@@ -183,6 +183,14 @@ class MultiPlayerManager(
         retryCounts[slot] = 0
     }
 
+    /** Frees one window completely (its decoder too); a later play() starts a fresh player. */
+    fun releaseSlot(slot: Int) {
+        require(slot in 0..3)
+        clear(slot)
+        players[slot]?.release()
+        players[slot] = null
+    }
+
     fun getPlayer(slot: Int): ExoPlayer? = if (slot in 0..3) players[slot] else null
 
     /**
