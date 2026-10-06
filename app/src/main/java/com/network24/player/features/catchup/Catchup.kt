@@ -42,7 +42,10 @@ import com.network24.player.features.discover.ChannelLauncher
 import com.network24.player.features.discover.CinemaPro
 import com.network24.player.features.discover.Fmt
 import com.network24.player.features.player.manager.PlayerManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -279,27 +282,72 @@ class CatchupActivity : BaseActivity() {
     }
 
     // ------------------------------------------------------------------------------------------------ data
+    /**
+     * The page opens from the guides saved on this device (instantly); they are asked again from the server when
+     * older than 15 minutes - shown at once next time - or when there are none yet (then 8 channels at a time).
+     */
     private fun load() = lifecycleScope.launch {
         val db = DatabaseProvider.get(this@CatchupActivity)
-        channels = db.channelDao().getAll().filter { (it.tvArchive ?: 0) == 1 }.sortedBy { it.name }
-        // The catch-up flag alone is not enough: a channel only has recordings when it runs always-on on its
-        // recording server. Main lists those; without an answer (older Main) every flagged channel is shown.
-        val api = Web24Api(this@CatchupActivity)
-        val recordable = runCatching { api.support("catchup").optJSONArray("streams") }.getOrNull()
-        if (recordable != null) {
-            val ids = (0 until recordable.length()).map { recordable.optInt(it) }.toSet()
-            channels = channels.filter { it.streamId in ids }
+        val flagged = db.channelDao().getAll().filter { (it.tvArchive ?: 0) == 1 }.sortedBy { it.name }
+        val cats = db.categoryDao().getByType(CategoryType.LIVE).sortedBy { it.position }.map { it.categoryId to it.name }
+        val cached = withContext(Dispatchers.IO) { readCache() }
+        if (cached != null) {
+            show(flagged, cached.second, cats)
+            if (System.currentTimeMillis() - cached.first < CACHE_FRESH_MS) return@launch
+            launch { fetch(flagged) }   // fresh guides for the next visit; this page stays as it is
+            return@launch
         }
-        if (channels.isEmpty()) { status.text = "No channel with catch-up on your plan yet."; return@launch }
-        // every channel's guide, a few at a time
-        val gate = Semaphore(4)
-        channels.map { ch -> async { gate.withPermit { ch.streamId to runCatching { api.fullGuide(ch.streamId) }.getOrDefault(emptyList()) } } }
-            .awaitAll().forEach { (id, g) -> guides[id] = g }
+        val fresh = fetch(flagged)
+        if (fresh == null) { status.text = "The recordings could not be loaded right now. Please try again."; return@launch }
+        show(flagged, fresh, cats)
+    }
+
+    private fun show(flagged: List<ChannelEntity>, data: Map<Int, List<Web24Api.Programme>>, cats: List<Pair<String, String>>) {
+        guides.clear(); guides.putAll(data)
+        channels = flagged.filter { it.streamId in data.keys }
+        if (channels.isEmpty()) { status.text = "No channel with catch-up on your plan yet."; return }
+        buildOverview(cats)
         val want = intent.getIntExtra(EXTRA_STREAM, 0)
-        val cats = db.categoryDao().getByType(CategoryType.LIVE).sortedBy { it.position }
-        buildOverview(cats.map { it.categoryId to it.name })
         channels.firstOrNull { it.streamId == want }?.let { open(it) }
     }
+
+    /** Recordable channels (Main lists them) and their guides; saved on this device. Null when nothing came back. */
+    private suspend fun fetch(flagged: List<ChannelEntity>): Map<Int, List<Web24Api.Programme>>? = coroutineScope {
+        // The catch-up flag alone is not enough: a channel only has recordings when it runs always-on on its
+        // recording server. Main lists those; without an answer (older Main) every flagged channel is used.
+        val api = Web24Api(this@CatchupActivity)
+        val recordable = runCatching { api.support("catchup").optJSONArray("streams") }.getOrNull()
+        val list = if (recordable == null) flagged else (0 until recordable.length()).map { recordable.optInt(it) }.toSet().let { ids -> flagged.filter { it.streamId in ids } }
+        val gate = Semaphore(8)
+        val got = list.map { ch -> async { gate.withPermit { ch.streamId to runCatching { api.fullGuide(ch.streamId) }.getOrNull() } } }.awaitAll()
+        if (got.isNotEmpty() && got.all { it.second == null }) return@coroutineScope null
+        val data = got.associate { (id, g) -> id to g.orEmpty() }
+        withContext(Dispatchers.IO) { writeCache(data) }
+        data
+    }
+
+    private val cacheFile by lazy { java.io.File(cacheDir, "catchup_guides.json") }
+
+    private fun writeCache(data: Map<Int, List<Web24Api.Programme>>) = runCatching {
+        val g = JSONObject()
+        data.forEach { (id, list) ->
+            g.put(id.toString(), org.json.JSONArray().apply {
+                list.forEach { p -> put(org.json.JSONArray().put(p.title).put(p.description).put(p.start).put(p.end).put(p.hasArchive)) }
+            })
+        }
+        cacheFile.writeText(JSONObject().put("at", System.currentTimeMillis()).put("guides", g).toString())
+    }
+
+    private fun readCache(): Pair<Long, Map<Int, List<Web24Api.Programme>>>? = runCatching {
+        val o = JSONObject(cacheFile.readText())
+        val g = o.getJSONObject("guides")
+        val data = g.keys().asSequence().associate { k ->
+            val a = g.getJSONArray(k)
+            k.toInt() to (0 until a.length()).map { a.getJSONArray(it) }.map { Web24Api.Programme(it.getString(0), it.getString(1), it.getLong(2), it.getLong(3), it.getBoolean(4)) }
+        }
+        // a cache older than a day is of no use (recordings are kept a few days, the guide moves on)
+        o.getLong("at").takeIf { System.currentTimeMillis() - it < 86_400_000L }?.let { it to data }
+    }.getOrNull()
 
     private fun canPlay(s: Show): Boolean {
         val now = System.currentTimeMillis()
@@ -309,6 +357,18 @@ class CatchupActivity : BaseActivity() {
 
     /** Recorded shows of a channel, newest first. */
     private fun recorded(ch: ChannelEntity) = guides[ch.streamId].orEmpty().map { Show(ch, it) }.filter { canPlay(it) }.sortedByDescending { it.p.end }
+
+    /** Where the viewer left this show in the catch-up player (ms), 0 when not started or finished. */
+    // (from one minute in, like the player: a show only peeked into starts from the beginning again)
+    private fun resumeAt(s: Show) = getSharedPreferences("n24_catchup_pos", MODE_PRIVATE).getLong("${s.ch.streamId}:${s.p.start}", 0L).takeIf { it >= 60_000 } ?: 0L
+    private fun watched(s: Show): Int = resumeAt(s).let { if (it <= 0) -1 else (it * 1000 / (s.p.end - s.p.start)).toInt().coerceIn(0, 1000) }
+
+    /** Shows left part-way, the ones watched most recently ... approximated by the newest broadcast first. */
+    private fun continueList() = channels.flatMap { recorded(it) }.filter { resumeAt(it) > 0 }.sortedByDescending { it.p.end }.take(20)
+
+    private fun progressBar(value: Int) = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        max = 1000; progress = value; progressDrawable = getDrawable(R.drawable.home_progress)
+    }
 
     private fun when_(s: Show) = "${Fmt.day(s.p.start)} ${Fmt.clock(s.p.start)}"
     private fun minutes(s: Show) = ((s.p.end - s.p.start) / 60_000).let { if (it >= 60) "${it / 60} h ${it % 60} min".replace(" 0 min", "") else "$it min" }
@@ -336,6 +396,8 @@ class CatchupActivity : BaseActivity() {
         // Just aired: the newest recordings over every channel (a few per channel, so one channel does not fill it)
         val justAired = channels.flatMap { recorded(it).take(3) }.sortedByDescending { it.p.end }.take(20)
         rows.addView(viewSwitch())
+        // shows left part-way come first, in both views
+        addRow("Continue watching", "pick up where you left off", continueList().map { showCard(it) })
         if (listView()) buildList(cats) else {
             addRow("Just aired", "recorded in the last hours", justAired.map { showCard(it) })
             // one row per category: its channels, each with its latest recording
@@ -440,7 +502,7 @@ class CatchupActivity : BaseActivity() {
     }
 
     /** 16:9 card with the show's artwork (TMDB), the channel's logo as a badge, the title and when it aired. */
-    private fun card(s: Show, title: String, sub: String, onClick: () -> Unit) = FrameLayout(this).apply {
+    private fun card(s: Show, title: String, sub: String, progress: Int = -1, onClick: () -> Unit) = FrameLayout(this).apply {
         background = shape(surface, 14f, line)
         clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         layoutParams = LinearLayout.LayoutParams(dp(288), dp(162))
@@ -463,6 +525,8 @@ class CatchupActivity : BaseActivity() {
         info.addView(text(title, 15f, weight = 700))
         info.addView(text(sub, 12f, textSub, 600).apply { setPadding(0, dp(4), 0, 0) })
         addView(info, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        // how much of the show was watched (catch-up player's resume point)
+        if (progress >= 0) addView(progressBar(progress), FrameLayout.LayoutParams(-1, dp(3), Gravity.BOTTOM).apply { setMargins(dp(14), 0, dp(14), dp(8)) })
         art(cleanTitle(s.p.title)) { a ->
             val url = a.optString("backdrop").ifBlank { return@art }.replace("/w1280/", "/w500/")
             pic.load(url) { crossfade(true); listener(onSuccess = { _, _ -> pic.animate().alpha(1f).setDuration(350).start(); logo.visibility = View.GONE; badge.visibility = View.VISIBLE }) }
@@ -474,7 +538,7 @@ class CatchupActivity : BaseActivity() {
         }
     }
 
-    private fun showCard(s: Show) = card(s, cleanTitle(s.p.title), "${cleanName(s.ch.name)} · ${when_(s)}") { watch(s) }
+    private fun showCard(s: Show) = card(s, cleanTitle(s.p.title), "${cleanName(s.ch.name)} · ${when_(s)}", watched(s)) { watch(s) }
 
     private fun channelCard(ch: ChannelEntity): View {
         val shows = recorded(ch)
@@ -488,7 +552,9 @@ class CatchupActivity : BaseActivity() {
         heroChLogo.load(s.ch.icon?.takeIf { it.isNotBlank() })
         heroTag.text = cleanName(s.ch.name).uppercase()
         heroTitle.text = cleanTitle(s.p.title); heroTitle.visibility = View.VISIBLE; heroArtLogo.visibility = View.GONE
-        heroMeta.text = "Aired ${when_(s)}  ·  ${minutes(s)}"
+        val at = resumeAt(s)
+        heroMeta.text = "Aired ${when_(s)}  ·  ${minutes(s)}" + if (at > 0) "  ·  watched up to ${clock(at)}" else ""
+        ((btnWatch as LinearLayout).getChildAt(1) as TextView).text = if (at > 0) "Resume" else "Watch from start"
         heroDesc.text = s.p.description.ifBlank { "Recorded on ${cleanName(s.ch.name)}. Watch it from the start." }
         btnChannel.text = "More from ${cleanName(s.ch.name)}"
         (heroBox.tag as View).visibility = View.VISIBLE
@@ -525,8 +591,29 @@ class CatchupActivity : BaseActivity() {
         val today = Fmt.startOfDay(now)
         val days = guides[ch.streamId].orEmpty().filter { it.start <= now }.map { Fmt.startOfDay(it.start) }.distinct().filter { it <= today }.sortedDescending()
         day = today.takeIf { it in days } ?: days.firstOrNull() ?: 0L
+        curDays = days
         renderChannel(days)
         scroll.post { scroll.smoothScrollTo(0, (heroBox.parent as View).bottom - dp(40)) }
+    }
+
+    private var curDays: List<Long> = emptyList()
+
+    /**
+     * Back from the player: the resume points changed, so the page shows them again - the channel page as it was,
+     * or the overview (Continue watching, progress on the cards) with the same show on the billboard.
+     */
+    override fun onRestart() {
+        super.onRestart()
+        if (guides.isEmpty() || !::catOrder.isInitialized) return
+        val keep = heroShow
+        if (cur == null) buildOverview(catOrder) else renderChannel(curDays)
+        heroShow = null
+        keep?.let { showHero(it) }
+    }
+
+    private fun clock(ms: Long): String {
+        val s = (ms / 1000).coerceAtLeast(0)
+        return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
     }
 
     private fun renderChannel(days: List<Long>) {
@@ -581,12 +668,14 @@ class CatchupActivity : BaseActivity() {
         mid.addView(text(cleanTitle(p.title), 16f, if (past && !playable) textSub else textMain, 700))
         val desc = p.description.ifBlank { "${Fmt.clock(p.start)} – ${Fmt.clock(p.end)}" }
         mid.addView(text(desc, 13f, textSub, 500, lines = 2).apply { setPadding(0, dp(4), 0, 0) })
-        if (isLive) mid.addView(ProgressBar(this@CatchupActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 1000; progress = ((now - p.start) * 1000 / (p.end - p.start)).toInt(); progressDrawable = getDrawable(R.drawable.home_progress)
-        }, LinearLayout.LayoutParams(dp(220), dp(3)).apply { topMargin = dp(8) })
+        // on now: how far the broadcast is; recorded and started: how much the viewer watched
+        val seen = watched(s)
+        val bar = if (isLive) ((now - p.start) * 1000 / (p.end - p.start)).toInt() else seen
+        if (bar >= 0) mid.addView(progressBar(bar), LinearLayout.LayoutParams(dp(220), dp(3)).apply { topMargin = dp(8) })
         addView(mid, LinearLayout.LayoutParams(0, -2, 1f))
         val (label, fill, color) = when {
             isLive -> Triple("▶  From start", live, Color.WHITE)
+            playable && seen >= 0 -> Triple("▶  Resume", Color.WHITE, bg)
             playable -> Triple("▶  Watch", Color.WHITE, bg)
             else -> Triple("Not recorded", 0x14FFFFFF, textSub)
         }
@@ -659,5 +748,5 @@ class CatchupActivity : BaseActivity() {
 
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); super.onDestroy() }
 
-    companion object { const val EXTRA_STREAM = "stream_id" }
+    companion object { const val EXTRA_STREAM = "stream_id"; private const val CACHE_FRESH_MS = 15 * 60_000L }
 }
