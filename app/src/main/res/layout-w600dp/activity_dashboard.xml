@@ -294,7 +294,7 @@
                             android:layout_marginTop="8dp"
                             android:gravity="center"
                             android:maxLines="1"
-                            android:text="Events &amp; Scores"
+                            android:text="Live Sports"
                             android:textColor="@android:color/white"
                             android:textStyle="bold"
                             android:textSize="15sp"/>

@@ -223,6 +223,15 @@
             android:screenOrientation="sensorLandscape"
             android:windowSoftInputMode="adjustPan|stateHidden" />
         <activity
+            android:name=".features.discover.GameActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name=".features.discover.TeamActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustPan|stateHidden" />
+        <activity
             android:name=".features.discover.TrendingActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />

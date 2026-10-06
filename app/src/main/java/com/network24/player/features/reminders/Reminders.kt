@@ -103,7 +103,7 @@ class RemindersActivity : FeatureListActivity() {
                     onLong = { chans[r.streamId]?.let { ChannelLauncher.play(this@RemindersActivity, listOf(it), it) } }) {
                     Reminders.toggle(this@RemindersActivity, r.streamId, r.start, r.title, r.channel); load()
                 }
-            }, "No reminders.\nOpen Events & Scores, Find a Show or the TV guide panel in the player to set one.")
+            }, "No reminders.\nOpen Live Sports, Find a Show or the TV guide panel in the player to set one.")
         }
     }
 }

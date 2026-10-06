@@ -117,7 +117,8 @@ abstract class FeatureListActivity : BaseActivity() {
         // TV remote: DOWN leaves the search box for the results (Fire TV kept the focus inside the box)
         b.editSearch.setOnKeyListener { _, keyCode, event ->
             if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
-                if (b.chipScroll.visibility == View.VISIBLE && b.chipRow.childCount > 0) b.chipRow.getChildAt(0).requestFocus() else focusFirstRow()
+                val chip = selectedChip(b.chipRow).takeIf { b.chipScroll.visibility == View.VISIBLE && b.chipRow.childCount > 0 }
+                if (chip != null) chip.requestFocus() else focusFirstRow()
                 true
             } else false
         }
@@ -128,30 +129,78 @@ abstract class FeatureListActivity : BaseActivity() {
         })
     }
 
+    /** UP on the first row goes to the selected chip (Android picked whichever chip sat right above, e.g. "MLS"). */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP) {
+            val row = currentFocus?.let { f -> generateSequence(f) { it.parent as? View }.firstOrNull { it.parent === b.rvItems } }
+            if (row != null && b.rvItems.getChildAdapterPosition(row) == 0) {
+                val target = selectedChip(b.chipRow2).takeIf { b.chipScroll2.visibility == View.VISIBLE }
+                    ?: selectedChip(b.chipRow).takeIf { b.chipScroll.visibility == View.VISIBLE }
+                    ?: b.editSearch.takeIf { b.searchRow.visibility == View.VISIBLE }
+                if (target != null && target.requestFocus()) return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     protected fun focusFirstRow() {
         b.rvItems.post { b.rvItems.getChildAt(0)?.let { (it.findViewById<View>(R.id.cardRoot) ?: it).requestFocus() } }
     }
 
     /** Chip row (same chips as the rest of the app); returns nothing, calls [onPick] with the chosen key. */
-    protected fun chips(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit) {
-        // rebuilding the chips must not throw the remote's focus away (it jumped to the Back button)
-        val hadFocus = b.chipRow.hasFocus()
-        b.chipScroll.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
-        b.chipRow.removeAllViews()
+    protected fun chips(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit): Unit =
+        chipsIn(b.chipScroll, b.chipRow, items, selected, onPick) { k -> chips(items, k, onPick) }
+
+    /** Second chip row under the first (e.g. a filter under the tabs); an empty list hides it. */
+    protected fun chips2(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit): Unit =
+        chipsIn(b.chipScroll2, b.chipRow2, items, selected, onPick) { k -> chips2(items, k, onPick) }
+
+    private fun chipsIn(scroll: View, row: LinearLayout, items: List<Pair<String, String>>, selected: String,
+                        onPick: (String) -> Unit, redraw: (String) -> Unit) {
+        // rebuilding the chips must not throw the remote's focus away (it jumped to the Back button). A pick can
+        // rebuild the same row twice (its own redraw, then the screen's render) before the first focus request lands.
+        val hadFocus = row.hasFocus() || pendingChipFocus === row
+        scroll.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        row.removeAllViews()
         val d = resources.displayMetrics.density
         items.forEach { (k, label) ->
             val t = TextView(this).apply {
+                id = View.generateViewId()
                 text = label; textSize = 14f; isFocusable = true; isClickable = true
                 setTextColor(ContextCompat.getColor(context, R.color.text_primary))
                 setBackgroundResource(R.drawable.bg_interactive_chip)
                 setPadding((16 * d).toInt(), (9 * d).toInt(), (16 * d).toInt(), (9 * d).toInt())
                 isSelected = k == selected
                 if (k == selected) { setTextColor(ContextCompat.getColor(context, R.color.primary_light)); setTypeface(typeface, android.graphics.Typeface.BOLD) }
-                setOnClickListener { chips(items, k, onPick); onPick(k) }
+                setOnClickListener { pendingChipFocus = row; redraw(k); onPick(k) }
             }
-            b.chipRow.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })
-            if (hadFocus && k == selected) t.post { t.requestFocus() }
+            row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })
+            if (hadFocus && k == selected) t.post { t.requestFocus(); if (pendingChipFocus === row) pendingChipFocus = null }
         }
+        wireFocus()
+    }
+
+    private var pendingChipFocus: LinearLayout? = null
+
+    private fun selectedChip(row: LinearLayout): View? =
+        (0 until row.childCount).map { row.getChildAt(it) }.firstOrNull { it.isSelected } ?: row.getChildAt(0)
+
+    /**
+     * TV remote order, top to bottom: header buttons -> search box -> tab chips -> second chips -> list. Android's own
+     * search jumped from the right-hand header buttons straight into the list, skipping the chips on the left.
+     */
+    protected fun wireFocus() {
+        val search = b.searchRow.takeIf { it.visibility == View.VISIBLE }?.let { b.editSearch }
+        val first = selectedChip(b.chipRow).takeIf { b.chipScroll.visibility == View.VISIBLE }
+        val second = selectedChip(b.chipRow2).takeIf { b.chipScroll2.visibility == View.VISIBLE }
+        val belowHeader = search ?: first ?: second
+        listOf(b.btnBack, b.btnAction, b.btnMore).forEach { it.nextFocusDownId = belowHeader?.id ?: View.NO_ID }
+        if (search != null) b.editSearch.nextFocusUpId = b.btnBack.id
+        for (i in 0 until b.chipRow.childCount) b.chipRow.getChildAt(i).apply {
+            nextFocusUpId = (search ?: b.btnBack).id
+            nextFocusDownId = second?.id ?: View.NO_ID
+        }
+        for (i in 0 until b.chipRow2.childCount) b.chipRow2.getChildAt(i).nextFocusUpId = first?.id ?: (search ?: b.btnBack).id
     }
 
     protected fun loading(on: Boolean) { b.progressLoading.visibility = if (on) View.VISIBLE else View.GONE }
@@ -189,7 +238,7 @@ object Fmt {
     fun day(ms: Long): String {
         val d = Calendar.getInstance().apply { timeInMillis = ms }
         val diff = (startOfDay(ms) - startOfDay(System.currentTimeMillis())) / 86_400_000L
-        return when (diff) { 0L -> "Today"; -1L -> "Yesterday"; 1L -> "Tomorrow"; else -> SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(d.time) }
+        return when (diff) { 0L -> "Today"; -1L -> "Yesterday"; 1L -> "Tomorrow"; else -> SimpleDateFormat("EEE, MMM d", Locale.US).format(d.time) }
     }
     fun startOfDay(ms: Long): Long = Calendar.getInstance().apply { timeInMillis = ms; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
     fun date(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(ms))

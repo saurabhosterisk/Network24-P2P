@@ -46,6 +46,13 @@ class CatchupActivity : FeatureListActivity() {
         loading(true)
         lifecycleScope.launch {
             channels = db.channelDao().getAll().filter { (it.tvArchive ?: 0) == 1 }.sortedBy { it.name }
+            // The catch-up flag alone is not enough: a channel only has recordings when it runs always-on on its
+            // recording server. Main lists those; without an answer (older Main) every flagged channel is shown.
+            val recordable = runCatching { Web24Api(this@CatchupActivity).support("catchup").optJSONArray("streams") }.getOrNull()
+            if (recordable != null) {
+                val ids = (0 until recordable.length()).map { recordable.optInt(it) }.toSet()
+                channels = channels.filter { it.streamId in ids }
+            }
             loading(false)
             val want = intent.getIntExtra(EXTRA_STREAM, 0)
             channels.firstOrNull { it.streamId == want }?.let { open(it) } ?: showChannels()
