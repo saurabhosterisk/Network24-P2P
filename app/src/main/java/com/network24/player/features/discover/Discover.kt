@@ -81,15 +81,16 @@ object EventParser {
 
 // ------------------------------------------------------------------------------------------------ Events & Scores
 class EventsActivity : FeatureListActivity() {
-    private var tab = "events"
+    // Only ESPN's scoreboard is listed: channel names can carry a wrong time or title, the scoreboard does not.
+    // (Channel names are still used behind the scenes to find the channels showing a game.)
+    private var tab = "scores"
     private var league = ""
-    private var events: List<EventParser.Event> = emptyList()
     private var games: List<JSONObject> = emptyList()
     private val teams = mutableListOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title("Events & Scores", "Live events from the event channels, and live scores from the leagues")
+        title("Events & Scores", "Live scores and games from the leagues - select a game to see the channels showing it")
         action("Refresh") { load() }
         teams.addAll(getSharedPreferences("n24_teams", MODE_PRIVATE).getStringSet("teams", emptySet())!!.sorted())
         tabs()
@@ -98,14 +99,11 @@ class EventsActivity : FeatureListActivity() {
 
     companion object { const val EXTRA_GAME = "game_json" }
 
-    private fun tabs() = chips(listOf("events" to "Live events", "scores" to "Scores", "teams" to "My teams"), tab) { tab = it; league = ""; render() }
+    private fun tabs() = chips(listOf("scores" to "Scores", "teams" to "My teams"), tab) { tab = it; league = ""; render() }
 
     private fun load() {
         loading(true)
         lifecycleScope.launch {
-            val replay = db.categoryDao().getByType(CategoryType.LIVE).filter { it.name?.contains("REPLAY", true) == true }.map { it.categoryId }.toSet()
-            val all = withContext(Dispatchers.IO) { db.channelDao().getAll() }
-            events = withContext(Dispatchers.Default) { EventParser.parse(all, replay) }
             games = runCatching { Web24Api.objects(Web24Api(this@EventsActivity).support("scores").optJSONArray("games")) }.getOrDefault(emptyList())
             loading(false)
             TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) })
@@ -119,41 +117,35 @@ class EventsActivity : FeatureListActivity() {
 
     private fun teamName(t: JSONObject) = t.optString("short").ifBlank { t.optString("name") }
 
-    /** Finds the channels showing this game: one -> plays it, several -> pick one, none -> says so. */
+    /** Finds the channels showing this game and opens them like a Live TV category (list + preview); none -> says so. */
     private fun openGame(game: Game) {
         loading(true)
         lifecycleScope.launch {
             val chans = GameChannels.find(this@EventsActivity, game)
             loading(false)
-            when {
-                chans.isEmpty() -> toast(
+            if (chans.isEmpty()) {
+                toast(
                     if (game.state == "post") "${game.title} has ended."
                     else "No channel lists ${game.title} yet. Event channels usually add it shortly before the start."
                 )
-                chans.size == 1 -> play(chans, chans[0])
-                else -> pickOne("Watch ${game.title} on", chans.map { it.name.orEmpty() }, 0) { play(chans, chans[it]) }
+                return@launch
             }
+            // Same screen as Live TV: channels on the left, preview on the right, so the viewer can check which
+            // channel really has the game before going full screen.
+            com.network24.player.features.player.state.PlayerState.currentPosition = 0
+            startActivity(
+                Intent(this@EventsActivity, com.network24.player.features.live.activity.ChannelListActivity::class.java)
+                    .putExtra("category_name", "${game.title} · ${game.league}")
+                    .putExtra(com.network24.player.features.live.activity.ChannelListActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray())
+            )
         }
     }
 
     private fun render() {
-        val now = System.currentTimeMillis()
+        tabs()
         when (tab) {
-            "events" -> show(events.map { e ->
-                val live = e.start <= now && now - e.start < 4 * 3_600_000L
-                val soon = e.start - now in 0..15 * 60_000L || (e.start <= now && !live)
-                Row("${e.ch.streamId}@${e.start}", e.title, e.sub.ifBlank { e.ch.name.orEmpty() }, if (e.sub.isBlank()) "" else e.ch.name.orEmpty(), e.ch.icon,
-                    lead = if (live) "LIVE" else if (e.start <= now) "Started\n${Fmt.clock(e.start)}" else "${Fmt.day(e.start)}\n${Fmt.clock(e.start)}",
-                    badge = when { live || soon -> "Watch"; Reminders.has(this, e.ch.streamId, e.start) -> "Reminder set"; else -> "Remind me" },
-                    badgeColor = if (live) LIVE else if (Reminders.has(this, e.ch.streamId, e.start)) GOLD else 0,
-                    onLong = { play(events.map { it.ch }, e.ch) }) {
-                    if (live || soon) play(events.map { it.ch }, e.ch)
-                    else { Reminders.toggle(this, e.ch.streamId, e.start, e.title, e.ch.name.orEmpty()); render() }
-                }
-            }, "No events found right now.\nEvent channels list their games in the channel name; they show up here when they do.")
             "scores" -> {
                 val leagues = games.map { it.optString("league") }.distinct()
-                chips(listOf("events" to "Live events", "scores" to "Scores", "teams" to "My teams") , tab) { tab = it; league = ""; render() }
                 val list = games.filter { league == "" || it.optString("league") == league }
                     .sortedWith(compareBy({ when (it.optString("state")) { "in" -> 0; "pre" -> 1; else -> 2 } }, { it.optLong("start") }))
                 val rows = mutableListOf<Row>()

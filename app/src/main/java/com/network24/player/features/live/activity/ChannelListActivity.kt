@@ -32,6 +32,7 @@ import com.network24.player.common.utils.EpgTimeFormatter
 import com.network24.player.common.utils.LiveStreamUrlBuilder
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
+import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.core.database.repository.FavoritesRepository
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.databinding.ActivityChannelListBinding
@@ -56,6 +57,11 @@ import kotlinx.coroutines.launch
 
 
 class ChannelListActivity : BaseActivity() {
+
+    companion object {
+        /** IntArray of stream ids: show exactly these channels (in this order) instead of a category. */
+        const val EXTRA_STREAM_IDS = "stream_ids"
+    }
 
     override fun onTvGuideUpdated() {
         if (::binding.isInitialized) {
@@ -470,14 +476,7 @@ class ChannelListActivity : BaseActivity() {
             try {
 
 
-                val channels =
-                    repository.getChannels(
-                        server = prefs.getServer(),
-                        username = prefs.getUsername(),
-                        password = prefs.getPassword(),
-                        categoryId = categoryId,
-                        forceRefresh = false
-                    )
+                val channels = fetchChannels(forceRefresh = false)
 
 
 
@@ -522,6 +521,23 @@ class ChannelListActivity : BaseActivity() {
 
 
 
+    /**
+     * This screen's channels: the category's, or a fixed list when EXTRA_STREAM_IDS is given (e.g. the channels
+     * showing one game, from Events & Scores), kept in that order.
+     */
+    private suspend fun fetchChannels(forceRefresh: Boolean): List<LiveChannel> {
+        val fixedIds = intent.getIntArrayExtra(EXTRA_STREAM_IDS)?.toList()
+            ?: return repository.getChannels(
+                server = prefs.getServer(),
+                username = prefs.getUsername(),
+                password = prefs.getPassword(),
+                categoryId = categoryId,
+                forceRefresh = forceRefresh
+            )
+        val byId = DatabaseProvider.get(this).channelDao().getByStreamIds(fixedIds).associateBy { it.streamId }
+        return fixedIds.mapNotNull { byId[it]?.toLiveChannel() }
+    }
+
     private fun loadChannels(
         forceRefresh: Boolean = false,
         preserveStreamId: Int? = null
@@ -540,14 +556,7 @@ class ChannelListActivity : BaseActivity() {
             try {
 
 
-                val channels =
-                    repository.getChannels(
-                        server = prefs.getServer(),
-                        username = prefs.getUsername(),
-                        password = prefs.getPassword(),
-                        categoryId = categoryId,
-                        forceRefresh = forceRefresh
-                    )
+                val channels = fetchChannels(forceRefresh)
 
 
 
