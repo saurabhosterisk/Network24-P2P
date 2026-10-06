@@ -88,13 +88,16 @@ class EventsActivity : FeatureListActivity() {
     private var league = ""
     private var firstFocusDone = false
     private var games: List<JSONObject> = emptyList()
+    // fights, golf, races, tennis (one row per event) and the leagues the console has switched on, in its order
+    private var events: List<JSONObject> = emptyList()
+    private var meta: Map<String, JSONObject> = emptyMap()
     private var allTeams: List<TeamInfo> = emptyList()
     private var next: Map<String, Game?> = emptyMap()
     private var query = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title("Live Sports", "Today's games and scores from ESPN. Select a game to see which channels are showing it.")
+        title("Live Sports", "Games, fights, races and tournaments from ESPN. Select one for the details and the channels showing it.")
         action("Refresh") { load() }
         enableSearch("Search a team: Cowboys, Lakers, Real Madrid...", live = true) { q ->
             query = q.trim()
@@ -121,9 +124,10 @@ class EventsActivity : FeatureListActivity() {
     private fun leagues() {
         if (tab != "games" && tab != "results") { chips2(emptyList(), "") {}; return }
         val wanted = if (tab == "results") "post" else null
-        val present = games.filter { g -> if (wanted != null) g.optString("state") == wanted else g.optString("state") != "post" }
+        val present = (games + events).filter { g -> if (wanted != null) g.optString("state") == wanted else g.optString("state") != "post" }
             .map { it.optString("league") }.toSet()
-        val order = US_ORDER + present.filter { it !in US_ORDER }
+        val known = if (meta.isNotEmpty()) meta.keys.toList() else US_ORDER
+        val order = known + present.filter { it !in known }
         val items = listOf("" to "All") + order.filter { it in present }.map { it to leagueName(it) }
         if (league.isNotEmpty() && league !in present) league = ""
         chips2(if (items.size > 2) items else emptyList(), league) { league = it; render() }
@@ -132,10 +136,16 @@ class EventsActivity : FeatureListActivity() {
     // how US viewers rank them: football first, college right after its pro league, soccer last
     private val US_ORDER = listOf("NFL", "NCAAF", "NBA", "NCAAB", "WNBA", "NHL", "MLB", "MLS", "EPL", "UCL", "LALIGA")
 
-    private fun leagueName(code: String) = when (code) {
+    private fun leagueName(code: String) = meta[code]?.optString("name")?.takeIf { it.isNotBlank() } ?: when (code) {
         "NCAAF" -> "College Football"; "NCAAB" -> "College Basketball"; "EPL" -> "Premier League"
         "UCL" -> "Champions League"; "LALIGA" -> "La Liga"; else -> code
     }
+
+    /** Short league label at the start of a row: the console name when it fits ("UFC", "Liga MX"), else the code. */
+    private fun lead(code: String) = leagueName(code).takeIf { it.length <= 10 } ?: code.takeIf { it.length <= 6 }
+        ?: sport(code).replace('-', ' ').replaceFirstChar { it.uppercase() }.takeIf { it.isNotBlank() && it.length <= 10 } ?: code.take(8)
+
+    private fun sport(code: String) = meta[code]?.optString("sport").orEmpty()
 
     private fun onTab() {
         b.searchRow.visibility = if (tab == "find") View.VISIBLE else View.GONE
@@ -149,7 +159,10 @@ class EventsActivity : FeatureListActivity() {
     private fun load() {
         loading(true)
         lifecycleScope.launch {
-            games = runCatching { Web24Api.objects(Web24Api(this@EventsActivity).support("scores").optJSONArray("games")) }.getOrDefault(emptyList())
+            val r = runCatching { Web24Api(this@EventsActivity).support("scores") }.getOrNull()
+            games = Web24Api.objects(r?.optJSONArray("games"))
+            events = Web24Api.objects(r?.optJSONArray("events"))
+            meta = Web24Api.objects(r?.optJSONArray("leagues")).associateBy { it.optString("code") }
             loading(false)
             TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) } + next.values.filterNotNull())
             render()
@@ -231,9 +244,42 @@ class EventsActivity : FeatureListActivity() {
      */
     private fun renderGames(results: Boolean) {
         val keys = Teams.keys(this)
-        val list = games.filter { g -> (league == "" || g.optString("league") == league) && (g.optString("state") == "post") == results }
-            .let { l -> if (results) l.sortedByDescending { it.optLong("start") } else l.sortedWith(compareBy({ if (it.optString("state") == "in") 0 else 1 }, { it.optLong("start") })) }
-        val rows = list.map { g ->
+        val list = (games + events).filter { g -> (league == "" || g.optString("league") == league) && (g.optString("state") == "post") == results }
+            .let { l -> if (results) l.sortedByDescending { it.optLong("end").takeIf { e -> e > 0 } ?: it.optLong("start") } else l.sortedWith(compareBy({ if (it.optString("state") == "in") 0 else 1 }, { it.optLong("start") })) }
+        val rows = list.map { g -> if (g.has("kind")) eventRow(g) else gameRow(g, keys) }
+        show(rows, if (results) "No results yet." else "Nothing live or coming up right now.\nCheck Results for final scores.")
+    }
+
+    /** A fight card, golf tournament, race weekend or tennis tournament. */
+    private fun eventRow(e: JSONObject): Row {
+        val state = e.optString("state")
+        val lg = e.optString("league")
+        val live = EventCenter.list(e.optJSONArray("live"))
+        val next = e.optJSONObject("next")
+        val head = e.optString("headline")
+        if (e.optString("kind") == "cricket") {
+            // "IND 245/8 (62.4 ov) · AUS 174", then the result / match situation
+            val score = Web24Api.objects(e.optJSONArray("teams")).filter { it.optString("score").isNotBlank() }
+                .joinToString("  ·  ") { it.optString("short").ifBlank { it.optString("name") } + " " + it.optString("score") }
+            val line = listOf(score, head).filter { it.isNotBlank() }.joinToString("  ·  ")
+            return Row("ev:$lg:" + e.optString("id"), e.optString("name"), line.ifBlank { listOf(e.optString("format"), e.optString("venue")).filter { it.isNotBlank() }.joinToString(" · ") },
+                e.optString("series"), showIcon = false, lead = lead(lg),
+                badge = when (state) { "in" -> "LIVE"; "post" -> e.optString("detail").ifBlank { "Result" }; else -> "${Fmt.day(e.optLong("start") * 1000)} · ${Fmt.clock(e.optLong("start") * 1000)}" },
+                badgeColor = if (state == "in") LIVE else 0) { EventCenter.open(this, e, leagueName(lg)) }
+        }
+        val sub = when {
+            state == "in" && live.isNotEmpty() -> "LIVE: " + live.joinToString(" · ")
+            head.isNotBlank() -> head
+            next != null && next.optLong("start") > 0 -> listOf(next.optString("name"), "${Fmt.day(next.optLong("start") * 1000)} at ${Fmt.clock(next.optLong("start") * 1000)}").filter { it.isNotBlank() }.joinToString(" · ")
+            else -> ""
+        }
+        val sub2 = listOf(e.optString("venue"), e.optString("city")).filter { it.isNotBlank() }.joinToString(", ")
+        return Row("ev:$lg:" + e.optString("id"), e.optString("name"), sub, sub2, showIcon = false, lead = lead(lg),
+            badge = when (state) { "in" -> "LIVE"; "post" -> e.optString("detail").ifBlank { "Final" }; else -> EventCenter.dates(e) },
+            badgeColor = if (state == "in") LIVE else 0) { EventCenter.open(this, e, leagueName(lg)) }
+    }
+
+    private fun gameRow(g: JSONObject, keys: Set<String>): Row = run {
             val t = Web24Api.objects(g.optJSONArray("teams"))
             val home = t.firstOrNull { it.optBoolean("home") } ?: t.getOrNull(0) ?: JSONObject()
             val away = t.firstOrNull { it !== home } ?: t.getOrNull(1) ?: JSONObject()
@@ -255,16 +301,14 @@ class EventsActivity : FeatureListActivity() {
                 else -> if (tbd) "${Fmt.day(startMs)} · start time to be announced" else "Starts ${Fmt.day(startMs)} at ${Fmt.clock(startMs)}"
             }
             Row(g.optString("league") + g.optLong("start") + teamName(home), title, sub, if (followed) "★ Your team" else "",
-                showIcon = false, lead = g.optString("league"),
+                showIcon = false, lead = lead(g.optString("league")),
                 badge = when (state) { "in" -> "LIVE"; "post" -> g.optString("detail").ifBlank { "Final" }; else -> whenText(startMs, tbd) },
                 badgeColor = if (state == "in") LIVE else if (followed) GOLD else 0) {
                 // Game Center (score, stats, Watch button); older cached scores have no game id yet
-                if (g.optString("id").isNotBlank()) GameCenter.open(this, g)
+                if (g.optString("id").isNotBlank()) GameCenter.open(this, JSONObject(g.toString()).put("sport", sport(g.optString("league"))).put("league_name", leagueName(g.optString("league"))))
                 else if (state == "post") toast("This game is over. Final: ${teamName(away)} ${away.optString("score")}, ${teamName(home)} ${home.optString("score")}.")
                 else parsed?.let { openGame(it) }
             }
-        }
-        show(rows, if (results) "No finished games yet." else "No live or upcoming games right now.\nCheck Results for final scores.")
     }
 
     /**

@@ -227,6 +227,10 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
         <activity
+            android:name=".features.discover.EventActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+        <activity
             android:name=".features.discover.TeamActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape"

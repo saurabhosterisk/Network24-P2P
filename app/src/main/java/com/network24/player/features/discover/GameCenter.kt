@@ -163,7 +163,7 @@ class GameActivity : BaseActivity() {
             setImageResource(R.drawable.ic_back); setColorFilter(Color.WHITE); setBackgroundResource(R.drawable.bg_back_focus)
             contentDescription = "Back"; isFocusable = true; tag = "back"; setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
-        bar.addView(text(listOf(league, s?.optString("note").orEmpty()).filter { it.isNotBlank() }.joinToString(" · "), 18f, bold = true).apply { setPadding(dp(14), 0, 0, 0) })
+        bar.addView(text(listOf(game.optString("league_name").ifBlank { league }, s?.optString("note").orEmpty()).filter { it.isNotBlank() }.joinToString(" · "), 18f, bold = true).apply { setPadding(dp(14), 0, 0, 0) })
         body.addView(bar)
 
         // scoreboard
@@ -274,7 +274,11 @@ class GameActivity : BaseActivity() {
 
     private fun regulation(n: Int): Int {
         val lg = game.optString("league")
-        val reg = when (lg) { "NHL" -> 3; "MLB" -> 9; "MLS", "EPL", "UCL", "LALIGA" -> 2; else -> 4 }
+        // periods in regulation: soccer/rugby halves, hockey periods, baseball innings, college basketball halves
+        val reg = when (game.optString("sport")) {
+            "soccer", "rugby", "rugby-league" -> 2; "hockey", "field-hockey" -> 3; "baseball" -> 9
+            else -> when (lg) { "NHL" -> 3; "MLB" -> 9; "MLS", "EPL", "UCL", "LALIGA" -> 2; "NCAAB" -> 2; else -> 4 }
+        }
         return if (n < reg) n else reg
     }
 

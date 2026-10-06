@@ -177,6 +177,9 @@ abstract class FeatureListActivity : BaseActivity() {
             row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })
             if (hadFocus && k == selected) t.post { t.requestFocus(); if (pendingChipFocus === row) pendingChipFocus = null }
         }
+        // RIGHT on the last chip / LEFT on the first stays in the row (it jumped up to the menu button)
+        row.getChildAt(row.childCount - 1)?.let { it.nextFocusRightId = it.id }
+        row.getChildAt(0)?.let { it.nextFocusLeftId = it.id }
         wireFocus()
     }
 
