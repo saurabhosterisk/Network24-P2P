@@ -179,8 +179,11 @@ class PlayerActivity : BaseActivity() {
             // signal that THIS surface has a real, current frame on it.
             override fun onRenderedFirstFrame() {
                 awaitingFirstFrame = false
-                binding.progressBar.visibility =
-                    View.GONE
+                // A new channel's first picture arrives while it is still buffering;
+                // keep the spinner until it really plays (onPlaybackStateChanged hides it).
+                if (!PlayerManager.isStartCovered())
+                    binding.progressBar.visibility =
+                        View.GONE
             }
 
 

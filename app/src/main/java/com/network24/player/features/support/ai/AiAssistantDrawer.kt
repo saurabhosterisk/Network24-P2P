@@ -278,7 +278,9 @@ class AiAssistantDrawer(
             val owned = runCatching {
                 DatabaseProvider.get(activity).channelDao().getByStreamIds(channels.map { it.id })
             }.getOrDefault(emptyList()).associateBy { it.streamId }
-            val shown = channels.filter { it.id in owned }
+            // not the channels of categories under the parental lock
+            val locked = com.network24.player.core.parental.ParentalLock.activeLockedIds(activity)
+            val shown = channels.filter { it.id in owned && owned[it.id]?.categoryId !in locked }
             if (shown.isEmpty()) {
                 box.addView(TextView(activity).apply {
                     text = "None of these channels are in your package."
@@ -425,7 +427,7 @@ class AiAssistantDrawer(
 
     private fun planText(): String {
         val expiry = prefs.getExpiry()
-        val days = if (expiry > 0L) ((expiry * 1000L - System.currentTimeMillis()) / 86_400_000L) else null
+        val days = if (expiry > 0L) com.network24.player.core.util.ExpiryDays.from(expiry * 1000L) else null
         val date = if (expiry > 0L) {
             java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(expiry * 1000L))
         } else {

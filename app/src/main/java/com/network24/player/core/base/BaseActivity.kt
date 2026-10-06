@@ -124,7 +124,7 @@ open class BaseActivity : AppCompatActivity() {
 
         val navView = NavigationView(this).apply {
             id = View.generateViewId()
-            setBackgroundColor(ContextCompat.getColor(context, android.R.color.white))
+            setBackgroundColor(ContextCompat.getColor(context, R.color.drawer_bg))
             itemBackground = ContextCompat.getDrawable(context, R.drawable.bg_navigation_item)
             itemIconTintList = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
             itemTextColor = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
@@ -179,6 +179,12 @@ open class BaseActivity : AppCompatActivity() {
                 startActivity(Intent(this, MasterChannelSearchActivity::class.java))
                 true
             }
+            R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)); true }
+            R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
+            R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
+            R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }
+            R.id.action_reminders -> { startActivity(Intent(this, com.network24.player.features.reminders.RemindersActivity::class.java)); true }
+            R.id.action_account -> { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)); true }
             R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
@@ -543,18 +549,26 @@ open class BaseActivity : AppCompatActivity() {
      */
     protected open fun onTvGuideUpdated() = Unit
 
+    /**
+     * @param refreshChannelsFirst false when the caller has just refreshed the channels itself.
+     * @param onDone called with true when the guide was saved, false otherwise (the caller then shows its own
+     *        message instead of the generic error toast).
+     */
     protected fun refreshTvGuide(
-        loadingMessage: String = "Updating TV Guide… This can take a minute."
+        loadingMessage: String = "Updating TV Guide… This can take a minute.",
+        refreshChannelsFirst: Boolean = true,
+        onDone: ((Boolean) -> Unit)? = null
     ) {
         showLoader(loadingMessage)
         lifecycleScope.launch {
             val syncManager = SyncManager(this@BaseActivity)
-            val channelsResult = syncManager.syncLiveChannelsAll(force = true) { percent ->
+            val channelsResult = if (!refreshChannelsFirst) SyncResult.Success else syncManager.syncLiveChannelsAll(force = true) { percent ->
                 showLoader("Refreshing channel data… $percent%")
             }
 
             if (channelsResult is SyncResult.Error) {
                 hideLoader()
+                if (onDone != null) { onDone(false); return@launch }
                 Toast.makeText(
                     this@BaseActivity,
                     "Channel data refresh failed: ${channelsResult.message}",
@@ -578,11 +592,17 @@ open class BaseActivity : AppCompatActivity() {
                     Toast.makeText(this@BaseActivity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
                     onTvGuideUpdated()
                     sendBroadcast(Intent(ACTION_EPG_UPDATED))
+                    onDone?.invoke(true)
                 }
                 is SyncResult.Error -> {
-                    Toast.makeText(this@BaseActivity, result.message, Toast.LENGTH_LONG).show()
+                    if (onDone != null) onDone(false)
+                    else Toast.makeText(this@BaseActivity, result.message, Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
+
+    /** Same choice dialog as Settings, for helpers that only hold the activity (e.g. the player's panels). */
+    fun pickOne(title: String, items: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit) =
+        showChoiceDialog(title = title, items = items, selectedIndex = selectedIndex, onSelect = onSelect)
 }

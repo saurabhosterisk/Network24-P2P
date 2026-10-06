@@ -6,7 +6,7 @@
     android:id="@id/rightNav"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/white"
+    android:background="@color/drawer_bg"
     app:itemBackground="@drawable/bg_navigation_item"
     app:itemIconTint="@color/navigation_item_content"
     app:itemTextColor="@color/navigation_item_content"

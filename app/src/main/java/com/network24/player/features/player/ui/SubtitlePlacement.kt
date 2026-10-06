@@ -1,22 +1,25 @@
 package com.network24.player.features.player.ui
 
 import androidx.media3.ui.PlayerView
-import androidx.media3.ui.SubtitleView
 
 /**
- * Keeps subtitles readable above the full-screen control overlay. Without
- * this they were drawn at the default position, right on top of the Now/Next
- * rows and the button row, in every full-screen player.
+ * Keeps subtitles clear of the full-screen player's bottom bar (now/next, seek bar and buttons) while that bar is
+ * shown, and puts them back to the normal spot when it hides.
+ *
+ * The whole subtitle layer is slid up rather than changing the bottom padding: TV captions (CEA-608, what our US
+ * channels carry) place every line on a fixed caption row and ignore the padding, so they used to sit right on top
+ * of the buttons. Sliding the layer moves positioned and unpositioned cues alike.
  */
 object SubtitlePlacement {
 
-    // The bottom overlay (Now/Next + progress + buttons) covers about the
-    // lower third of the screen.
-    private const val ABOVE_CONTROLS_FRACTION = 0.33f
+    // The bottom overlay covers roughly the lower 30 % of the screen; captions already sit ~8 % above the edge.
+    private const val LIFT_FRACTION = 0.26f
+    private const val ANIM_MS = 200L
 
     fun update(playerView: PlayerView, controlsVisible: Boolean) {
-        playerView.subtitleView?.setBottomPaddingFraction(
-            if (controlsVisible) ABOVE_CONTROLS_FRACTION else SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION
-        )
+        val subtitles = playerView.subtitleView ?: return
+        val lift = if (controlsVisible) -playerView.height * LIFT_FRACTION else 0f
+        subtitles.animate().cancel()
+        subtitles.animate().translationY(lift).setDuration(ANIM_MS).start()
     }
 }

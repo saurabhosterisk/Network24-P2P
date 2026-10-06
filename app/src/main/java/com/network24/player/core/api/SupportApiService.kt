@@ -5,6 +5,9 @@ import com.network24.player.common.models.AiPollResponse
 import com.network24.player.common.models.SupportChannelsResponse
 import com.network24.player.common.models.SupportMessagesResponse
 import com.network24.player.common.models.SupportSendResponse
+import com.network24.player.common.models.WebLockResponse
+import com.network24.player.common.models.WebOkResponse
+import com.network24.player.common.models.WebStateResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -85,4 +88,70 @@ interface SupportApiService {
         @Part("reply_to") replyTo: RequestBody,
         @Part image: MultipartBody.Part?
     ): Response<SupportSendResponse>
+    // ---------------------------------------------------------------- account state shared with the web player
+    // Recently watched channels and the parental lock live on Main for the whole account, so the app and
+    // play.web24.live show the same list and the same locked categories.
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun webState(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("action") action: String = "web_state_get"
+    ): Response<WebStateResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun recentAdd(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("id") id: String,
+        @Field("action") action: String = "recent_add"
+    ): Response<WebOkResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun recentClear(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("action") action: String = "recent_clear"
+    ): Response<WebOkResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun recentRemove(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("id") id: String,
+        @Field("action") action: String = "recent_remove"
+    ): Response<WebOkResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun lockVerify(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("pin") pin: String,
+        @Field("action") action: String = "lock_verify"
+    ): Response<WebOkResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun lockSet(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("pin") pin: String,
+        @Field("current_pin") currentPin: String,
+        @Field("cats[]") cats: List<String>,
+        @Field("action") action: String = "lock_set"
+    ): Response<WebLockResponse>
+
+    @FormUrlEncoded
+    @POST("support_api.php")
+    suspend fun lockOff(
+        @Field("username") username: String,
+        @Field("password") password: String,
+        @Field("current_pin") currentPin: String,
+        @Field("action") action: String = "lock_off"
+    ): Response<WebLockResponse>
 }

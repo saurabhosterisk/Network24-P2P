@@ -118,3 +118,27 @@ data class SupportError(
     val error: String?,
     val message: String?
 )
+
+/** Web-player state kept on Main for the whole account (support_api.php web_state_get / lock_*). */
+data class WebLock(
+    val enabled: Boolean?,
+    val cats: List<String>?,
+    /** false = the customer never set a PIN, so it is the default 0000 */
+    val custom_pin: Boolean? = null
+)
+
+data class WebStateResponse(
+    val ok: Boolean?,
+    val recent: List<Int>?,
+    val lock: WebLock?,
+    val recent_cleared: Long? = null
+)
+
+data class WebLockResponse(
+    val ok: Boolean?,
+    val lock: WebLock?
+)
+
+data class WebOkResponse(
+    val ok: Boolean?
+)

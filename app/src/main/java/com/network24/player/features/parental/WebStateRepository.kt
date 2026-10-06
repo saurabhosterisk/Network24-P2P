@@ -1,0 +1,121 @@
+package com.network24.player.features.parental
+
+import android.content.Context
+import com.google.gson.Gson
+import com.network24.player.common.models.SupportError
+import com.network24.player.common.models.WebLock
+import com.network24.player.core.api.ApiClient
+import com.network24.player.core.database.repository.LiveHistoryRepository
+import com.network24.player.core.parental.ParentalLock
+import com.network24.player.core.preferences.PreferenceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import retrofit2.Response
+
+/**
+ * Account state shared with the web player (play.web24.live), kept on Main by support_api.php:
+ * recently watched channels and the parental lock (PIN hash + locked category ids).
+ */
+class WebStateRepository(context: Context) {
+
+    companion object {
+        private const val BASE_URL = PreferenceManager.SERVER_URL + "/"
+        private const val FALLBACK_ERROR = "Network24 could not be reached. Please check your connection and try again."
+        private const val SYNC_EVERY_MS = 30_000L
+
+        @Volatile
+        private var lastSyncMs = 0L
+        private val syncMutex = Mutex()
+    }
+
+    private val appContext = context.applicationContext
+    private val prefs = PreferenceManager(appContext)
+    private val api get() = ApiClient.supportApi(BASE_URL)
+
+    private fun user() = prefs.getUsername()
+    private fun pass() = prefs.getPassword()
+
+    /**
+     * Reads the account's recently watched list and parental lock. Returns true when the lock changed (the caller
+     * then redraws its lists). Runs at most every 30 s unless forced.
+     */
+    suspend fun sync(force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        if (user().isBlank() || pass().isBlank()) return@withContext false
+        syncMutex.withLock {
+            if (!force && System.currentTimeMillis() - lastSyncMs < SYNC_EVERY_MS) return@withLock false
+            val state = call { api.webState(user(), pass()) }.getOrNull() ?: return@withLock false
+            lastSyncMs = System.currentTimeMillis()
+            val changed = saveLock(state.lock)
+            runCatching { mergeRecent(state.recent.orEmpty(), state.recent_cleared ?: 0L) }
+            changed
+        }
+    }
+
+    private fun saveLock(lock: WebLock?): Boolean =
+        ParentalLock.save(appContext, lock?.enabled == true, lock?.cats.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }, lock?.custom_pin == true)
+
+    /**
+     * The account's list on Main is the one list for every device: this device's list becomes exactly that (so a
+     * channel removed or a list cleared on any device or the web player goes everywhere). Only an account that never
+     * had a list (never cleared, nothing saved) gets this device's list sent up once.
+     */
+    private suspend fun mergeRecent(serverIds: List<Int>, clearedAt: Long) {
+        val history = LiveHistoryRepository(appContext)
+        if (serverIds.isEmpty() && clearedAt <= 0L) {
+            history.localRecentIds().take(15).reversed().forEach { id -> runCatching { api.recentAdd(user(), pass(), id.toString()) } }
+            return
+        }
+        history.replaceWith(serverIds)
+    }
+
+    /** Empties the recently watched list on this device and for the account (other devices follow on their next sync). */
+    suspend fun clearRecent(): Result<Unit> = withContext(Dispatchers.IO) {
+        LiveHistoryRepository(appContext).clearLocal()
+        call { api.recentClear(user(), pass()) }.map { }
+    }
+
+    /** Removes one channel from the recently watched list here and for the account. */
+    suspend fun removeRecent(streamId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        LiveHistoryRepository(appContext).removeLocal(streamId)
+        call { api.recentRemove(user(), pass(), streamId.toString()) }.map { }
+    }
+
+    /** Tells Main this channel was just watched (called from the watch-history recorder, off the main thread). */
+    suspend fun addRecent(streamId: Int) {
+        if (user().isBlank()) return
+        runCatching { api.recentAdd(user(), pass(), streamId.toString()) }
+    }
+
+    suspend fun verifyPin(pin: String): Result<Unit> = withContext(Dispatchers.IO) {
+        call { api.lockVerify(user(), pass(), pin) }.map { }
+    }
+
+    suspend fun setLock(pin: String, currentPin: String, categoryIds: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        call { api.lockSet(user(), pass(), pin, currentPin, categoryIds) }.map { saveLock(it.lock); ParentalLock.relock() }
+    }
+
+    suspend fun lockOff(currentPin: String): Result<Unit> = withContext(Dispatchers.IO) {
+        call { api.lockOff(user(), pass(), currentPin) }.map { saveLock(it.lock); ParentalLock.relock() }
+    }
+
+    private suspend fun <T> call(block: suspend () -> Response<T>): Result<T> {
+        return try {
+            val response = block()
+            val body = response.body()
+            if (response.isSuccessful && body != null) {
+                Result.success(body)
+            } else {
+                val error = try {
+                    Gson().fromJson(response.errorBody()?.string(), SupportError::class.java)
+                } catch (e: Exception) {
+                    null
+                }
+                Result.failure(Exception(error?.message ?: FALLBACK_ERROR))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(FALLBACK_ERROR))
+        }
+    }
+}

@@ -1,0 +1,169 @@
+package com.network24.player.features.discover
+
+import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognizerIntent
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import coil.load
+import com.network24.player.R
+import com.network24.player.core.base.BaseActivity
+import com.network24.player.core.database.DatabaseProvider
+import com.network24.player.core.database.entity.ChannelEntity
+import com.network24.player.core.database.mapper.toLiveChannel
+import com.network24.player.databinding.ActivityFeatureListBinding
+import com.network24.player.databinding.ItemFeatureRowBinding
+import com.network24.player.features.player.activity.PlayerActivity
+import com.network24.player.features.player.state.PlayerState
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+/** One row of a list page. */
+data class Row(
+    val key: String,
+    val title: String,
+    val sub: String = "",
+    val sub2: String = "",
+    val icon: String? = null,
+    val lead: String = "",
+    val badge: String = "",
+    val badgeColor: Int = 0,
+    val progress: Int = -1,
+    val showIcon: Boolean = true,
+    val onLong: (() -> Unit)? = null,
+    val onClick: (() -> Unit)? = null,
+)
+
+class RowAdapter : RecyclerView.Adapter<RowAdapter.VH>() {
+    class VH(val b: ItemFeatureRowBinding) : RecyclerView.ViewHolder(b.root)
+    private var rows: List<Row> = emptyList()
+    fun submit(list: List<Row>) { rows = list; notifyDataSetChanged() }
+    override fun getItemCount() = rows.size
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = VH(ItemFeatureRowBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+    override fun onBindViewHolder(h: VH, position: Int) {
+        val r = rows[position]
+        h.b.txtTitle.text = r.title
+        h.b.txtSub.text = r.sub; h.b.txtSub.visibility = if (r.sub.isBlank()) View.GONE else View.VISIBLE
+        h.b.txtSub2.text = r.sub2; h.b.txtSub2.visibility = if (r.sub2.isBlank()) View.GONE else View.VISIBLE
+        h.b.txtLead.text = r.lead; h.b.txtLead.visibility = if (r.lead.isBlank()) View.GONE else View.VISIBLE
+        h.b.imgIcon.visibility = if (r.showIcon) View.VISIBLE else View.GONE
+        if (r.showIcon) h.b.imgIcon.load(r.icon?.takeIf { it.isNotBlank() }) { placeholder(R.drawable.app_logo); error(R.drawable.app_logo) }
+        h.b.txtBadge.text = r.badge; h.b.txtBadge.visibility = if (r.badge.isBlank()) View.GONE else View.VISIBLE
+        if (r.badgeColor != 0) h.b.txtBadge.setTextColor(r.badgeColor) else h.b.txtBadge.setTextColor(ContextCompat.getColor(h.itemView.context, R.color.text_primary))
+        h.b.progress.visibility = if (r.progress >= 0) View.VISIBLE else View.GONE
+        if (r.progress >= 0) h.b.progress.progress = r.progress
+        h.b.cardRoot.isClickable = r.onClick != null || r.onLong != null
+        h.b.cardRoot.setOnClickListener { r.onClick?.invoke() }
+        h.b.cardRoot.setOnLongClickListener { if (r.onLong != null) { r.onLong.invoke(); true } else false }
+    }
+}
+
+/** Base for the newer list pages: header card, optional search bar with voice, optional chip row, one list. */
+abstract class FeatureListActivity : BaseActivity() {
+    protected lateinit var b: ActivityFeatureListBinding
+    protected val adapter = RowAdapter()
+    protected val db by lazy { DatabaseProvider.get(this) }
+    private var onQuery: ((String) -> Unit)? = null
+
+    private val voice = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { b.editSearch.setText(it); b.editSearch.setSelection(it.length); onQuery?.invoke(it) }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        b = ActivityFeatureListBinding.inflate(layoutInflater)
+        setContentView(setupGlobalRightDrawer(b.root, b.btnMore))
+        b.btnBack.setOnClickListener { finish() }
+        b.rvItems.layoutManager = LinearLayoutManager(this)
+        b.rvItems.adapter = adapter
+    }
+
+    protected fun title(t: String, sub: String = "") { b.txtTitle.text = t; b.txtSubtitle.text = sub; b.txtSubtitle.visibility = if (sub.isBlank()) View.GONE else View.VISIBLE }
+
+    protected fun action(label: String?, onClick: () -> Unit = {}) {
+        b.btnAction.visibility = if (label == null) View.GONE else View.VISIBLE
+        b.btnAction.text = label ?: ""; b.btnAction.setOnClickListener { onClick() }
+    }
+
+    protected fun enableSearch(hint: String, live: Boolean, cb: (String) -> Unit) {
+        onQuery = cb
+        b.searchRow.visibility = View.VISIBLE
+        b.editSearch.hint = hint
+        b.btnVoice.setOnClickListener {
+            runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, hint)) }
+                .onFailure { toast("Voice search is not available on this device.") }
+        }
+        b.editSearch.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEARCH) { cb(b.editSearch.text.toString()); true } else false }
+        if (live) b.editSearch.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) { cb(s?.toString().orEmpty()) }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, c: Int, d: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, a: Int, c: Int, d: Int) = Unit
+        })
+    }
+
+    /** Chip row (same chips as the rest of the app); returns nothing, calls [onPick] with the chosen key. */
+    protected fun chips(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit) {
+        b.chipScroll.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        b.chipRow.removeAllViews()
+        val d = resources.displayMetrics.density
+        items.forEach { (k, label) ->
+            val t = TextView(this).apply {
+                text = label; textSize = 14f; isFocusable = true; isClickable = true
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                setBackgroundResource(R.drawable.bg_interactive_chip)
+                setPadding((16 * d).toInt(), (9 * d).toInt(), (16 * d).toInt(), (9 * d).toInt())
+                isSelected = k == selected
+                if (k == selected) { setTextColor(ContextCompat.getColor(context, R.color.primary_light)); setTypeface(typeface, android.graphics.Typeface.BOLD) }
+                setOnClickListener { chips(items, k, onPick); onPick(k) }
+            }
+            b.chipRow.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })
+        }
+    }
+
+    protected fun loading(on: Boolean) { b.progressLoading.visibility = if (on) View.VISIBLE else View.GONE }
+
+    protected fun show(rows: List<Row>, empty: String) {
+        adapter.submit(rows)
+        b.txtEmpty.text = empty
+        b.txtEmpty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    protected fun toast(t: String) = Toast.makeText(this, t, Toast.LENGTH_SHORT).show()
+
+    /** Plays [ch] full screen; channel up / down walks through [list] (the same way every other screen does it). */
+    protected fun play(list: List<ChannelEntity>, ch: ChannelEntity) = ChannelLauncher.play(this, list, ch)
+}
+
+object ChannelLauncher {
+    fun play(activity: android.app.Activity, list: List<ChannelEntity>, ch: ChannelEntity) {
+        val channels = (if (list.any { it.streamId == ch.streamId }) list else listOf(ch)).map { it.toLiveChannel() }
+        PlayerState.channels.clear()
+        PlayerState.channels.addAll(channels)
+        PlayerState.currentPosition = channels.indexOfFirst { it.stream_id == ch.streamId }.coerceAtLeast(0)
+        activity.startActivity(Intent(activity, PlayerActivity::class.java).putExtra(PlayerActivity.EXTRA_PLAY_SELECTED_CHANNEL, true))
+    }
+}
+
+object Fmt {
+    fun clock(ms: Long): String = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ms)).uppercase(Locale.getDefault())
+    fun day(ms: Long): String {
+        val d = Calendar.getInstance().apply { timeInMillis = ms }
+        val diff = (startOfDay(ms) - startOfDay(System.currentTimeMillis())) / 86_400_000L
+        return when (diff) { 0L -> "Today"; -1L -> "Yesterday"; 1L -> "Tomorrow"; else -> SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(d.time) }
+    }
+    fun startOfDay(ms: Long): Long = Calendar.getInstance().apply { timeInMillis = ms; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+    fun date(ms: Long): String = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date(ms))
+}

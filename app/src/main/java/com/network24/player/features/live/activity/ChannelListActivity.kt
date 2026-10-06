@@ -1369,6 +1369,7 @@ class ChannelListActivity : BaseActivity() {
         binding.cardEpg.visibility = View.GONE
         binding.btnFullscreen.visibility = View.GONE
         binding.layoutOverlay.visibility = View.GONE
+        binding.previewScrim.visibility = View.GONE
 
 
         binding.fsTxtChannelTitle.text = run {
@@ -1418,6 +1419,7 @@ class ChannelListActivity : BaseActivity() {
         binding.cardEpg.visibility = View.VISIBLE
         binding.btnFullscreen.visibility = View.VISIBLE
         binding.layoutOverlay.visibility = View.VISIBLE
+        binding.previewScrim.visibility = View.VISIBLE
 
         binding.fsTopTint.visibility = View.GONE
         binding.fsBtnBack.visibility = View.GONE

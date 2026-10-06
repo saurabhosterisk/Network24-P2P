@@ -89,6 +89,8 @@ class DashboardActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         if (!isFinishing) updateVpnStatus()
+        // recently watched + parental lock shared with play.web24.live (at most every 30 s)
+        lifecycleScope.launch { com.network24.player.features.parental.WebStateRepository(this@DashboardActivity).sync() }
     }
 
     /**
@@ -116,7 +118,7 @@ class DashboardActivity : BaseActivity() {
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults) }
     private fun hasCredentials() = prefs.getServer().isNotBlank() && prefs.getUsername().isNotBlank() && prefs.getPassword().isNotBlank()
-    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val remainingDays = TimeUnit.MILLISECONDS.toDays(expiryDate.time - System.currentTimeMillis()); binding.txtRemaining.text = if (remainingDays > 0) "$remainingDays Days" else "Expired"; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE } }
+    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val expired = expiryDate.time <= System.currentTimeMillis(); val remainingDays = com.network24.player.core.util.ExpiryDays.from(expiryDate.time); binding.txtRemaining.text = when { expired -> "Expired"; remainingDays == 0L -> "Ends today"; remainingDays == 1L -> "1 Day"; else -> "$remainingDays Days" }; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE } }
 
     private fun refreshAccountInfo() {
         if (isAccountRefreshRunning || !hasCredentials()) return
@@ -155,10 +157,10 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun setupDashboardCardInteractions() {
-        val cards = listOf(binding.cardLiveTv, binding.cardFavorites, binding.cardNotification, binding.cardSupport, binding.cardSettings, binding.cardLiveEvents)
+        val cards = listOf(binding.cardLiveTv, binding.cardFavorites, binding.cardLiveEvents, binding.cardEvents, binding.cardCatchup, binding.cardTrending, binding.cardNotification, binding.cardSupport, binding.cardSettings)
         val cardColor = ContextCompat.getColor(this, R.color.card); val focusedCardColor = ContextCompat.getColor(this, R.color.selection_surface); val density = resources.displayMetrics.density; val normalElevation = 3f * density; val focusedElevation = 7f * density; val focusedStroke = (2f * density).toInt()
         cards.forEach { card ->
-            card.isFocusable = true; card.isClickable = true; card.strokeWidth = 0; card.strokeColor = Color.TRANSPARENT; card.cardElevation = normalElevation; enlargeDashboardIcons(card, 42)
+            card.isFocusable = true; card.isClickable = true; card.strokeWidth = 0; card.strokeColor = Color.TRANSPARENT; card.cardElevation = normalElevation; enlargeDashboardIcons(card, 36)
             card.setOnFocusChangeListener { view, hasFocus -> val materialCard = view as MaterialCardView; if (hasFocus) { materialCard.setCardBackgroundColor(focusedCardColor); materialCard.strokeWidth = focusedStroke; materialCard.strokeColor = Color.WHITE; materialCard.cardElevation = focusedElevation } else { materialCard.setCardBackgroundColor(cardColor); materialCard.strokeWidth = 0; materialCard.strokeColor = Color.TRANSPARENT; materialCard.cardElevation = normalElevation } }
         }
     }
@@ -174,6 +176,12 @@ class DashboardActivity : BaseActivity() {
                 R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }
+                R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)); true }
+                R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
+                R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
+                R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }
+                R.id.action_reminders -> { startActivity(Intent(this, com.network24.player.features.reminders.RemindersActivity::class.java)); true }
+                R.id.action_account -> { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)); true }
                 else -> false
             }
         }
@@ -193,6 +201,10 @@ class DashboardActivity : BaseActivity() {
         binding.cardSupport.setOnClickListener { startActivity(Intent(this, LiveSupportActivity::class.java)) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, LiveCategoryActivity::class.java).apply { putExtra("epg_mode", true) }) }
+        binding.cardEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)) }
+        binding.cardCatchup.setOnClickListener { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)) }
+        binding.cardTrending.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)) }
+        binding.accountCard.setOnClickListener { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)) }
         binding.btnRenew.setOnClickListener { showRenewPaymentQr() }
     }
 
@@ -242,6 +254,7 @@ class DashboardActivity : BaseActivity() {
     private fun showRenewPaymentQr() { val qrSize = 720; val matrix: BitMatrix = MultiFormatWriter().encode(PAYMENT_URL, BarcodeFormat.QR_CODE, qrSize, qrSize); val pixels = IntArray(qrSize * qrSize); for (y in 0 until qrSize) { val offset = y * qrSize; for (x in 0 until qrSize) pixels[offset + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE }; val qrBitmap = Bitmap.createBitmap(pixels, 0, qrSize, qrSize, qrSize, Bitmap.Config.ARGB_8888); val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(28, 8, 28, 12) }; val instruction = TextView(this).apply { text = "Renew your subscription in just a few steps"; gravity = Gravity.CENTER; textSize = 18f; setTextColor(Color.rgb(30, 30, 30)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(0, 4, 0, 10) }; val steps = TextView(this).apply { text = "1. Open your phone's camera.\n2. Point the camera at the QR code below.\n3. Tap the link that appears on your phone.\n4. Follow the instructions on the payment page to renew your subscription."; gravity = Gravity.CENTER; textSize = 15f; setTextColor(Color.DKGRAY); setLineSpacing(2f, 1.05f); setPadding(8, 0, 8, 10) }; val imageView = ImageView(this).apply { setImageBitmap(qrBitmap); adjustViewBounds = true; setPadding(8, 8, 8, 12); contentDescription = "QR code to open the subscription payment page" }; val scanHint = TextView(this).apply { text = "📱 Scan this code with another phone to open the payment page."; gravity = Gravity.CENTER; textSize = 14f; setTextColor(Color.rgb(55, 55, 55)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(8, 2, 8, 8) }; container.addView(instruction); container.addView(steps); container.addView(imageView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)); container.addView(scanHint); AlertDialog.Builder(this).setView(container).setNegativeButton("Close", null).setPositiveButton("Open Payment Page") { _, _ -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PAYMENT_URL))) }.show() }
     private fun syncInitialData(forceRefresh: Boolean = false) {
         if (!hasCredentials() || isInitialSyncRunning) return
+        if (prefs.isFirstSetupPending()) { runFirstSetup(); return }
 
         val lastSyncTime = prefs.getLastSyncTime()
         val currentTime = System.currentTimeMillis()
@@ -288,6 +301,60 @@ class DashboardActivity : BaseActivity() {
                 }
             )
         }
+    }
+
+    /**
+     * First start after a login (new install, or logout -> login): the same as "Refresh Channels" followed by
+     * "Refresh TV Guide" from the 3-dot menu, with the progress on screen. The pending flag is cleared only once
+     * the TV Guide was saved, so an interrupted setup runs again the next time the app opens.
+     */
+    private fun runFirstSetup() {
+        isInitialSyncRunning = true
+        val channelsMessage = "Setting up Network24… downloading your channels"
+        showLoader(channelsMessage)
+        repository.syncAllData(
+            server = prefs.getServer(),
+            username = prefs.getUsername(),
+            password = prefs.getPassword(),
+            callback = object : SyncCallback {
+                override fun onSuccess() {
+                    runOnUiThread {
+                        prefs.setLastSyncTime(System.currentTimeMillis())
+                        refreshTvGuide(
+                            loadingMessage = "Setting up your TV Guide… This can take a minute.",
+                            refreshChannelsFirst = false
+                        ) { saved ->
+                            isInitialSyncRunning = false
+                            if (saved) {
+                                prefs.setFirstSetupPending(false)
+                            } else {
+                                Toast.makeText(
+                                    this@DashboardActivity,
+                                    "The TV Guide could not be downloaded right now. Network24 will try again the next time you open the app, or use ⋮ → Refresh TV Guide.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                }
+
+                override fun onError(message: String) {
+                    runOnUiThread {
+                        isInitialSyncRunning = false
+                        hideLoader()
+                        Toast.makeText(
+                            this@DashboardActivity,
+                            "Could not download the channels right now ($message). Network24 will try again the next time you open the app.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
+                override fun onProgress(percent: Int) {
+                    runOnUiThread { showLoader("$channelsMessage $percent%") }
+                }
+            }
+        )
     }
 
     private fun refreshInitialEpgInBackground() {

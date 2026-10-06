@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
+import android.view.View
 
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -650,9 +651,35 @@ object PlayerManager {
 
 
 
+                                // A new channel's first picture is decoded and drawn as soon as
+                                // the first bytes arrive, but playback only starts once
+                                // bufferForPlaybackMs of media is queued (0.7-1 s later on a
+                                // good line, longer on a slow one). Viewers saw that still
+                                // picture as "the channel freezes when it starts". Keep the
+                                // PlayerView's shutter (black, with the buffering spinner on
+                                // top) over it until the video is really moving.
+                                override fun onRenderedFirstFrame() {
+                                    if (!startCoverPending) return
+                                    val view = currentPlayerView ?: return
+                                    view.post {
+                                        if (startCoverPending && exoPlayer?.isPlaying != true && exoPlayer?.playWhenReady == true) {
+                                            setStartCover(view, true)
+                                        }
+                                    }
+                                }
+
+                                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                                    if (isPlaying) releaseStartCover()
+                                }
+
+                                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                                    if (!playWhenReady) releaseStartCover()
+                                }
+
                                 override fun onPlayerError(
                                     error: PlaybackException
                                 ) {
+                                    releaseStartCover()
                                     handlePlayerError(error)
                                 }
                             }
@@ -665,6 +692,24 @@ object PlayerManager {
 
 
         return exoPlayer!!
+    }
+
+    // True from loading a new stream until its video is really playing.
+    private var startCoverPending = false
+
+    /** True while a new channel's first picture is held back until playback actually starts. */
+    fun isStartCovered(): Boolean = startCoverPending
+
+    private fun setStartCover(view: PlayerView, covered: Boolean) {
+        view.findViewById<View>(androidx.media3.ui.R.id.exo_shutter)?.visibility =
+            if (covered) View.VISIBLE else View.INVISIBLE
+    }
+
+    private fun releaseStartCover() {
+        if (!startCoverPending) return
+        startCoverPending = false
+        val view = currentPlayerView ?: return
+        view.post { if (!startCoverPending && exoPlayer?.isPlaying == true) setStartCover(view, false) }
     }
 
 
@@ -844,6 +889,8 @@ object PlayerManager {
 
 
             isReplacingMediaItem = true
+
+            startCoverPending = true
 
             try {
                 player.stop()

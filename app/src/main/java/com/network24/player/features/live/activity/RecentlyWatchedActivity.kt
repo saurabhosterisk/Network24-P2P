@@ -14,6 +14,7 @@ import com.network24.player.core.database.entity.MasterChannelSearchResult
 import com.network24.player.core.database.repository.LiveHistoryRepository
 import com.network24.player.databinding.ActivityRecentlyWatchedBinding
 import com.network24.player.features.live.adapter.MasterChannelSearchAdapter
+import com.network24.player.features.parental.WebStateRepository
 import com.network24.player.features.player.activity.PlayerActivity
 import com.network24.player.features.player.state.PlayerState
 import kotlinx.coroutines.Dispatchers
@@ -36,11 +37,45 @@ class RecentlyWatchedActivity : BaseActivity() {
         historyRepository = LiveHistoryRepository(this)
         adapter = MasterChannelSearchAdapter(
             onSelected = ::openChannel,
-            onLongClicked = {}
+            onLongClicked = ::confirmRemove
         )
         binding.rvRecentChannels.layoutManager = LinearLayoutManager(this)
         binding.rvRecentChannels.adapter = adapter
         binding.btnBack.setOnClickListener { finish() }
+        binding.btnClearAll.setOnClickListener { confirmClearAll() }
+    }
+
+    private fun confirmClearAll() {
+        showConfirmDialog(
+            "Clear recently watched?",
+            "Removes every channel from this list on all your devices and the web player.",
+            "Clear all",
+            onPositive = {
+                lifecycleScope.launch {
+                    val result = WebStateRepository(this@RecentlyWatchedActivity).clearRecent()
+                    loadRecentlyWatched()
+                    android.widget.Toast.makeText(
+                        this@RecentlyWatchedActivity,
+                        if (result.isSuccess) "Recently watched cleared" else "Cleared here; your other devices update when the server can be reached",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        )
+    }
+
+    private fun confirmRemove(selected: MasterChannelSearchResult) {
+        showConfirmDialog(
+            "Remove from recently watched?",
+            selected.channelName.orEmpty(),
+            "Remove",
+            onPositive = {
+                lifecycleScope.launch {
+                    WebStateRepository(this@RecentlyWatchedActivity).removeRecent(selected.streamId)
+                    loadRecentlyWatched()
+                }
+            }
+        )
     }
 
     override fun onResume() {
@@ -89,6 +124,7 @@ class RecentlyWatchedActivity : BaseActivity() {
             recentResults.addAll(results)
             adapter.submitResults(results)
             adapter.updateCurrentPrograms(loadCurrentPrograms(results))
+            binding.btnClearAll.visibility = if (results.isEmpty()) View.GONE else View.VISIBLE
             binding.txtEmpty.visibility = if (results.isEmpty()) {
                 View.VISIBLE
             } else {

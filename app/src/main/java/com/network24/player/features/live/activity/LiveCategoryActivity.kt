@@ -21,6 +21,9 @@ import com.network24.player.R
 import com.network24.player.core.base.BaseActivity
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.repository.FavoritesRepository
+import com.network24.player.core.parental.ParentalLock
+import com.network24.player.features.parental.PinPrompt
+import com.network24.player.features.parental.WebStateRepository
 import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.databinding.ActivityLiveCategoryBinding
 import com.network24.player.features.dashboard.activity.DashboardActivity
@@ -214,7 +217,11 @@ class LiveCategoryActivity : BaseActivity() {
     private fun updateUIWithCategories(categories: List<LiveCategory>, favoriteIds: Set<String>) {
         val startMs = SystemClock.elapsedRealtime()
         allCategories.clear()
-        allCategories.addAll(categories.filterNot { disabledCategoryIds.contains(it.category_id) })
+        // parental lock: locked categories stay listed with a padlock; opening one asks for the PIN
+        val locked = ParentalLock.activeLockedIds(this)
+        allCategories.addAll(categories.filterNot { disabledCategoryIds.contains(it.category_id) }.map {
+            if (it.category_id in locked) it.copy(category_name = "🔒 " + it.category_name) else it
+        })
         categoryAdapter.updateList(allCategories)
         favoriteCategories.clear()
         favoriteCategories.addAll(allCategories.filter { favoriteIds.contains(it.category_id) })
@@ -223,6 +230,8 @@ class LiveCategoryActivity : BaseActivity() {
         updateFavoritesSectionVisibility()
         initialLoadCompleted = true
         logPerf("LiveCategory.adapterPopulation", SystemClock.elapsedRealtime() - startMs)
+        // the lock may have been changed on play.web24.live or another device (checked at most every 30 s)
+        lifecycleScope.launch { if (WebStateRepository(this@LiveCategoryActivity).sync()) loadCategoriesFromDB() }
         val targetId = pendingFocusCategoryId
         pendingFocusCategoryId = null
         val targetPosition = targetId
@@ -331,6 +340,13 @@ class LiveCategoryActivity : BaseActivity() {
 
     private fun openCategory(category: LiveCategory) {
         if (disabledCategoryIds.contains(category.category_id)) return
+        if (ParentalLock.isLocked(this, category.category_id)) {
+            PinPrompt.ask(this) {
+                loadCategoriesFromDB()
+                openCategory(category.copy(category_name = category.category_name.removePrefix("🔒 ")))
+            }
+            return
+        }
         pendingFocusCategoryId = category.category_id
         if (epgMode) {
             startActivity(Intent(this, EpgChannelListActivity::class.java).apply {

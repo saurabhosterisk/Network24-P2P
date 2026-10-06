@@ -105,6 +105,11 @@ class SettingsActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        val lockOn = com.network24.player.core.parental.ParentalLock.isEnabled(this)
+        val lockedCount = com.network24.player.core.parental.ParentalLock.lockedIds(this).size
+        findViewById<android.widget.TextView>(R.id.parentalLockStatus)?.text =
+            if (lockOn) "On · $lockedCount ${if (lockedCount == 1) "category" else "categories"} locked with a PIN"
+            else "Lock categories (like Adults Only) with a PIN"
         findViewById<SwitchMaterial>(R.id.autoVolumeSwitch)?.isChecked = prefs.isAutoVolumeEnabled()
         findViewById<SwitchMaterial>(R.id.softwareDecodingSwitch)?.isChecked =
             com.network24.player.core.player.SoftwareDecoding.enabled
@@ -167,8 +172,8 @@ class SettingsActivity : BaseActivity() {
             val expiryMs = expiry * 1000L
             expiryValue.text = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
                 .format(java.util.Date(expiryMs))
-            val daysLeft = java.util.concurrent.TimeUnit.MILLISECONDS
-                .toDays(expiryMs - System.currentTimeMillis())
+            val daysLeft = if (expiryMs <= System.currentTimeMillis()) -1L
+                else com.network24.player.core.util.ExpiryDays.from(expiryMs)
             expirySub.text = when {
                 daysLeft < 0 -> "Expired"
                 daysLeft == 0L -> "Expires today"
@@ -267,6 +272,9 @@ class SettingsActivity : BaseActivity() {
 
         findViewById<android.view.View>(R.id.manageCategories).setOnClickListener {
             startActivity(Intent(this, ManageCategoriesActivity::class.java))
+        }
+        findViewById<android.view.View>(R.id.parentalLock).setOnClickListener {
+            startActivity(Intent(this, com.network24.player.features.parental.ParentalLockActivity::class.java))
         }
 
         findViewById<android.view.View>(R.id.autoRefresh).setOnClickListener {

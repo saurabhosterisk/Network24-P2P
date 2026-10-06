@@ -49,8 +49,28 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@id/btnMore"
+                app:layout_constraintEnd_toStartOf="@id/btnClearAll"
                 app:layout_constraintStart_toEndOf="@id/btnBack"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/btnClearAll"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_outline_pill"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Clear all"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/btnMore"
                 app:layout_constraintTop_toTopOf="parent" />
 
             <ImageButton
@@ -77,7 +97,7 @@
         android:layout_marginStart="24dp"
         android:layout_marginTop="14dp"
         android:layout_marginEnd="24dp"
-        android:text="Your most recently watched live channels"
+        android:text="Your most recently watched live channels · hold OK on a channel to remove it"
         android:textColor="@color/text_hint"
         android:textSize="14sp"
         app:layout_constraintEnd_toEndOf="parent"

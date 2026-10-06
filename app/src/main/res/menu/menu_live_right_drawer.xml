@@ -12,6 +12,36 @@
         android:icon="@android:drawable/ic_menu_recent_history" />
 
     <item
+        android:id="@+id/action_events"
+        android:title="Events &amp; Scores"
+        android:icon="@android:drawable/ic_menu_today" />
+
+    <item
+        android:id="@+id/action_trending"
+        android:title="Trending Now"
+        android:icon="@android:drawable/ic_menu_view" />
+
+    <item
+        android:id="@+id/action_catchup"
+        android:title="Catch-up TV"
+        android:icon="@android:drawable/ic_menu_rotate" />
+
+    <item
+        android:id="@+id/action_find_show"
+        android:title="Find a Show"
+        android:icon="@drawable/ic_tv" />
+
+    <item
+        android:id="@+id/action_reminders"
+        android:title="Reminders"
+        android:icon="@android:drawable/ic_lock_idle_alarm" />
+
+    <item
+        android:id="@+id/action_account"
+        android:title="Account &amp; Connections"
+        android:icon="@android:drawable/ic_menu_myplaces" />
+
+    <item
         android:id="@+id/action_refresh_all"
         android:title="Refresh Channels"
         android:icon="@drawable/ic_refresh" />
@@ -19,7 +49,7 @@
     <item
         android:id="@+id/action_refresh_guide"
         android:title="Refresh TV Guide"
-        android:icon="@drawable/ic_info" />
+        android:icon="@drawable/ic_schedule" />
 
     <item
         android:id="@+id/action_master_search"

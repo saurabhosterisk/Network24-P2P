@@ -140,6 +140,8 @@ class LoginActivity : BaseActivity() {
                         password,
                         binding.chkRemember.isChecked
                     )
+                    // Dashboard downloads the channels + full TV Guide on screen right after this login
+                    prefs.setFirstSetupPending(true)
 
                     try {
                         val userId = userInfo.username ?: username
@@ -153,8 +155,11 @@ class LoginActivity : BaseActivity() {
                         coroutineScope {
                             val favoritesSync = async { favRepo.syncFromCloud(userId) }
                             val categoriesSync = async { categorySettingsRepo.syncFromCloud(userId) }
+                            // recently watched + parental lock (on Main, shared with play.web24.live)
+                            val webStateSync = async { runCatching { com.network24.player.features.parental.WebStateRepository(this@LoginActivity).sync(force = true) } }
                             favoritesSync.await()
                             categoriesSync.await()
+                            webStateSync.await()
                         }
                     } catch (_: Exception) {
                         // ignore: login ko block nahi karna

@@ -35,6 +35,7 @@ class PreferenceManager(context: Context) {
         private const val KEY_VPN_PERSISTENT_ACCESS = "vpn_persistent_access"
 
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val KEY_FIRST_SETUP_PENDING = "first_setup_pending"
         private const val KEY_DISABLED_CATEGORIES = "disabled_live_category_ids"
         private const val KEY_DISABLED_CATEGORIES_CACHED = "disabled_live_category_ids_cached"
         private const val KEY_AUTO_RECONNECT_MODE = "auto_reconnect_mode"
@@ -165,6 +166,17 @@ class PreferenceManager(context: Context) {
     fun getLastSyncTime(): Long {
         return prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
     }
+
+    /**
+     * Set on every successful login (new install, or logout -> login). The Dashboard then downloads the channels
+     * AND the full TV Guide with a visible progress screen, and clears it only when the guide really arrived -
+     * new customers used to see no EPG until they found Refresh TV Guide in the 3-dot menu.
+     */
+    fun setFirstSetupPending(pending: Boolean) {
+        prefs.edit().putBoolean(KEY_FIRST_SETUP_PENDING, pending).apply()
+    }
+
+    fun isFirstSetupPending(): Boolean = prefs.getBoolean(KEY_FIRST_SETUP_PENDING, false)
 
     // -------------------------
     // Live category settings cache

@@ -332,7 +332,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_clear_cache"
                 android:tint="@color/text_primary" />
 
             <LinearLayout
@@ -402,7 +402,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_settings"
+                android:src="@drawable/ic_list"
                 android:tint="@color/text_primary" />
 
             <LinearLayout
@@ -425,6 +425,60 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:text="Choose which live categories are visible"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textColor="@color/text_hint"
+                android:textSize="28sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/parentalLock"
+            android:layout_width="match_parent"
+            android:layout_height="68dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_settings_action"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp">
+
+            <ImageView
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_settings_icon"
+                android:padding="7dp"
+                android:src="@drawable/ic_lock"
+                android:tint="@color/text_primary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Parental Lock"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/parentalLockStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Lock categories (like Adults Only) with a PIN"
                     android:textColor="@color/text_hint"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -466,7 +520,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_sync"
                 android:tint="@color/text_primary" />
 
             <LinearLayout
@@ -530,7 +584,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_settings"
+                android:src="@drawable/ic_vpn"
                 android:tint="@color/text_primary" />
 
             <LinearLayout
@@ -566,6 +620,8 @@
                  instead of the app-wide row highlight every other setting
                  uses. -->
             <com.google.android.material.switchmaterial.SwitchMaterial
+                app:thumbTint="@color/switch_thumb"
+                app:trackTint="@color/switch_track"
                 android:id="@+id/vpnTunnelSwitch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -622,6 +678,8 @@
 
             <!-- Visual only, the row is the D-pad target (same as the VPN row). -->
             <com.google.android.material.switchmaterial.SwitchMaterial
+                app:thumbTint="@color/switch_thumb"
+                app:trackTint="@color/switch_track"
                 android:id="@+id/aiAssistantSwitch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -677,6 +735,8 @@
 
             <!-- Visual only, the row is the D-pad target. -->
             <com.google.android.material.switchmaterial.SwitchMaterial
+                app:thumbTint="@color/switch_thumb"
+                app:trackTint="@color/switch_track"
                 android:id="@+id/autoVolumeSwitch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -732,6 +792,8 @@
 
             <!-- Visual only, the row is the D-pad target. -->
             <com.google.android.material.switchmaterial.SwitchMaterial
+                app:thumbTint="@color/switch_thumb"
+                app:trackTint="@color/switch_track"
                 android:id="@+id/softwareDecodingSwitch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -758,7 +820,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_schedule"
                 android:tint="@color/text_primary" />
 
             <LinearLayout
@@ -871,7 +933,7 @@
                 android:layout_height="36dp"
                 android:background="@drawable/bg_settings_icon"
                 android:padding="7dp"
-                android:src="@drawable/ic_refresh"
+                android:src="@drawable/ic_download"
                 android:tint="@color/text_primary" />
 
             <LinearLayout

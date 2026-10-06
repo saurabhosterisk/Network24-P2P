@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Right-hand menu: dark like the rest of the app (was white). -->
+    <color name="drawer_bg">#1C1C1E</color>
+    <color name="drawer_item_text">#E6E6E6</color>
+</resources>

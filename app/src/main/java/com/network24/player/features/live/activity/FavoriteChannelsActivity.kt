@@ -613,6 +613,8 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
+        // channels of categories under the parental lock are left out until the PIN is entered
+        val locked = com.network24.player.core.parental.ParentalLock.activeLockedIds(this)
         val favChannels =
 
             allChannels.filter {
@@ -624,7 +626,7 @@ class FavoriteChannelsActivity : BaseActivity() {
                         ?.toString()
                         .orEmpty()
 
-                )
+                ) && it.category_id !in locked
 
             }
 
@@ -1033,6 +1035,7 @@ class FavoriteChannelsActivity : BaseActivity() {
         binding.cardEpg.visibility = View.GONE
         binding.btnFullscreen.visibility = View.GONE
         binding.layoutOverlay.visibility = View.GONE
+        binding.previewScrim.visibility = View.GONE
 
         binding.fsTxtChannelTitle.text = run {
             val streamId = channel.stream_id?.let { "$it - " } ?: ""
@@ -1081,6 +1084,7 @@ class FavoriteChannelsActivity : BaseActivity() {
         binding.cardEpg.visibility = View.VISIBLE
         binding.btnFullscreen.visibility = View.VISIBLE
         binding.layoutOverlay.visibility = View.VISIBLE
+        binding.previewScrim.visibility = View.VISIBLE
 
         binding.fsTopTint.visibility = View.GONE
         binding.fsBtnBack.visibility = View.GONE

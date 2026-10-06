@@ -112,7 +112,9 @@ class MasterChannelSearchActivity : BaseActivity() {
             return
         }
 
-        searchResults = result.getOrDefault(emptyList())
+        // channels of categories under the parental lock are left out until the PIN is entered
+        val locked = com.network24.player.core.parental.ParentalLock.activeLockedIds(this)
+        searchResults = result.getOrDefault(emptyList()).filter { it.categoryId == null || it.categoryId !in locked }
         adapter.submitResults(searchResults)
         adapter.updateCurrentPrograms(emptyMap())
         adapter.updateCurrentPrograms(loadCurrentPrograms(searchResults))

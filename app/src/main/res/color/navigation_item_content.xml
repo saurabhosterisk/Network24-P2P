@@ -5,5 +5,5 @@
     <item android:state_focused="true" android:color="@color/text_primary" />
     <!-- No checked state: these are one-off actions. After "Refresh TV Guide" the
          item stayed checked and its light text vanished on the white drawer. -->
-    <item android:color="@android:color/black" />
+    <item android:color="@color/drawer_item_text" />
 </selector>

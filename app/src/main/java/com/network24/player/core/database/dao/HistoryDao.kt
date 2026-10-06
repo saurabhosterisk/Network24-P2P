@@ -32,6 +32,9 @@ interface HistoryDao {
     @Query("DELETE FROM history")
     suspend fun clearAll()
 
+    @Query("DELETE FROM history WHERE itemType = :itemType")
+    suspend fun deleteByType(itemType: String)
+
     @Query("""
         DELETE FROM history
         WHERE itemType = :itemType

@@ -106,7 +106,7 @@ object DrawerFocusStyler {
     }
 
     private fun updateContent(itemView: View, focused: Boolean) {
-        val colorRes = if (focused) android.R.color.white else android.R.color.black
+        val colorRes = if (focused) android.R.color.white else com.network24.player.R.color.drawer_item_text
         val color = ContextCompat.getColor(itemView.context, colorRes)
         updateDescendants(itemView, color)
     }

@@ -10,6 +10,8 @@ import com.network24.player.features.live.models.LiveCategory
 class ManageCategoryAdapter(
     private val categories: MutableList<LiveCategory> = mutableListOf(),
     private val disabledIds: MutableSet<String> = mutableSetOf(),
+    private val onLabel: String = "Enabled",
+    private val offLabel: String = "Disabled",
     private val onChanged: (LiveCategory, Boolean) -> Unit
 ) : RecyclerView.Adapter<ManageCategoryAdapter.ViewHolder>() {
 
@@ -45,11 +47,11 @@ class ManageCategoryAdapter(
             binding.txtCategory.text = category.category_name
             binding.switchEnabled.setOnCheckedChangeListener(null)
             binding.switchEnabled.isChecked = !disabledIds.contains(category.category_id)
-            binding.txtStatus.text = if (binding.switchEnabled.isChecked) "Enabled" else "Disabled"
+            binding.txtStatus.text = if (binding.switchEnabled.isChecked) onLabel else offLabel
 
             binding.switchEnabled.setOnCheckedChangeListener { _, checked ->
                 setEnabled(category.category_id, checked)
-                binding.txtStatus.text = if (checked) "Enabled" else "Disabled"
+                binding.txtStatus.text = if (checked) onLabel else offLabel
                 onChanged(category, checked)
             }
 

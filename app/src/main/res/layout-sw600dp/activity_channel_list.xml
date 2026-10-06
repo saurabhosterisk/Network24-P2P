@@ -272,6 +272,16 @@
                     app:layout_constraintTop_toTopOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"/>
 
+                <View
+                    android:id="@+id/previewScrim"
+                    android:layout_width="0dp"
+                    android:layout_height="96dp"
+                    android:background="@drawable/bg_preview_scrim"
+                    android:importantForAccessibility="no"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent" />
+
                 <LinearLayout
                     android:id="@+id/layoutOverlay"
                     android:layout_width="wrap_content"
@@ -288,7 +298,10 @@
                         android:text="AE HD"
                         android:textColor="@android:color/white"
                         android:textStyle="bold"
-                        android:textSize="18sp"/>
+                        android:textSize="18sp"
+                        android:shadowColor="#E6000000"
+                        android:shadowDy="1"
+                        android:shadowRadius="4"/>
 
                     <TextView
                         android:id="@+id/txtOverlayProgram"
@@ -297,7 +310,10 @@
                         android:layout_marginTop="2dp"
                         android:text="The First 48"
                         android:textColor="#DDFFFFFF"
-                        android:textSize="14sp"/>
+                        android:textSize="14sp"
+                        android:shadowColor="#E6000000"
+                        android:shadowDy="1"
+                        android:shadowRadius="4"/>
                 </LinearLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -754,7 +770,7 @@
         android:layout_width="@dimen/navigation_drawer_width"
         android:layout_height="match_parent"
         android:layout_gravity="end"
-        android:background="@android:color/white"
+        android:background="@color/drawer_bg"
         app:itemBackground="@drawable/bg_navigation_item"
         app:itemIconTint="@color/navigation_item_content"
         app:itemTextColor="@color/navigation_item_content"

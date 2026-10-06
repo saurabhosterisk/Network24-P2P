@@ -499,5 +499,5 @@
         </LinearLayout>
     </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
-    <com.google.android.material.navigation.NavigationView android:id="@+id/rightNav" android:layout_width="340dp" android:layout_height="match_parent" android:layout_gravity="end" android:background="@android:color/white" app:itemBackground="@drawable/bg_navigation_item" app:itemIconTint="@color/navigation_item_content" app:itemTextColor="@color/navigation_item_content" app:menu="@menu/menu_live_right_drawer" />
+    <com.google.android.material.navigation.NavigationView android:id="@+id/rightNav" android:layout_width="340dp" android:layout_height="match_parent" android:layout_gravity="end" android:background="@color/drawer_bg" app:itemBackground="@drawable/bg_navigation_item" app:itemIconTint="@color/navigation_item_content" app:itemTextColor="@color/navigation_item_content" app:menu="@menu/menu_live_right_drawer" />
 </androidx.drawerlayout.widget.DrawerLayout>

@@ -35,6 +35,11 @@ class ProgramInfoDrawer(
     private val onOpen: () -> Unit = {}
 ) {
     private var host: FrameLayout? = null
+    private var shownChannel: com.network24.player.core.database.entity.ChannelEntity? = null
+    private var shownNow: EpgEntity? = null
+    private var shownNext: EpgEntity? = null
+
+    private fun toast(t: String) = android.widget.Toast.makeText(activity, t, android.widget.Toast.LENGTH_SHORT).show()
 
     var isOpen = false
         private set
@@ -87,6 +92,25 @@ class ProgramInfoDrawer(
         frame.addView(panel, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START))
         root.addView(frame, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         panel.findViewById<View>(R.id.progClose).setOnClickListener { close() }
+        panel.findViewById<View>(R.id.progActCatchup).setOnClickListener {
+            val ch = shownChannel ?: return@setOnClickListener
+            if ((ch.tvArchive ?: 0) != 1) { toast("This channel has no catch-up.") ; return@setOnClickListener }
+            activity.startActivity(android.content.Intent(activity, com.network24.player.features.catchup.CatchupActivity::class.java)
+                .putExtra(com.network24.player.features.catchup.CatchupActivity.EXTRA_STREAM, ch.streamId))
+        }
+        panel.findViewById<View>(R.id.progActRemind).setOnClickListener {
+            val ch = shownChannel; val n = shownNext
+            if (ch == null || n?.startTimestamp == null) { toast("There is no next show in the TV guide.") ; return@setOnClickListener }
+            com.network24.player.features.reminders.Reminders.toggle(activity, ch.streamId, n.startTimestamp, n.title?.trim().orEmpty(), ch.name.orEmpty())
+        }
+        panel.findViewById<View>(R.id.progActSleep).setOnClickListener { SleepTimer.choose(activity) }
+        panel.findViewById<View>(R.id.progActShare).setOnClickListener {
+            val ch = shownChannel ?: return@setOnClickListener
+            val now = shownNow?.title?.trim()?.takeIf { it.isNotEmpty() }
+            val text = "I'm watching ${ch.name?.trim()}" + (now?.let { " - $it" } ?: "") + " on Network24. Watch anywhere: https://play.web24.live"
+            runCatching { activity.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), "Share")) }
+                .onFailure { toast("Sharing is not available on this device.") }
+        }
         return frame
     }
 
@@ -100,6 +124,9 @@ class ProgramInfoDrawer(
             val now = System.currentTimeMillis()
             val current = epgId?.let { runCatching { db.epgDao().getNowByEpgChannelId(it, now) }.getOrNull() }
             val next = epgId?.let { runCatching { db.epgDao().getNextByEpgChannelId(it, now) }.getOrNull() }
+            shownChannel = channel; shownNow = current; shownNext = next
+            frame.findViewById<TextView>(R.id.progActCatchup).alpha = if ((channel?.tvArchive ?: 0) == 1) 1f else 0.45f
+            frame.findViewById<TextView>(R.id.progActSleep).text = SleepTimer.label()
             show(frame, channel?.name, channel?.icon, current, next, now)
         }
     }
@@ -199,5 +226,32 @@ class ProgramInfoDrawer(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER
         )
+    }
+}
+
+/** Stops playback after a chosen time (the live channel is paused, so the connection is freed). */
+object SleepTimer {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var endsAt = 0L
+    private val stopRunnable = Runnable { endsAt = 0L; runCatching { PlayerManager.pause() } }
+
+    fun label(): String = if (endsAt > System.currentTimeMillis()) "Sleep: ${((endsAt - System.currentTimeMillis()) / 60_000) + 1} min" else "Sleep timer"
+
+    fun choose(activity: AppCompatActivity) {
+        val options = listOf(0 to "Off", 15 to "15 minutes", 30 to "30 minutes", 45 to "45 minutes", 60 to "1 hour", 90 to "1 hour 30 minutes", 120 to "2 hours", 180 to "3 hours")
+        val pick: (Int) -> Unit = { i ->
+            val min = options[i].first
+            handler.removeCallbacks(stopRunnable)
+            if (min == 0) { endsAt = 0L; android.widget.Toast.makeText(activity, "Sleep timer off", android.widget.Toast.LENGTH_SHORT).show() }
+            else {
+                endsAt = System.currentTimeMillis() + min * 60_000L
+                handler.postDelayed(stopRunnable, min * 60_000L)
+                android.widget.Toast.makeText(activity, "Playback stops in ${options[i].second}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            activity.findViewById<TextView>(R.id.progActSleep)?.text = label()
+        }
+        val base = activity as? com.network24.player.core.base.BaseActivity
+        if (base != null) base.pickOne("Sleep timer", options.map { it.second }, 0, pick)
+        else android.app.AlertDialog.Builder(activity).setTitle("Sleep timer").setItems(options.map { it.second }.toTypedArray()) { _, i -> pick(i) }.show()
     }
 }
