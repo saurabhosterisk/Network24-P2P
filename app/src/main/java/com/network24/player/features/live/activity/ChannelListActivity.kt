@@ -293,6 +293,14 @@ class ChannelListActivity : BaseActivity() {
                 "category_name"
             ) ?: "Live TV"
 
+        lifecycleScope.launch {
+            categoryNames = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                DatabaseProvider.get(this@ChannelListActivity).categoryDao()
+                    .getByType(com.network24.player.core.database.entity.CategoryType.LIVE)
+                    .associate { it.categoryId to it.name.orEmpty() }
+            }
+        }
+
 
 
 
@@ -1235,9 +1243,23 @@ class ChannelListActivity : BaseActivity() {
 
 
 
+    // Category names, to tell on-demand channels (ESPN Unlimited) that take up to a minute to start
+    private var categoryNames: Map<String, String> = emptyMap()
+
+    private fun updateSlowHint(channel: LiveChannel) {
+        val slow = com.network24.player.features.discover.SlowChannels.isSlow(categoryNames[channel.category_id], channel.name)
+        binding.txtCategorySub.text = if (slow) com.network24.player.features.discover.SlowChannels.HINT else "Live TV"
+        binding.txtCategorySub.setTextColor(
+            androidx.core.content.ContextCompat.getColor(this, if (slow) R.color.warning else R.color.text_hint)
+        )
+        if (slow) Toast.makeText(this, com.network24.player.features.discover.SlowChannels.HINT, Toast.LENGTH_LONG).show()
+    }
+
     private fun showPreview(
         channel: LiveChannel
     ) {
+
+        updateSlowHint(channel)
 
         LiveWatchHistory.record(applicationContext, channel)
 

@@ -3,6 +3,7 @@ package com.network24.player.features.discover
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import androidx.lifecycle.lifecycleScope
 import com.network24.player.core.api.Web24Api
 import com.network24.player.core.database.entity.CategoryType
@@ -81,41 +82,83 @@ object EventParser {
 
 // ------------------------------------------------------------------------------------------------ Events & Scores
 class EventsActivity : FeatureListActivity() {
-    // Only ESPN's scoreboard is listed: channel names can carry a wrong time or title, the scoreboard does not.
+    // Only ESPN's data is listed: channel names can carry a wrong time or title, ESPN does not.
     // (Channel names are still used behind the scenes to find the channels showing a game.)
     private var tab = "scores"
     private var league = ""
     private var games: List<JSONObject> = emptyList()
-    private val teams = mutableListOf<String>()
+    private var allTeams: List<TeamInfo> = emptyList()
+    private var next: Map<String, Game?> = emptyMap()
+    private var query = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         title("Events & Scores", "Live scores and games from the leagues - select a game to see the channels showing it")
         action("Refresh") { load() }
-        teams.addAll(getSharedPreferences("n24_teams", MODE_PRIVATE).getStringSet("teams", emptySet())!!.sorted())
+        enableSearch("Search a team: Cowboys, Lakers, Real Madrid...", live = true) { q ->
+            query = q.trim()
+            if (tab == "find") render()
+        }
+        b.searchRow.visibility = View.GONE
         tabs()
         load()
     }
 
     companion object { const val EXTRA_GAME = "game_json" }
 
-    private fun tabs() = chips(listOf("scores" to "Scores", "teams" to "My teams"), tab) { tab = it; league = ""; render() }
+    private fun tabs() = chips(listOf("scores" to "Scores", "mine" to "My teams", "find" to "Find a team"), tab) {
+        tab = it; league = ""; onTab()
+    }
+
+    private fun onTab() {
+        b.searchRow.visibility = if (tab == "find") View.VISIBLE else View.GONE
+        when (tab) {
+            "mine" -> loadMine()
+            "find" -> withTeams { render() }
+            else -> render()
+        }
+    }
 
     private fun load() {
         loading(true)
         lifecycleScope.launch {
             games = runCatching { Web24Api.objects(Web24Api(this@EventsActivity).support("scores").optJSONArray("games")) }.getOrDefault(emptyList())
             loading(false)
-            TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) })
+            TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) } + next.values.filterNotNull())
             render()
             Game.fromJson(intent.getStringExtra(EXTRA_GAME))?.let { g ->
                 intent.removeExtra(EXTRA_GAME)
-                tab = "scores"; tabs(); render(); openGame(g)
+                tab = "scores"; onTab(); openGame(g)
             }
+            if (tab == "mine") loadMine()
+        }
+    }
+
+    /** Loads the team list once (cached on the device for a day), then runs [then]. */
+    private fun withTeams(then: () -> Unit) {
+        if (allTeams.isNotEmpty()) { then(); return }
+        loading(true)
+        lifecycleScope.launch {
+            allTeams = Teams.all(this@EventsActivity)
+            loading(false)
+            then()
+        }
+    }
+
+    private fun loadMine() = withTeams {
+        loading(true)
+        lifecycleScope.launch {
+            next = Teams.nextGames(this@EventsActivity)
+            loading(false)
+            render()
+            TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) } + next.values.filterNotNull())
         }
     }
 
     private fun teamName(t: JSONObject) = t.optString("short").ifBlank { t.optString("name") }
+
+    /** Start text in this device's time zone (ESPN's own text is US Eastern); "time TBD" when ESPN has no time yet. */
+    private fun whenText(startMs: Long, tbd: Boolean) = if (tbd) "${Fmt.day(startMs)} · time TBD" else "${Fmt.day(startMs)} · ${Fmt.clock(startMs)}"
 
     /** Finds the channels showing this game and opens them like a Live TV category (list + preview); none -> says so. */
     private fun openGame(game: Game) {
@@ -144,45 +187,103 @@ class EventsActivity : FeatureListActivity() {
     private fun render() {
         tabs()
         when (tab) {
-            "scores" -> {
-                val leagues = games.map { it.optString("league") }.distinct()
-                val list = games.filter { league == "" || it.optString("league") == league }
-                    .sortedWith(compareBy({ when (it.optString("state")) { "in" -> 0; "pre" -> 1; else -> 2 } }, { it.optLong("start") }))
-                val rows = mutableListOf<Row>()
-                if (leagues.size > 1) rows += Row("leagues", "Leagues: " + (listOf("All") + leagues).joinToString(" · "), "Select to switch league" + if (league.isNotBlank()) " (now $league)" else "", showIcon = false) {
-                    val all = listOf("") + leagues; league = all[(all.indexOf(league) + 1) % all.size]; render()
-                }
-                rows += list.map { g ->
-                    val t = Web24Api.objects(g.optJSONArray("teams"))
-                    val home = t.firstOrNull { it.optBoolean("home") } ?: t.getOrNull(0) ?: JSONObject()
-                    val away = t.firstOrNull { it !== home } ?: t.getOrNull(1) ?: JSONObject()
-                    val state = g.optString("state")
-                    val followed = teams.any { f -> teamName(home).equals(f, true) || teamName(away).equals(f, true) }
-                    val score = if (state == "pre") "" else "  ${away.optString("score")} - ${home.optString("score")}"
-                    Row(g.optString("league") + g.optLong("start") + teamName(home), "${teamName(away)} @ ${teamName(home)}$score",
-                        g.optString("detail"), if (followed) "★ A team you follow" else "", showIcon = false, lead = g.optString("league"),
-                        badge = when (state) { "in" -> "LIVE"; "post" -> "Final"; else -> Fmt.clock(g.optLong("start") * 1000) },
-                        badgeColor = if (state == "in") LIVE else 0) {
-                        Game.parse(g)?.let { openGame(it) }
-                    }
-                }
-                show(rows, "No scores right now.")
-            }
-            else -> {
-                val all = games.flatMap { g -> Web24Api.objects(g.optJSONArray("teams")).map { teamName(it) } }.filter { it.isNotBlank() }.distinct().sorted()
-                show(all.map { t ->
-                    val on = t in teams
-                    Row("team:$t", t, if (on) "Following - games marked in Scores, alert 5 minutes before each game" else "Select to follow", showIcon = false,
-                        badge = if (on) "Following" else "Follow", badgeColor = if (on) GOOD else 0) {
-                        if (on) teams.remove(t) else teams.add(t)
-                        getSharedPreferences("n24_teams", MODE_PRIVATE).edit().putStringSet("teams", teams.toSet()).apply()
-                        TeamAlerts.update(this, games.mapNotNull { Game.parse(it) })
-                        lifecycleScope.launch { runCatching { Web24Api(this@EventsActivity).support("web_state_set", "key" to "teams", *teams.mapIndexed { i, x -> "value[$i]" to x }.toTypedArray()) } }
-                        render()
-                    }
-                }, "Teams appear here when there are games in Scores.")
+            "scores" -> renderScores()
+            "mine" -> renderMine()
+            else -> renderFind()
+        }
+    }
+
+    private fun renderScores() {
+        val keys = Teams.keys(this)
+        val leagues = games.map { it.optString("league") }.distinct()
+        val list = games.filter { league == "" || it.optString("league") == league }
+            .sortedWith(compareBy({ when (it.optString("state")) { "in" -> 0; "pre" -> 1; else -> 2 } }, { it.optLong("start") }))
+        val rows = mutableListOf<Row>()
+        if (leagues.size > 1) rows += Row("leagues", "Leagues: " + (listOf("All") + leagues).joinToString(" · "), "Select to switch league" + if (league.isNotBlank()) " (now $league)" else "", showIcon = false) {
+            val all = listOf("") + leagues; league = all[(all.indexOf(league) + 1) % all.size]; render()
+        }
+        rows += list.map { g ->
+            val t = Web24Api.objects(g.optJSONArray("teams"))
+            val home = t.firstOrNull { it.optBoolean("home") } ?: t.getOrNull(0) ?: JSONObject()
+            val away = t.firstOrNull { it !== home } ?: t.getOrNull(1) ?: JSONObject()
+            val state = g.optString("state")
+            val parsed = Game.parse(g)
+            val followed = parsed != null && Teams.isFollowed(this, parsed, keys)
+            val score = if (state == "pre") "" else "  ${away.optString("score")} - ${home.optString("score")}"
+            val startMs = g.optLong("start") * 1000
+            val tbd = g.optBoolean("tbd")
+            val sub = if (state == "pre") "Starts " + whenText(startMs, tbd) else g.optString("detail")
+            Row(g.optString("league") + g.optLong("start") + teamName(home), "${teamName(away)} @ ${teamName(home)}$score",
+                sub, if (followed) "★ A team you follow" else "", showIcon = false, lead = g.optString("league"),
+                badge = when (state) { "in" -> "LIVE"; "post" -> "Final"; else -> whenText(startMs, tbd) },
+                badgeColor = if (state == "in") LIVE else if (followed) GOLD else 0) {
+                parsed?.let { openGame(it) }
             }
         }
+        show(rows, "No scores right now.")
+    }
+
+    private fun order(t: TeamInfo) = Teams.LEAGUE_ORDER.indexOf(t.league).let { if (it < 0) 99 else it }
+
+    private fun renderMine() {
+        val byKey = allTeams.associateBy { it.key }
+        val mine = Teams.keys(this).mapNotNull { byKey[it] }.sortedWith(compareBy({ order(it) }, { it.name }))
+        show(mine.map { t ->
+            val g = next[t.key]
+            val isHome = g?.home?.id == t.id
+            val opp = if (g == null) "" else if (isHome) "vs ${g.away.short}" else "@ ${g.home.short}"
+            val sub: String
+            val badge: String
+            val color: Int
+            when {
+                g == null -> { sub = "No game scheduled right now"; badge = "Following"; color = GOOD }
+                g.state == "in" -> {
+                    val sc = runCatching {
+                        val tj = Web24Api.objects(JSONObject(g.json).optJSONArray("teams"))
+                        val h = tj.firstOrNull { it.optBoolean("home") }; val a = tj.firstOrNull { !it.optBoolean("home") }
+                        "  ${a?.optString("score")} - ${h?.optString("score")}"
+                    }.getOrDefault("")
+                    sub = "LIVE now $opp$sc"; badge = "LIVE"; color = LIVE
+                }
+                else -> { sub = "Next: ${whenText(g.startMs, g.tbd)} $opp"; badge = whenText(g.startMs, g.tbd); color = 0 }
+            }
+            Row("mine:${t.key}", t.name, sub, "", showIcon = false, lead = t.league, badge = badge, badgeColor = color) {
+                val options = listOfNotNull(g?.let { "Watch ${it.title}" }, "Unfollow ${t.name}")
+                pickOne(t.name, options, 0) { i ->
+                    if (g != null && i == 0) openGame(g)
+                    else lifecycleScope.launch {
+                        Teams.set(this@EventsActivity, t, false, allTeams)
+                        toast("${t.name} removed from My teams")
+                        render()
+                        TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) } + next.values.filterNotNull())
+                    }
+                }
+            }
+        }, "You don't follow any team yet.\nOpen Find a team, search for your team and select it to follow it.\nYou get an alert 5 minutes before each of its games.")
+    }
+
+    private fun renderFind() {
+        val keys = Teams.keys(this)
+        val q = query.lowercase()
+        val list = if (q.isBlank()) allTeams.filter { it.league != "NCAAF" && it.league != "NCAAB" }
+        else allTeams.filter { t -> listOf(t.name, t.short, t.abbr, t.location).any { it.lowercase().contains(q) } }
+        val rows = mutableListOf<Row>()
+        if (q.isBlank()) rows += Row("find:hint", "Type a team name above to search all ${allTeams.size} teams",
+            "College teams (NCAAF, NCAAB) show up when you search", showIcon = false)
+        rows += list.sortedWith(compareBy({ order(it) }, { it.name })).take(400).map { t ->
+            val on = t.key in keys
+            Row("find:${t.key}", t.name, if (on) "Following - in My teams, alert 5 minutes before each game" else "Select to follow",
+                showIcon = false, lead = t.league, badge = if (on) "Following" else "Follow", badgeColor = if (on) GOOD else 0) {
+                lifecycleScope.launch {
+                    Teams.set(this@EventsActivity, t, !on, allTeams)
+                    toast(if (on) "${t.name} removed from My teams" else "${t.name} added to My teams")
+                    render()
+                    next = Teams.nextGames(this@EventsActivity)
+                    TeamAlerts.update(this@EventsActivity, games.mapNotNull { Game.parse(it) } + next.values.filterNotNull())
+                }
+            }
+        }
+        show(rows, if (allTeams.isEmpty()) "The team list could not be loaded. Select Refresh to try again." else "No team matches \"$query\".")
     }
 }
 

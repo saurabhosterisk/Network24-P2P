@@ -106,7 +106,21 @@ abstract class FeatureListActivity : BaseActivity() {
             runCatching { voice.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_PROMPT, hint)) }
                 .onFailure { toast("Voice search is not available on this device.") }
         }
-        b.editSearch.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEARCH) { cb(b.editSearch.text.toString()); true } else false }
+        b.editSearch.setOnEditorActionListener { v, id, _ ->
+            if (id == EditorInfo.IME_ACTION_SEARCH) {
+                cb(b.editSearch.text.toString())
+                (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(v.windowToken, 0)
+                focusFirstRow()
+                true
+            } else false
+        }
+        // TV remote: DOWN leaves the search box for the results (Fire TV kept the focus inside the box)
+        b.editSearch.setOnKeyListener { _, keyCode, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (b.chipScroll.visibility == View.VISIBLE && b.chipRow.childCount > 0) b.chipRow.getChildAt(0).requestFocus() else focusFirstRow()
+                true
+            } else false
+        }
         if (live) b.editSearch.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) { cb(s?.toString().orEmpty()) }
             override fun beforeTextChanged(s: CharSequence?, a: Int, c: Int, d: Int) = Unit
@@ -114,8 +128,14 @@ abstract class FeatureListActivity : BaseActivity() {
         })
     }
 
+    protected fun focusFirstRow() {
+        b.rvItems.post { b.rvItems.getChildAt(0)?.let { (it.findViewById<View>(R.id.cardRoot) ?: it).requestFocus() } }
+    }
+
     /** Chip row (same chips as the rest of the app); returns nothing, calls [onPick] with the chosen key. */
     protected fun chips(items: List<Pair<String, String>>, selected: String, onPick: (String) -> Unit) {
+        // rebuilding the chips must not throw the remote's focus away (it jumped to the Back button)
+        val hadFocus = b.chipRow.hasFocus()
         b.chipScroll.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
         b.chipRow.removeAllViews()
         val d = resources.displayMetrics.density
@@ -130,13 +150,20 @@ abstract class FeatureListActivity : BaseActivity() {
                 setOnClickListener { chips(items, k, onPick); onPick(k) }
             }
             b.chipRow.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })
+            if (hadFocus && k == selected) t.post { t.requestFocus() }
         }
     }
 
     protected fun loading(on: Boolean) { b.progressLoading.visibility = if (on) View.VISIBLE else View.GONE }
 
     protected fun show(rows: List<Row>, empty: String) {
+        // keep the remote's focus on the same row when the list is redrawn (league switch, refresh, follow)
+        val focused = b.rvItems.focusedChild?.let { b.rvItems.getChildAdapterPosition(it) } ?: -1
         adapter.submit(rows)
+        if (focused >= 0 && rows.isNotEmpty()) {
+            val pos = focused.coerceAtMost(rows.size - 1)
+            b.rvItems.post { b.rvItems.findViewHolderForAdapterPosition(pos)?.itemView?.let { (it.findViewById<View>(R.id.cardRoot) ?: it).requestFocus() } }
+        }
         b.txtEmpty.text = empty
         b.txtEmpty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
     }
