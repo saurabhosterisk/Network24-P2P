@@ -330,6 +330,7 @@ open class BaseActivity : AppCompatActivity() {
         selectedIndex: Int,
         negativeText: String = "Cancel",
         onNegative: (() -> Unit)? = null,
+        focusIndex: Int = selectedIndex,
         onSelect: (Int) -> Unit
     ) {
         if (isFinishing || isDestroyed) return
@@ -379,7 +380,7 @@ open class BaseActivity : AppCompatActivity() {
         }
 
         dialog.setOnShowListener {
-            val target = rows.getOrNull(selectedIndex) ?: negativeView
+            val target = rows.getOrNull(focusIndex) ?: negativeView
             target.post { target.requestFocus() }
         }
 

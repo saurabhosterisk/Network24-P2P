@@ -25,25 +25,25 @@
     <FrameLayout android:id="@+id/slot1" android:layout_width="0dp" android:layout_height="0dp" android:layout_margin="3dp" android:background="@drawable/bg_multiview_slot" android:clickable="true" android:focusable="true" android:nextFocusRight="@id/slot2" android:nextFocusDown="@id/slot3" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/guidelineVertical" app:layout_constraintBottom_toTopOf="@id/guidelineHorizontal">
         <androidx.media3.ui.PlayerView android:id="@+id/playerView1" android:layout_width="match_parent" android:layout_height="match_parent" app:use_controller="false" app:show_buffering="always" app:resize_mode="fit" app:surface_type="surface_view" />
         <ProgressBar android:id="@+id/progress1" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:visibility="gone" />
-        <TextView android:id="@+id/label1" style="@style/MultiViewLabel" android:text="Select channel" />
+        <TextView android:id="@+id/label1" style="@style/MultiViewLabel" android:text="Press OK to add a channel" />
     </FrameLayout>
 
     <FrameLayout android:id="@+id/slot2" android:layout_width="0dp" android:layout_height="0dp" android:layout_margin="3dp" android:background="@drawable/bg_multiview_slot" android:clickable="true" android:focusable="true" android:nextFocusLeft="@id/slot1" android:nextFocusDown="@id/slot4" app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toEndOf="@id/guidelineVertical" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintBottom_toTopOf="@id/guidelineHorizontal">
         <androidx.media3.ui.PlayerView android:id="@+id/playerView2" android:layout_width="match_parent" android:layout_height="match_parent" app:use_controller="false" app:show_buffering="always" app:resize_mode="fit" app:surface_type="surface_view" />
         <ProgressBar android:id="@+id/progress2" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:visibility="gone" />
-        <TextView android:id="@+id/label2" style="@style/MultiViewLabel" android:text="Select channel" />
+        <TextView android:id="@+id/label2" style="@style/MultiViewLabel" android:text="Press OK to add a channel" />
     </FrameLayout>
 
     <FrameLayout android:id="@+id/slot3" android:layout_width="0dp" android:layout_height="0dp" android:layout_margin="3dp" android:background="@drawable/bg_multiview_slot" android:clickable="true" android:focusable="true" android:nextFocusRight="@id/slot4" android:nextFocusUp="@id/slot1" app:layout_constraintTop_toBottomOf="@id/guidelineHorizontal" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toStartOf="@id/guidelineVertical" app:layout_constraintBottom_toBottomOf="parent">
         <androidx.media3.ui.PlayerView android:id="@+id/playerView3" android:layout_width="match_parent" android:layout_height="match_parent" app:use_controller="false" app:show_buffering="always" app:resize_mode="fit" app:surface_type="surface_view" />
         <ProgressBar android:id="@+id/progress3" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:visibility="gone" />
-        <TextView android:id="@+id/label3" style="@style/MultiViewLabel" android:text="Select channel" />
+        <TextView android:id="@+id/label3" style="@style/MultiViewLabel" android:text="Press OK to add a channel" />
     </FrameLayout>
 
     <FrameLayout android:id="@+id/slot4" android:layout_width="0dp" android:layout_height="0dp" android:layout_margin="3dp" android:background="@drawable/bg_multiview_slot" android:clickable="true" android:focusable="true" android:nextFocusLeft="@id/slot3" android:nextFocusUp="@id/slot2" app:layout_constraintTop_toBottomOf="@id/guidelineHorizontal" app:layout_constraintStart_toEndOf="@id/guidelineVertical" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintBottom_toBottomOf="parent">
         <androidx.media3.ui.PlayerView android:id="@+id/playerView4" android:layout_width="match_parent" android:layout_height="match_parent" app:use_controller="false" app:show_buffering="always" app:resize_mode="fit" app:surface_type="surface_view" />
         <ProgressBar android:id="@+id/progress4" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="center" android:visibility="gone" />
-        <TextView android:id="@+id/label4" style="@style/MultiViewLabel" android:text="Select channel" />
+        <TextView android:id="@+id/label4" style="@style/MultiViewLabel" android:text="Press OK to add a channel" />
     </FrameLayout>
 
     <androidx.constraintlayout.widget.Guideline android:id="@+id/guidelineVertical" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" app:layout_constraintGuide_percent="0.5" />
