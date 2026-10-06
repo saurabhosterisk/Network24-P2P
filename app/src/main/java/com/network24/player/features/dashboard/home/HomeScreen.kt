@@ -84,9 +84,15 @@ class HomeScreen(
     private val tabs: List<Pair<String, () -> Unit>>,
     private val support: () -> Unit,
 ) {
-    private val d = act.resources.displayMetrics.density
+    // the page is laid out for a screen at least 880 x 400 dp (TV, big phones in landscape); smaller screens
+    // (16:9 phones, small tablets) get the same page scaled down evenly, so the top bar and billboard never
+    // squeeze or run off the edge. Text follows the same scale; the system font size counts up to +15%.
+    private val uiScale = act.resources.displayMetrics.let { m -> minOf(1f, m.widthPixels / m.density / 880f, m.heightPixels / m.density / 400f) }
+    private val d = act.resources.displayMetrics.density * uiScale
+    private val fontD = d * act.resources.configuration.fontScale.coerceIn(0.85f, 1.15f)
     private fun dp(v: Int) = (v * d).toInt()
     private fun dpf(v: Float) = v * d
+    private fun TextView.size(sp: Float) = setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sp * fontD)
     private val prefs = PreferenceManager(act)
     private val db by lazy { DatabaseProvider.get(act) }
     private val handler = Handler(Looper.getMainLooper())
@@ -145,7 +151,7 @@ class HomeScreen(
 
     // ------------------------------------------------------------------------------------------------ building blocks
     private fun text(s: String, size: Float, color: Int = textMain, weight: Int = 500) = TextView(act).apply {
-        text = s; textSize = size; setTextColor(color); typeface = HomeFont.of(act, weight)
+        text = s; size(size); setTextColor(color); typeface = HomeFont.of(act, weight)
         maxLines = 1; ellipsize = TextUtils.TruncateAt.END; includeFontPadding = false
     }
 
@@ -176,7 +182,11 @@ class HomeScreen(
     }
 
     private fun build() {
-        val heroH = (screenH * 0.70f).toInt()
+        // the picture's height follows the screen shape: 70% on 16:9 (TV) and narrower screens, growing to the full
+        // height on 20:9 phones and wider, so the billboard text and buttons always sit on the picture and a 16:9
+        // picture is never cut into a thin strip; in between it grows smoothly
+        val tall = ((screenW.toFloat() / screenH - 16f / 9f) / (20f / 9f - 16f / 9f)).coerceIn(0f, 1f)
+        val heroH = (screenH * (0.70f + 0.30f * tall)).toInt()
         video = PlayerView(act).apply {
             useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             setShutterBackgroundColor(Color.TRANSPARENT); alpha = 0f
@@ -193,15 +203,21 @@ class HomeScreen(
         root.addView(View(act).apply {
             background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF508090C.toInt(), 0xCC08090C.toInt(), 0x4008090C, 0x0008090C))
         }, FrameLayout.LayoutParams((screenW * 0.75f).toInt(), heroH))
+        // bottom fade; the more of the picture lies behind the buttons (a taller picture, or a scaled-down page
+        // whose buttons sit higher), the higher and darker it starts, so the channel's own captions never show
+        // through the buttons
+        val under = maxOf(tall, ((1f - uiScale) * 3f).coerceIn(0f, 1f))
+        val fadeTop = 0.55f - 0.15f * under
+        val fadeMid = 0xB3 + ((0xE0 - 0xB3) * under).toInt()
         root.addView(View(act).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x0008090C, 0xB308090C.toInt(), bg))
-        }, FrameLayout.LayoutParams(-1, (heroH * 0.45f).toInt(), Gravity.TOP).apply { topMargin = (heroH * 0.55f).toInt() + 1 })
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x0008090C, (fadeMid shl 24) or 0x08090C, bg))
+        }, FrameLayout.LayoutParams(-1, (heroH * (1f - fadeTop)).toInt(), Gravity.TOP).apply { topMargin = (heroH * fadeTop).toInt() + 1 })
         root.addView(View(act).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xD908090C.toInt(), 0x0008090C))
         }, FrameLayout.LayoutParams(-1, dp(120)))
 
         scroll = ScrollView(act).apply { isVerticalScrollBarEnabled = false; isFillViewport = true; isFocusable = false }
-        scroll.viewTreeObserver.addOnScrollChangedListener { nearBottom() }
+        scroll.viewTreeObserver.addOnScrollChangedListener { nearBottom(); fadeSound() }
         // nothing clips: a focused (enlarged) button or card must show whole, also at the left edge
         val page = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(48), dp(24), 0, dp(40)); clipChildren = false; clipToPadding = false }
         scroll.addView(page)
@@ -346,7 +362,7 @@ class HomeScreen(
         background = shape(0x14FFFFFF, 14f, line)
         layoutParams = LinearLayout.LayoutParams(dp(170), dp(162))
         addView(TextView(act).apply {
-            text = "→"; textSize = 26f; setTextColor(textMain); gravity = Gravity.CENTER; typeface = HomeFont.of(act, 600)
+            text = "→"; size(26f); setTextColor(textMain); gravity = Gravity.CENTER; typeface = HomeFont.of(act, 600)
             background = shape(0x1FFFFFFF, 26f)
         }, LinearLayout.LayoutParams(dp(52), dp(52)))
         addView(text("See all", 15f, weight = 700).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, 0) })
@@ -712,20 +728,44 @@ class HomeScreen(
         if (!started || playingId == ch.streamId) return
         val p = player ?: ExoPlayer.Builder(act.applicationContext, StreamDataSourceFactory.createRenderersFactory(act))
             .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(8000, 20000, 1000, 2000).build())
-            .setMediaSourceFactory(StreamDataSourceFactory.createMediaSourceFactory()).build().also { pl ->
+            .setMediaSourceFactory(StreamDataSourceFactory.createMediaSourceFactory())
+            // the billboard plays with sound; it takes audio focus like any player (other apps pause)
+            .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+            .build().also { pl ->
                 player = pl; pl.volume = 0f; video.player = pl
                 pl.addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() {
                         video.animate().alpha(1f).setDuration(600).start(); poster.animate().alpha(0f).setDuration(400).start()
+                        soundOn = true; fadeSound()
                     }
                     override fun onPlayerError(error: PlaybackException) { video.animate().alpha(0f).setDuration(300).start(); playingId = -1 }
                 })
             }
         playingId = ch.streamId
+        // a new channel starts silent and its sound rises once the picture is up
+        soundOn = false; volumeAnim?.cancel(); volumeTarget = 0f; p.volume = 0f
         video.animate().alpha(0f).setDuration(200).start()
         val server = prefs.getServer().trim().trimEnd('/')
         p.setMediaItem(MediaItem.fromUri("$server/live/${prefs.getUsername().trim()}/${prefs.getPassword().trim()}/${ch.streamId}.m3u8"))
         p.prepare(); p.playWhenReady = true
+    }
+
+    // billboard sound: rises softly when the picture starts, fades out while the page is scrolled down to the rows
+    // (the billboard is then mostly covered) and comes back at the top
+    private var soundOn = false
+    private var volumeAnim: ValueAnimator? = null
+    private var volumeTarget = 0f
+    private fun fadeSound() {
+        val p = player ?: return
+        val target = if (soundOn && scroll.scrollY < screenH * 0.35f) 1f else 0f
+        if (target == volumeTarget && (volumeAnim?.isRunning == true || p.volume == target)) return
+        volumeTarget = target; volumeAnim?.cancel()
+        volumeAnim = ValueAnimator.ofFloat(p.volume, target).apply {
+            duration = if (target > 0f) 900 else 400
+            addUpdateListener { player?.volume = it.animatedValue as Float }
+            start()
+        }
     }
 
     private fun multiView() {
@@ -763,6 +803,7 @@ class HomeScreen(
     fun onStop() {
         started = false
         handler.removeCallbacks(tick); pendingHero?.let { handler.removeCallbacks(it) }
+        soundOn = false; volumeAnim?.cancel(); volumeTarget = 0f; player?.volume = 0f
         player?.stop(); playingId = -1; video.alpha = 0f
     }
 
