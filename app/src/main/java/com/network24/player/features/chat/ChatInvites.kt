@@ -51,12 +51,11 @@ object ChatInvites {
             shown += room
             if (activity.isFinishing || activity.isDestroyed) return
             val on = o.optString("channel").takeIf { it.isNotBlank() }?.let { " on $it" } ?: ""
-            AlertDialog.Builder(activity).setTitle("Watch Party invite")
-                .setMessage("${o.optString("from")} invited you to watch together$on and chat during the game.")
-                .setPositiveButton("Join") { _, _ -> join(activity, room) }
-                .setNeutralButton("Not now", null)
-                .setNegativeButton("Decline") { _, _ -> activity.lifecycleScope.launch { api.declineInvite(room) } }
-                .show()
+            com.network24.player.core.remote.RemoteUi.popup(activity,
+                title = "${o.optString("from")} invited you",
+                body = "Watch together$on and chat during the game.",
+                buttons = listOf("Join" to { join(activity, room) }, "Not now" to {}, "Decline" to { activity.lifecycleScope.launch { api.declineInvite(room) }; Unit }),
+                chip = "🎉  Watch Party", chipColor = android.graphics.Color.parseColor("#A894FF"))
             return
         }
     }

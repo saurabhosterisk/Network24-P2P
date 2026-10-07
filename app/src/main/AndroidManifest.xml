@@ -108,6 +108,12 @@
 
 
 
+        <!-- Remote Help & Easy Mode (core/remote) -->
+        <activity
+            android:name=".core.remote.EasyHomeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
         <!-- Player -->
 
         <activity

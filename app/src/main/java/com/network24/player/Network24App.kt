@@ -55,6 +55,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
             )
         }
         registerActivityLifecycleCallbacks(this)
+        // Remote Help & Setup: commands from the console, help sessions, Easy Mode
+        com.network24.player.core.remote.RemoteAgent.init(this)
         Network24CrashReporter.initialize(this, legacyTv)
 
         // Secure Relay is an explicit, per-session choice by default - it

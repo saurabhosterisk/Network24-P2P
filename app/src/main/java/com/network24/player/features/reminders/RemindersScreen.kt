@@ -370,9 +370,12 @@ object ReminderAlert {
         if (activity.isFinishing || activity.isDestroyed) return
         val ch = withContext(Dispatchers.IO) { runCatching { DatabaseProvider.get(activity).channelDao().getByStreamIds(listOf(due.streamId)).firstOrNull() }.getOrNull() }
         val mins = ((due.start - now) / 60_000).coerceAtLeast(0)
-        AlertDialog.Builder(activity).setTitle(if (mins <= 0) "Starting now" else "Starting in $mins min")
-            .setMessage("${due.title}\non ${due.channel}")
-            .setPositiveButton("Watch now") { _, _ -> ch?.let { ChannelLauncher.play(activity, listOf(it), it) } }
-            .setNegativeButton("Not now", null).show()
+        val at = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(due.start))
+        com.network24.player.core.remote.RemoteUi.popup(activity,
+            title = if (mins <= 0) "Starting now" else "Starting in $mins min",
+            body = due.title,
+            note = "on ${due.channel}  ·  $at",
+            buttons = listOf("Watch now" to { ch?.let { ChannelLauncher.play(activity, listOf(it), it) }; Unit }, "Not now" to {}),
+            chip = "⏰  Reminder", chipColor = android.graphics.Color.parseColor("#F5B841"), logo = ch?.icon)
     }
 }

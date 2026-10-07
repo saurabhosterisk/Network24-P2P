@@ -72,6 +72,8 @@ class DashboardActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); binding = ActivityDashboardBinding.inflate(layoutInflater); setContentView(binding.root); registerDrawerBackHandler(binding.drawerLayout); askNotificationPermissionIfNeeded(); prefs = PreferenceManager(this); repository = LiveRepository(this)
         if (!hasCredentials()) { startActivity(Intent(this, LoginActivity::class.java)); finishAffinity(); return }
+        // Easy Mode (Remote Help): the simple home instead of this one
+        if (com.network24.player.core.remote.EasyMode.isOn(this)) { startActivity(Intent(this, com.network24.player.core.remote.EasyHomeActivity::class.java)); finish(); return }
         loadDashboard()
         if (intent.getBooleanExtra(EXTRA_REFRESH_ACCOUNT, false)) refreshAccountInfo()
         // Catch up if the scheduled Auto Refresh hasn't run for a whole interval.

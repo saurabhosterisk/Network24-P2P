@@ -75,6 +75,19 @@ class LoginActivity : BaseActivity() {
 
             login()
         }
+
+        // Remote Help: sign in with a code that support types in the console (or the customer on the phone)
+        tvCode = com.network24.player.core.remote.TvCodePanel(this, binding.brandingContainer) { u, p ->
+            binding.edtUsername.setText(u); binding.edtPassword.setText(p); binding.chkRemember.isChecked = true
+            login()
+        }
+    }
+
+    private var tvCode: com.network24.player.core.remote.TvCodePanel? = null
+
+    override fun onPause() {
+        tvCode?.stop()
+        super.onPause()
     }
 
     private fun login() {
@@ -234,6 +247,7 @@ Body: $body
         super.onResume()
         if (blockedByGate) return
         renderVpn()
+        tvCode?.start()
     }
 
     // ---------------------------------------------------------------- VPN before sign-in

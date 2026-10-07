@@ -101,6 +101,9 @@ class SettingsActivity : BaseActivity() {
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
             "Network24  •  Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+        // Remote Help commands from the console (RemoteAgent): check for an update / fresh start without asking
+        if (intent.getBooleanExtra(com.network24.player.core.remote.RemoteAgent.EXTRA_CHECK_UPDATE, false)) checkForUpdates()
+        if (intent.getBooleanExtra(com.network24.player.core.remote.RemoteAgent.EXTRA_FRESH_START, false)) freshStart()
         // the remote starts on the first setting
         ui.firstRow()?.postDelayed({ if (!startFocused) { startFocused = true; ui.firstRow()?.requestFocus() } }, 150)
     }
@@ -277,6 +280,19 @@ class SettingsActivity : BaseActivity() {
         findViewById<android.view.View>(R.id.vpnTunnel).setOnClickListener {
             val switch = findViewById<SwitchMaterial>(R.id.vpnTunnelSwitch)
             switch.isChecked = !switch.isChecked
+        }
+
+        findViewById<android.view.View>(R.id.remoteHelp).setOnClickListener { com.network24.player.core.remote.HelpSession.request(this) }
+        val easySwitch = findViewById<SwitchMaterial>(R.id.easyModeSwitch)
+        easySwitch.isChecked = com.network24.player.core.remote.EasyMode.isOn(this)
+        findViewById<android.view.View>(R.id.easyMode).setOnClickListener {
+            if (easySwitch.isChecked) { easySwitch.isChecked = false; com.network24.player.core.remote.EasyMode.set(this, false); return@setOnClickListener }
+            showConfirmDialog(
+                title = "Turn on Easy Mode?",
+                message = "The app opens on one simple screen: big tiles of your favourite channels and a Get help button. Press Full app there to come back.",
+                positiveText = "Turn on",
+                onPositive = { easySwitch.isChecked = true; com.network24.player.core.remote.EasyMode.set(this, true); com.network24.player.core.remote.EasyMode.goHome(this) }
+            )
         }
 
         val aiSwitch = findViewById<SwitchMaterial>(R.id.aiAssistantSwitch)

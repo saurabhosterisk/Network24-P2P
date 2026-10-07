@@ -178,6 +178,13 @@ class HelpCenter private constructor(private val act: AppCompatActivity) : Dialo
                 focusable(this, 18f, 1.05f, if (on) accent else Color.WHITE)
             }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         }
+        // Remote Help: support sees the screen and presses the remote for the customer (core/remote)
+        val helping = com.network24.player.core.remote.HelpSession.state.let { it == "live" || it == "waiting" }
+        tabRow.addView(text(if (helping) "■  Stop remote help" else "🎧  Get remote help", 14f, textMain, 700).apply {
+            setPadding(dp(18), dp(9), dp(18), dp(9)); background = shape(if (helping) 0x40E5484D else 0x403DD68C, 18f); this.tag = "tab:remote"
+            setOnClickListener { dismiss(); if (helping) com.network24.player.core.remote.HelpSession.stop(act) else com.network24.player.core.remote.HelpSession.request(act) }
+            focusable(this, 18f, 1.05f)
+        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
         content.removeAllViews()
         when (t) {
             "community" -> communityView()

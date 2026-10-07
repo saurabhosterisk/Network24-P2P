@@ -114,6 +114,8 @@ class SettingsUi(private val act: AppCompatActivity) {
         group("Special features") {
             row(R.id.vpnTunnel, R.drawable.ic_vpn, "#3DD68C", "Virtual Private Network", "Off", R.id.vpnTunnelSwitch, subId = R.id.vpnTunnelSummary)
             row(R.id.aiAssistant, R.drawable.ic_ai, "#A894FF", "AI support assistant", "AI button in the full-screen player: fix channels, find shows", R.id.aiAssistantSwitch)
+            row(R.id.remoteHelp, R.drawable.ic_remote_help, "#3DD68C", "Get remote help", "Network24 support sees your screen and sets up the app for you", null)
+            row(R.id.easyMode, R.drawable.ic_home, "#F5B841", "Easy Mode", "One simple screen with big buttons: your channels and a help button", R.id.easyModeSwitch)
         }
         group("About") {
             row(R.id.aboutDeviceInfo, R.drawable.ic_info, "#9BA1AD", "About this device", "App, device and system details", null)

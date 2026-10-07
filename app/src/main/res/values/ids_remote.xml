@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="remoteHelp" type="id" />
+    <item name="easyMode" type="id" />
+    <item name="easyModeSwitch" type="id" />
+</resources>
