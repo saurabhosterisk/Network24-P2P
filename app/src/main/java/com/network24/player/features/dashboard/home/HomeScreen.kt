@@ -518,16 +518,20 @@ class HomeScreen(
     // ------------------------------------------------------------------------------------------------ data
     fun load() {
         act.lifecycleScope.launch {
-            val locked = ParentalLock.activeLockedIds(act)
+            val locked = hiddenCategories()
             val recent = withContext(Dispatchers.IO) {
                 val ids = runCatching { LiveHistoryRepository(act).getRecentlyWatched().mapNotNull { it.stream_id } }.getOrDefault(emptyList())
                 val by = db.channelDao().getByStreamIds(ids).associateBy { it.streamId }
-                ids.mapNotNull { by[it] }.take(MAX_ROW)
+                ids.mapNotNull { by[it] }.filter { it.categoryId == null || it.categoryId !in locked }.take(MAX_ROW)
             }
             val favs = withContext(Dispatchers.IO) {
                 val ids = db.favoritesDao().getByType(FavoriteItemType.LIVE_CHANNEL).mapNotNull { it.itemId.toIntOrNull() }
                 val by = db.channelDao().getByStreamIds(ids).associateBy { it.streamId }
                 ids.mapNotNull { by[it] }.filter { it.categoryId == null || it.categoryId !in locked }.take(MAX_ROW)
+            }
+            // the billboard was on a channel that is hidden now (category locked / adult): it is taken off
+            if (heroChannel?.categoryId?.let { it in locked } == true) {
+                player?.stop(); playingId = -1; video.alpha = 0f; heroChannel = null
             }
             val newest = recent.firstOrNull()?.streamId ?: -1
             val watchedSomethingNew = newest != -1 && newest != recentFirst && recentFirst != -1
@@ -548,6 +552,19 @@ class HomeScreen(
             loadTrending(locked)
             planCategories(recent, locked)
         }
+    }
+
+    /**
+     * Categories the home never shows or plays (the TV is shared at home): the ones under the parental lock - also
+     * while it is opened with the PIN - and every adult category (ADULT / XXX / 18+ in its name).
+     */
+    private suspend fun hiddenCategories(): Set<String> {
+        val locked = if (ParentalLock.isEnabled(act)) ParentalLock.lockedIds(act) else emptySet()
+        val adult = Regex("ADULT|XXX|18\\+", RegexOption.IGNORE_CASE)
+        val adultIds = withContext(Dispatchers.IO) {
+            db.categoryDao().getByType(com.network24.player.core.database.entity.CategoryType.LIVE).filter { adult.containsMatchIn(it.name) }.map { it.categoryId }
+        }
+        return locked + adultIds
     }
 
     private var focusedOnce = false

@@ -91,7 +91,14 @@ class RecentlyWatchedActivity : BaseActivity() {
                     .map { it.itemId }
                     .toSet()
 
-                recentChannels.mapNotNull { channel ->
+                // the TV is shared at home: channels of locked categories (also while opened with the PIN) and of
+                // adult categories are not listed here (they would play without the PIN)
+                val adult = Regex("ADULT|XXX|18\\+", RegexOption.IGNORE_CASE)
+                val hidden = (if (com.network24.player.core.parental.ParentalLock.isEnabled(this@RecentlyWatchedActivity))
+                    com.network24.player.core.parental.ParentalLock.lockedIds(this@RecentlyWatchedActivity) else emptySet()) +
+                    categoryNames.filterValues { adult.containsMatchIn(it) }.keys
+
+                recentChannels.filter { it.category_id == null || it.category_id !in hidden }.mapNotNull { channel ->
                     val streamId = channel.stream_id ?: return@mapNotNull null
                     MasterChannelSearchResult(
                         streamId = streamId,

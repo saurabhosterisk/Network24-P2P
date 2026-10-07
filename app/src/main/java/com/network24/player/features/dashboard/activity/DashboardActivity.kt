@@ -93,7 +93,7 @@ class DashboardActivity : BaseActivity() {
             "Live TV" to { open(LiveCategoryActivity::class.java) },
             "Movies" to { openCinemaPro3() },
             "Sports" to { open(com.network24.player.features.discover.EventsActivity::class.java) },
-            "Guide" to { open(LiveCategoryActivity::class.java) { putExtra("epg_mode", true) } },
+            "TV Guide" to { open(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { open(com.network24.player.features.catchup.CatchupActivity::class.java) },
         )
         home = com.network24.player.features.dashboard.home.HomeScreen(this, openMenu = { openRightDrawer(binding.drawerLayout) }, renew = { showRenewPaymentQr() },
@@ -240,7 +240,7 @@ class DashboardActivity : BaseActivity() {
         binding.cardNotification.setOnClickListener { openCinemaPro3() }
         binding.cardSupport.setOnClickListener { startActivity(Intent(this, LiveSupportActivity::class.java)) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
-        binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, LiveCategoryActivity::class.java).apply { putExtra("epg_mode", true) }) }
+        binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.guide.TvGuideActivity::class.java)) }
         binding.cardEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)) }
         binding.cardCatchup.setOnClickListener { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)) }
         binding.cardTrending.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)) }

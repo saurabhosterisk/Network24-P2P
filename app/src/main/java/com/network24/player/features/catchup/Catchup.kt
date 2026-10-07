@@ -223,7 +223,7 @@ class CatchupActivity : BaseActivity() {
             "Live TV" to { go(com.network24.player.features.live.activity.LiveCategoryActivity::class.java) },
             "Movies" to { CinemaPro.open(this@CatchupActivity) },
             "Sports" to { go(com.network24.player.features.discover.EventsActivity::class.java) },
-            "Guide" to { go(com.network24.player.features.live.activity.LiveCategoryActivity::class.java) { putExtra("epg_mode", true) } },
+            "TV Guide" to { go(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { showOverview() },
         )
         val tabRow = LinearLayout(this@CatchupActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
