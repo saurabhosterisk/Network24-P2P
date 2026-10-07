@@ -30,6 +30,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         super.onCreate()
         // Older than Android 7.0: only the "device not supported" screen runs.
         if (UnsupportedDeviceGate.isUnsupported) return
+        // https to Main (or http on TVs / networks where https does not work)
+        com.network24.player.core.net.ServerRoute.init(this)
         // Settings > Auto Refresh (channels + TV guide on a schedule)
         AutoRefreshWorker.schedule(this)
         // Events & Scores > My teams: alert 5 minutes before a followed team's game

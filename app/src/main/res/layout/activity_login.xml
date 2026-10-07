@@ -85,13 +85,20 @@
 
             <TextView
                 android:id="@+id/tvTagline"
-                android:layout_width="340dp"
+                android:layout_width="360dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:lineSpacingMultiplier="1.2"
-                android:text="Live TV, sports, movies and catch-up - on every screen in your home."
-                android:textColor="#B8BDC7"
-                android:textSize="16sp" />
+                android:layout_marginTop="20dp"
+                android:includeFontPadding="false"
+                android:lineSpacingMultiplier="1.1"
+                android:text="The future of IPTV,&#10;driven by AI."
+                android:textColor="#F2F3F5"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <!-- three promises - all real features of the app (AI auto-fix, smart search, AI assistant / remote help) -->
+            <TextView style="@style/N24LoginLine" android:layout_marginTop="16dp" android:text="✦  Channels that fix themselves." />
+            <TextView style="@style/N24LoginLine" android:text="✦  Search that understands you." />
+            <TextView style="@style/N24LoginLine" android:text="✦  Help before you even ask." />
 
             <!-- the TV code card (TvCodePanel) is added here in code -->
         </LinearLayout>

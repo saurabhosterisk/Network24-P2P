@@ -28,7 +28,6 @@ import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.entity.CategoryType
 import com.network24.player.core.database.entity.ChannelEntity
 import com.network24.player.core.parental.ParentalLock
-import com.network24.player.features.live.activity.ChannelListActivity
 import com.network24.player.features.player.state.PlayerState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -155,8 +154,8 @@ object EventChannels {
                 return@launch
             }
             PlayerState.currentPosition = 0
-            a.startActivity(Intent(a, ChannelListActivity::class.java).putExtra("category_name", title)
-                .putExtra(ChannelListActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray()))
+            a.startActivity(Intent(a, com.network24.player.features.livetv.LiveTvActivity::class.java).putExtra("category_name", title)
+                .putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray()))
         }
     }
 }

@@ -108,6 +108,15 @@ class ProgramInfoDrawer(
             val ch = shownChannel ?: return@setOnClickListener
             val now = shownNow?.title?.trim()?.takeIf { it.isNotEmpty() }
             val text = "I'm watching ${ch.name?.trim()}" + (now?.let { " - $it" } ?: "") + " on Network24. Watch anywhere: https://play.web24.live"
+            // a TV has no apps to share to (Fire TV shows an empty chooser): show a QR the viewer scans with the phone
+            val tv = activity.packageManager.hasSystemFeature("android.software.leanback") ||
+                (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            if (tv) {
+                com.network24.player.core.remote.RemoteUi.popup(activity, "Share ${ch.name?.trim().orEmpty()}",
+                    "Scan the code with your phone to open Network24 on the web.", listOf("Done" to {}),
+                    chip = "Share", logo = ch.icon, note = now?.let { "On now: $it" }, qr = "https://play.web24.live")
+                return@setOnClickListener
+            }
             runCatching { activity.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), "Share")) }
                 .onFailure { toast("Sharing is not available on this device.") }
         }

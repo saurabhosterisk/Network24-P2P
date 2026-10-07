@@ -28,8 +28,9 @@ import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 
 /**
- * Network24 needs Android 7.0 (API 24) - the in-app VPN (WireGuard) does
- * not run below it. minSdk is 21 only so older devices can install the app
+ * Network24 needs Android 8.0 (API 26) - owner decision 2026-10-07: older TVs (e.g. Fire TV Stick 4K 1st gen and
+ * Stick 2nd gen on Fire OS 6 = Android 7.1) stay on N24 Dark Edition. (Technically the app ran from API 24; the in-app
+ * VPN (WireGuard) does not run below that.) minSdk is 21 only so older devices can install the app
  * and be told plainly, instead of Android's bare "App not installed". On
  * those devices the app shows this screen and nothing else runs; it points
  * them to N24 Dark Edition, the older app that still supports them, and can
@@ -37,7 +38,7 @@ import javax.net.ssl.TrustManagerFactory
  */
 object UnsupportedDeviceGate {
 
-    const val MIN_SUPPORTED_SDK = 24
+    const val MIN_SUPPORTED_SDK = 26
 
     private const val DARK_EDITION_URL = "https://network24.biz/app/N24_Dark_Edition.apk"
     private const val DARK_EDITION_FILE = "N24_Dark_Edition.apk"
@@ -53,7 +54,7 @@ object UnsupportedDeviceGate {
         activity.setContentView(R.layout.activity_unsupported_device)
         activity.findViewById<TextView>(R.id.unsupportedDetail).text =
             "This device runs Android ${Build.VERSION.RELEASE}. " +
-                "The new Network24 app needs Android 7.0 or newer."
+                "The new Network24 app needs Android 8.0 or newer."
         activity.findViewById<View>(R.id.unsupportedChip).background.mutate().setTint(
             // ContextCompat: this screen is exactly where API < 23 runs.
             ContextCompat.getColor(activity, R.color.primary).let {

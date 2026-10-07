@@ -49,10 +49,18 @@ object RemoteUi {
      * [chipColor]) and channel [logo], a big title, the text, and buttons - the first one is the main (white) one.
      */
     fun popup(a: Activity, title: String, body: String, buttons: List<Pair<String, () -> Unit>>, onCancel: (() -> Unit)? = null,
-              chip: String? = null, chipColor: Int = accent, logo: String? = null, note: String? = null) = dialog(a, title, body, buttons, onCancel, chip, chipColor, logo, note)
+              chip: String? = null, chipColor: Int = accent, logo: String? = null, note: String? = null, qr: String? = null) =
+        dialog(a, title, body, buttons, onCancel, chip, chipColor, logo, note, qr)
+
+    private fun qrBitmap(url: String): android.graphics.Bitmap? = runCatching {
+        val m = com.google.zxing.MultiFormatWriter().encode(url, com.google.zxing.BarcodeFormat.QR_CODE, 300, 300)
+        android.graphics.Bitmap.createBitmap(m.width, m.height, android.graphics.Bitmap.Config.RGB_565).apply {
+            for (x in 0 until m.width) for (y in 0 until m.height) setPixel(x, y, if (m[x, y]) Color.BLACK else Color.WHITE)
+        }
+    }.getOrNull()
 
     private fun dialog(a: Activity, title: String, body: String, buttons: List<Pair<String, () -> Unit>>, onCancel: (() -> Unit)? = null,
-                       chip: String? = null, chipColor: Int = accent, logo: String? = null, note: String? = null) {
+                       chip: String? = null, chipColor: Int = accent, logo: String? = null, note: String? = null, qr: String? = null) {
         if (a.isFinishing || a.isDestroyed) return
         val k = d(a)
         val dlg = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
@@ -81,6 +89,12 @@ object RemoteUi {
         card.addView(text(a, title, 24f, textMain, 800, 3))
         card.addView(text(a, body, 16f, textMain, 600, 3).apply { setPadding(0, (10 * k).toInt(), 0, 0); alpha = 0.92f })
         card.addView(text(a, note ?: "", 14f, textSub, 500, 2).apply { setPadding(0, (6 * k).toInt(), 0, 0); visibility = if (note.isNullOrBlank()) View.GONE else View.VISIBLE })
+        qr?.let(::qrBitmap)?.let { bmp ->
+            card.addView(android.widget.ImageView(a).apply {
+                setImageBitmap(bmp); val p = (8 * k).toInt(); setPadding(p, p, p, p)
+                background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = 12 * k }
+            }, LinearLayout.LayoutParams((168 * k).toInt(), (168 * k).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = (18 * k).toInt() })
+        }
         card.addView(View(a), LinearLayout.LayoutParams(1, (22 * k).toInt()))
         val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; clipChildren = false; clipToPadding = false }
         var first: View? = null

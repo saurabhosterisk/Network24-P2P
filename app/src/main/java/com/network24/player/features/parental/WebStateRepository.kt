@@ -21,7 +21,7 @@ import retrofit2.Response
 class WebStateRepository(context: Context) {
 
     companion object {
-        private const val BASE_URL = PreferenceManager.SERVER_URL + "/"
+        private val BASE_URL get() = PreferenceManager.SERVER_URL + "/"
         private const val FALLBACK_ERROR = "Network24 could not be reached. Please check your connection and try again."
         private const val SYNC_EVERY_MS = 30_000L
 

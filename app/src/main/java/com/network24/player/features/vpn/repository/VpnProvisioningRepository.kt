@@ -26,7 +26,7 @@ class VpnProvisioningRepository(private val prefs: PreferenceManager) {
         // its DB and vpn_api.php runs there directly. Uses the same host as
         // login/streams (app.web24.live), not the 185.134.22.150 address
         // that some ISPs throttle.
-        private const val VPN_API_BASE_URL = PreferenceManager.SERVER_URL + "/"
+        private val VPN_API_BASE_URL get() = PreferenceManager.SERVER_URL + "/"
 
         // Backup route when a customer's ISP blocks Main: network24.biz
         // (Hostinger, different network) forwards the same request to Main.

@@ -32,7 +32,7 @@ class SupportRepository(private val prefs: PreferenceManager) {
 
     companion object {
         // Same host as login/streams (app.web24.live), like vpn_api.php.
-        private const val SUPPORT_API_BASE_URL = PreferenceManager.SERVER_URL + "/"
+        private val SUPPORT_API_BASE_URL get() = PreferenceManager.SERVER_URL + "/"
 
         // Main accepts request bodies up to 3 MB; this keeps pictures well
         // below that while staying readable (screenshots of error screens).

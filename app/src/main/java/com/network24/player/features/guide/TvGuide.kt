@@ -37,6 +37,7 @@ import com.network24.player.core.preferences.PreferenceManager
 import com.network24.player.features.catchup.CatchupActivity
 import com.network24.player.features.catchup.CatchupPlayerActivity
 import com.network24.player.features.dashboard.home.HomeFont
+import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.features.discover.ChannelLauncher
 import com.network24.player.features.discover.CinemaPro
 import com.network24.player.features.discover.Fmt
@@ -157,6 +158,7 @@ class TvGuideActivity : BaseActivity() {
         setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
         background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
         focusable(this, 21f, 1.08f)
+        com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
     private val prefix = Regex("^[A-Z]{2,3}\\s*\\|\\s*")
@@ -182,7 +184,7 @@ class TvGuideActivity : BaseActivity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(48), dp(24), dp(48), dp(12)); clipChildren = false; clipToPadding = false }
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
-        val menu = iconButton(R.drawable.ic_more_vert, "Menu") {}
+        val menu = iconButton(R.drawable.ic_more_vert, "More") {}
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2))
         page.addView(hero(), LinearLayout.LayoutParams(-1, (screenH * 0.2f).toInt()).apply { topMargin = dp(8) })
 
@@ -249,23 +251,24 @@ class TvGuideActivity : BaseActivity() {
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "TV Guide"
             val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(11), dp(9), dp(11), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
+                setPadding(dp(9), dp(9), dp(9), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
-            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
+            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
         addView(HorizontalScrollView(this@TvGuideActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@TvGuideActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@TvGuideActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_h_account, "Account") {
             com.network24.player.features.account.AccountCenter.show(this@TvGuideActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 
@@ -594,6 +597,7 @@ class TvGuideActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         val items = mutableListOf<Pair<String, () -> Unit>>()
         items += "Watch ${cleanName(b.ch.name)} live" to { watchLive(b.ch) }
+        items += "Watch in MultiView" to { multiView(b.ch) }
         if (b.p != null && b.start < now && catchupOk(b.ch, b.start)) items += "Watch from the start" to { watchCatchup(b) }
         if (b.p != null && b.start > now) items += (if (Reminders.has(this, b.ch.streamId, b.start)) "Remove reminder" else "Remind me") to { toggleReminder(b) }
         items += (if (b.ch.streamId in favIds) "Remove from Favorites" else "Add to Favorites") to { toggleFavorite(b.ch) }
@@ -602,6 +606,14 @@ class TvGuideActivity : BaseActivity() {
     }
 
     private fun watchLive(ch: ChannelEntity) = ChannelLauncher.play(this, channels.ifEmpty { listOf(ch) }, ch)
+
+    private fun multiView(ch: ChannelEntity) {
+        val list = channels.ifEmpty { listOf(ch) }
+        com.network24.player.features.player.state.PlayerState.channels.clear()
+        com.network24.player.features.player.state.PlayerState.channels.addAll(list.map { it.toLiveChannel() })
+        com.network24.player.features.player.state.PlayerState.currentPosition = list.indexOfFirst { it.streamId == ch.streamId }.coerceAtLeast(0)
+        startActivity(Intent(this, com.network24.player.features.player.multiview.MultiViewActivity::class.java))
+    }
 
     private fun watchCatchup(b: Block) {
         val p = b.p ?: return

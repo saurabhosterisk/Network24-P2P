@@ -354,7 +354,7 @@ class LiveCategoryActivity : BaseActivity() {
                 putExtra("category_name", category.category_name)
             })
         } else {
-            startActivity(Intent(this, ChannelListActivity::class.java).apply {
+            startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java).apply {
                 putExtra("category_id", category.category_id)
                 putExtra("category_name", category.category_name)
             })

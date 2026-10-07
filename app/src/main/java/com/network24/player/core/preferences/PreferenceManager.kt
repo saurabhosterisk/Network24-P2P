@@ -19,7 +19,14 @@ class PreferenceManager(context: Context) {
         // Main server. app.web24.live -> 185.134.22.131; op.web24.live ->
         // 185.134.22.150 is the old name (see getServer()).
         const val SERVER_HOST = "app.web24.live"
-        const val SERVER_URL = "http://$SERVER_HOST:8080"
+
+        // https since build 89 (Main and every load balancer have the *.web24.live certificate; Main sends https
+        // requests on to https://sN.web24.live:8443). A TV where https does not work falls back to plain http on its
+        // own (ServerRoute.check at start-up, result remembered).
+        const val HTTPS_URL = "https://$SERVER_HOST"
+        const val HTTP_URL = "http://$SERVER_HOST:8080"
+        @Volatile @JvmStatic var useHttps = true
+        val SERVER_URL: String get() = if (useHttps) HTTPS_URL else HTTP_URL
         private const val LEGACY_SERVER_HOST = "op.web24.live"
 
         private const val KEY_SERVER = "server"
@@ -81,10 +88,10 @@ class PreferenceManager(context: Context) {
     // re-login.
     fun getServer(): String {
         val saved = prefs.getString(KEY_SERVER, "") ?: ""
-        if (!saved.contains(LEGACY_SERVER_HOST)) return saved
-        val migrated = saved.replace(LEGACY_SERVER_HOST, SERVER_HOST)
-        prefs.edit().putString(KEY_SERVER, migrated).apply()
-        return migrated
+        // our own server (old or new name, http or https) always follows the current route (https, or http if this
+        // TV cannot do https)
+        if (saved.contains(SERVER_HOST) || saved.contains(LEGACY_SERVER_HOST)) return SERVER_URL
+        return saved
     }
     fun getUsername(): String = prefs.getString(KEY_USERNAME, "") ?: ""
     fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""

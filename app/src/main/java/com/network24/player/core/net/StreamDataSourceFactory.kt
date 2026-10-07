@@ -3,7 +3,10 @@ package com.network24.player.core.net
 import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
@@ -24,18 +27,31 @@ import kotlin.math.min
 object StreamDataSourceFactory {
     const val USER_AGENT = "N24PlayerPlayer"
 
+    /**
+     * One OkHttp client for every stream request (since build 89 streams are https): it keeps connections to the
+     * load balancer open and reuses them, and resumes TLS sessions, so a new HLS segment does not pay a fresh
+     * TCP + TLS handshake (~0.5 s from far away) each time. Android's default HttpURLConnection source did not
+     * reuse them well on Fire TV, which showed as buffering after the switch to https.
+     */
+    private val client: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            // Fire OS can take longer to resolve/connect to IPTV hosts than newer phones, so this stays well
+            // above a normal connect time - but short, because IptvLoadErrorHandlingPolicy retries a failed
+            // connection up to 6 more times before the player reports an error (30 s meant ~3.5 minutes of
+            // silent spinner on a route that drops packets).
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            // https -> http and back (a load balancer without https still plays)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
     fun createDataSourceFactory(): DataSource.Factory {
-        val httpFactory = DefaultHttpDataSource.Factory()
+        val httpFactory = OkHttpDataSource.Factory(client)
             .setUserAgent(USER_AGENT)
-            // Fire OS 6 can take longer to resolve/connect to IPTV hosts than
-            // newer phones, so this stays well above a normal connect time.
-            // It was 30s, but IptvLoadErrorHandlingPolicy retries a failed
-            // connection up to 6 more times before the player reports an
-            // error, so on a route that drops packets a 30s timeout meant
-            // ~3.5 minutes of silent spinner before any recovery could start.
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(15_000)
-            .setAllowCrossProtocolRedirects(true)
 
         return DataSource.Factory {
             CountingDataSource(httpFactory.createDataSource())

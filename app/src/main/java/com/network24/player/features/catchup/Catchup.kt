@@ -149,6 +149,7 @@ class CatchupActivity : BaseActivity() {
         setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
         background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
         focusable(this, 21f, 1.08f)
+        com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
     private fun button(label: String, icon: Int?, primary: Boolean, onClick: () -> Unit) = LinearLayout(this).apply {
@@ -189,7 +190,7 @@ class CatchupActivity : BaseActivity() {
         scroll.addView(page)
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
 
-        val menu = iconButton(R.drawable.ic_more_vert, "Menu") {}
+        val menu = iconButton(R.drawable.ic_more_vert, "More") {}
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2).apply { marginEnd = dp(48) })
         heroBox = hero()
         val heroArea = FrameLayout(this).apply { clipChildren = false; clipToPadding = false; minimumHeight = (screenH * 0.58f).toInt() - dp(24 + 42 + 36) }
@@ -233,25 +234,26 @@ class CatchupActivity : BaseActivity() {
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Catch-up"
             val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(11), dp(9), dp(11), dp(9))
+                setPadding(dp(9), dp(9), dp(9), dp(9))
                 background = if (here) shape(0x1FFFFFFF, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
             if (here) catchupTab = t
-            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
+            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
         addView(HorizontalScrollView(this@CatchupActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@CatchupActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@CatchupActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_h_account, "Account") {
             com.network24.player.features.account.AccountCenter.show(this@CatchupActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 
@@ -261,7 +263,7 @@ class CatchupActivity : BaseActivity() {
         val tagRow = LinearLayout(this@CatchupActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         tagRow.addView(text("CATCH-UP", 11f, Color.WHITE, 800).apply {
             letterSpacing = 0.12f; setPadding(dp(8), dp(4), dp(8), dp(4)); background = shape(Color.parseColor("#7C5CFF"), 4f)
-        })
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         heroChLogo = ImageView(this@CatchupActivity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
         tagRow.addView(heroChLogo, LinearLayout.LayoutParams(dp(44), dp(24)).apply { marginStart = dp(12) })
         heroTag = text("WATCH WHAT YOU MISSED", 12f, Color.parseColor("#D9F2F3F5"), 700).apply { letterSpacing = 0.12f; setPadding(dp(10), 0, 0, 0) }

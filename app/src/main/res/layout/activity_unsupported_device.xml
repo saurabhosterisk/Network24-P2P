@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Shown instead of the app on devices older than Android 7.0
+<!-- Shown instead of the app on devices older than Android 8.0
      (UnsupportedDeviceGate). Cannot be dismissed. Left: why; right: the way
      forward - the older N24 Dark Edition app still runs on these devices. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"

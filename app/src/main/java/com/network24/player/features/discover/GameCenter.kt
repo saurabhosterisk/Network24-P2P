@@ -24,7 +24,6 @@ import coil.load
 import com.network24.player.R
 import com.network24.player.core.api.Web24Api
 import com.network24.player.core.base.BaseActivity
-import com.network24.player.features.live.activity.ChannelListActivity
 import com.network24.player.features.player.state.PlayerState
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -59,9 +58,9 @@ object GameCenter {
                 return@launch
             }
             PlayerState.currentPosition = 0
-            a.startActivity(Intent(a, ChannelListActivity::class.java)
+            a.startActivity(Intent(a, com.network24.player.features.livetv.LiveTvActivity::class.java)
                 .putExtra("category_name", "${game.title} · ${game.league}")
-                .putExtra(ChannelListActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray()))
+                .putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray()))
         }
     }
 

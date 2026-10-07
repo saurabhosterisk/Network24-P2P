@@ -131,6 +131,7 @@ class SportsActivity : BaseActivity() {
         setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
         background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
         focusable(this, 21f, 1.08f)
+        com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
     private fun pill(label: String, primary: Boolean, onClick: () -> Unit) = text(label, 14f, if (primary) bg else textMain, 700).apply {
@@ -185,7 +186,7 @@ class SportsActivity : BaseActivity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(48), dp(24), dp(48), 0); clipChildren = false; clipToPadding = false }
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
-        val menu = iconButton(R.drawable.ic_more_vert, "Menu") {}
+        val menu = iconButton(R.drawable.ic_more_vert, "More") {}
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2))
 
         heroBox = FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
@@ -247,23 +248,24 @@ class SportsActivity : BaseActivity() {
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Sports"
             val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(11), dp(9), dp(11), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
+                setPadding(dp(9), dp(9), dp(9), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
-            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
+            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
         addView(HorizontalScrollView(this@SportsActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@SportsActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@SportsActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_h_account, "Account") {
             com.network24.player.features.account.AccountCenter.show(this@SportsActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 

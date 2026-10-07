@@ -107,7 +107,7 @@ class LoginActivity : BaseActivity() {
             isFocusable = true; isClickable = true
             setOnClickListener { com.network24.player.core.remote.HelpSession.request(this@LoginActivity) }
         }
-        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (16 * d).toInt() })
+        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (12 * d).toInt() })
     }
 
     override fun onPause() {

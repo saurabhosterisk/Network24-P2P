@@ -113,6 +113,9 @@ class LiveTvActivity : BaseActivity() {
     private val seen = HashMap<String, Now>()
     private var heroCh: ChannelEntity? = null
     private var lastChannelPos = 0
+    private val pickIds by lazy { intent.getIntArrayExtra(EXTRA_STREAM_IDS)?.toList() }
+    private val pickTitle by lazy { intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "Channels" } }
+    private var pickChannels: List<ChannelEntity> = emptyList()
 
     private lateinit var root: FrameLayout
     private lateinit var video: PlayerView
@@ -169,6 +172,7 @@ class LiveTvActivity : BaseActivity() {
         setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
         background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
         focusable(this, 21f, 1.08f)
+        com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
     private val prefix = Regex("^[A-Z]{2,3}\\s*\\|\\s*")
@@ -209,7 +213,7 @@ class LiveTvActivity : BaseActivity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(48), dp(24), dp(48), 0); clipChildren = false; clipToPadding = false }
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
-        val menu = iconButton(R.drawable.ic_more_vert, "Menu") {}
+        val menu = iconButton(R.drawable.ic_more_vert, "More") {}
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2))
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
@@ -283,23 +287,24 @@ class LiveTvActivity : BaseActivity() {
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Live TV"
             val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(11), dp(9), dp(11), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
+                setPadding(dp(9), dp(9), dp(9), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
-            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
+            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
         addView(HorizontalScrollView(this@LiveTvActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@LiveTvActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@LiveTvActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_h_account, "Account") {
             com.network24.player.features.account.AccountCenter.show(this@LiveTvActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 
@@ -355,7 +360,9 @@ class LiveTvActivity : BaseActivity() {
             val disabled = runCatching { CategorySettingsRepository(FirebaseFirestore.getInstance(), prefs).getDisabledCategoryIds(user) }.getOrDefault(emptySet())
             val favCats = runCatching { favRepo.getFavoriteItemIds("LIVE_CATEGORY") }.getOrDefault(emptySet())
             val locked = ParentalLock.activeLockedIds(this@LiveTvActivity)
-            val chans = db.channelDao().getAll().filter { it.categoryId !in disabled }
+            val raw = db.channelDao().getAll()
+            pickIds?.let { ids -> val byId = raw.associateBy { it.streamId }; pickChannels = ids.mapNotNull { byId[it] } }
+            val chans = raw.filter { it.categoryId !in disabled }
             val counts = chans.groupingBy { it.categoryId }.eachCount()
             val all = db.categoryDao().getByType(CategoryType.LIVE).sortedBy { it.position }
                 .filter { it.categoryId !in disabled && (counts[it.categoryId] ?: 0) > 0 }
@@ -367,9 +374,11 @@ class LiveTvActivity : BaseActivity() {
         }
         allChannels = ch; favChannelIds = favCh
         val favCount = ch.count { it.streamId in favCh && !ParentalLock.isLocked(this, it.categoryId) }
-        cats = (if (favCount > 0) listOf(Cat("fav", "Favorite channels", favCount, false, false)) else emptyList()) + c
+        cats = (if (pickIds != null) listOf(Cat("pick", pickTitle, pickChannels.size, false, false)) else emptyList()) +
+            (if (favCount > 0) listOf(Cat("fav", "Favorite channels", favCount, false, false)) else emptyList()) + c
         railAdapter.notifyDataSetChanged()
-        val start = catKey.takeIf { keepCat && k(it) >= 0 } ?: cats.firstOrNull { !it.locked }?.id ?: return
+        val asked = (if (pickIds != null) "pick" else intent.getStringExtra(EXTRA_CATEGORY_ID))?.takeIf { k(it) >= 0 }
+        val start = catKey.takeIf { keepCat && k(it) >= 0 } ?: asked ?: cats.firstOrNull { !it.locked }?.id ?: return
         selectCategory(start, focusList = !keepCat)
     }
 
@@ -380,14 +389,15 @@ class LiveTvActivity : BaseActivity() {
         val changed = catKey != id
         catKey = id
         repaintRail()
-        listTitle.text = if (id == "fav") "★  Favorite channels" else niceName(cat.name)
+        listTitle.text = when (id) { "fav" -> "★  Favorite channels"; "pick" -> cat.name; else -> niceName(cat.name) }
         listCount.text = "${cat.count} channels"
         if (cat.locked) {
             channels = emptyList(); guide = emptyMap(); listAdapter.notifyDataSetChanged()
             status.visibility = View.VISIBLE; status.text = "🔒  This category is locked.\nSelect it and enter your PIN to open it."
             return
         }
-        val chans = (if (id == "fav") allChannels.filter { it.streamId in favChannelIds && !ParentalLock.isLocked(this, it.categoryId) } else allChannels.filter { it.categoryId == id })
+        val chans = if (id == "pick") pickChannels.filterNot { ParentalLock.isLocked(this, it.categoryId) }
+        else (if (id == "fav") allChannels.filter { it.streamId in favChannelIds && !ParentalLock.isLocked(this, it.categoryId) } else allChannels.filter { it.categoryId == id })
             .sortedWith(compareBy({ it.num ?: Int.MAX_VALUE }, { it.name }))
         if (!changed && chans.size == channels.size) { if (focusList) focusChannel(lastChannelPos); return }
         channels = chans; guide = emptyMap(); lastChannelPos = 0
@@ -838,5 +848,13 @@ class LiveTvActivity : BaseActivity() {
 
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); player?.release(); player = null; super.onDestroy() }
 
-    private companion object { const val IDLE_MS = 20_000L; const val TICK = "tick" }
+    companion object {
+        private const val IDLE_MS = 20_000L
+        private const val TICK = "tick"
+        /** Open on this category (Home "All …" rows). */
+        const val EXTRA_CATEGORY_ID = "category_id"
+        /** A list of channels (an event or game) shown first, under EXTRA_TITLE, in the given order. */
+        const val EXTRA_STREAM_IDS = "stream_ids"
+        const val EXTRA_TITLE = "category_name"
+    }
 }

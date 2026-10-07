@@ -254,23 +254,24 @@ class HomeScreen(
         tabs.forEachIndexed { i, (label, onClick) ->
             val home = i == 0
             val t = text(label, 14f, if (home) textMain else textSub, if (home) 700 else 600).apply {
-                setPadding(dp(11), dp(9), dp(11), dp(9))
+                setPadding(dp(9), dp(9), dp(9), dp(9))
                 background = if (home) shape(0x1FFFFFFF, 18f) else null
                 setOnClickListener { if (!home) onClick() }
             }
             focusable(t, 18f, 1.04f)
-            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
+            tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
         addView(HorizontalScrollView(act).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 1f)
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(act)
-        })
+        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") { support() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         // account: a round icon like its neighbours (keeps room for the tabs); opens the user info page
         chip = iconButton(R.drawable.ic_h_account, "Account") { openAccount() }
         addView(chip, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_more_vert, "Menu") { openMenu() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_settings, "Settings") { act.startActivity(android.content.Intent(act, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        addView(iconButton(R.drawable.ic_more_vert, "More") { openMenu() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }
 
     private fun iconButton(icon: Int, label: String, onClick: () -> Unit) = ImageView(act).apply {
@@ -278,6 +279,7 @@ class HomeScreen(
         background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
         layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
         focusable(this, 21f, 1.08f)
+        com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
     private fun hero() = LinearLayout(act).apply {
@@ -648,12 +650,14 @@ class HomeScreen(
             repeat(n) {
                 val c = catPlan.getOrNull(catBuilt) ?: return@repeat
                 catBuilt++
-                val list = withContext(Dispatchers.IO) { db.channelDao().getByCategory(c.categoryId) }.take(15)
+                // the row shows 15 cards, but the player gets the whole category so channel up/down goes through all of it
+                val all = withContext(Dispatchers.IO) { db.channelDao().getByCategory(c.categoryId) }
+                val list = all.take(15)
                 if (list.isEmpty()) return@repeat
                 val now = nowPlaying(list)
-                addRow("cat:" + c.categoryId, niceName(c.name), "", list.map { channelCard(it, now[it.epgChannelId], list) },
+                addRow("cat:" + c.categoryId, niceName(c.name), "", list.map { channelCard(it, now[it.epgChannelId], all) },
                     "All ${c.name.lowercase()}" to {
-                        act.startActivity(Intent(act, com.network24.player.features.live.activity.ChannelListActivity::class.java)
+                        act.startActivity(Intent(act, com.network24.player.features.livetv.LiveTvActivity::class.java)
                             .putExtra("category_id", c.categoryId).putExtra("category_name", c.name))
                     })
             }

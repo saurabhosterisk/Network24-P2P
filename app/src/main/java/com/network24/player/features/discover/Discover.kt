@@ -218,9 +218,9 @@ class EventsActivity : FeatureListActivity() {
             // channel really has the game before going full screen.
             com.network24.player.features.player.state.PlayerState.currentPosition = 0
             startActivity(
-                Intent(this@EventsActivity, com.network24.player.features.live.activity.ChannelListActivity::class.java)
+                Intent(this@EventsActivity, com.network24.player.features.livetv.LiveTvActivity::class.java)
                     .putExtra("category_name", "${game.title} · ${game.league}")
-                    .putExtra(com.network24.player.features.live.activity.ChannelListActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray())
+                    .putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_STREAM_IDS, chans.map { it.streamId }.toIntArray())
             )
         }
     }
