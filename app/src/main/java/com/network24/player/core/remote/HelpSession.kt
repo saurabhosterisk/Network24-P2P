@@ -60,7 +60,7 @@ object HelpSession {
             "When support joins, they can see the Network24 app on your TV and press its remote buttons for you. " +
                 "You can stop it at any time.", "Start help", "Cancel") {
             scope.launch {
-                runCatching { Web24Api(act.applicationContext).support("rm_help", "device_id" to RemoteAgent.deviceId(act), "op" to "request") }
+                runCatching { RemoteAgent.ensureKnown(); RemoteAgent.call("rm_help", "device_id" to RemoteAgent.deviceId(act), "op" to "request") }
                     .onSuccess { j -> state = "waiting"; code = j.optString("code"); refreshBars(); RemoteAgent.poke() }
                     .onFailure { RemoteUi.message(act, it.message ?: "Support could not be reached. Please try again.") }
             }
@@ -76,7 +76,7 @@ object HelpSession {
     fun stop(c: Context) {
         val ctx = c.applicationContext
         end()
-        scope.launch { runCatching { Web24Api(ctx).support("rm_help", "device_id" to RemoteAgent.deviceId(ctx), "op" to "end") } }
+        scope.launch { runCatching { RemoteAgent.call("rm_help", "device_id" to RemoteAgent.deviceId(ctx), "op" to "end") } }
     }
 
     // ------------------------------------------------------------------ server changes (command file)
@@ -96,10 +96,10 @@ object HelpSession {
                     "If you allow it, support can see the Network24 app on your TV and press its remote buttons for you. You can stop it at any time.",
                     "Allow", "No, thanks", onNo = {
                         asked = false; state = ""
-                        scope.launch { runCatching { Web24Api(c.applicationContext).support("rm_help", "device_id" to RemoteAgent.deviceId(c), "op" to "deny") } }
+                        scope.launch { runCatching { RemoteAgent.call("rm_help", "device_id" to RemoteAgent.deviceId(c), "op" to "deny") } }
                     }) {
                     scope.launch {
-                        runCatching { Web24Api(c.applicationContext).support("rm_help", "device_id" to RemoteAgent.deviceId(c), "op" to "allow") }
+                        runCatching { RemoteAgent.call("rm_help", "device_id" to RemoteAgent.deviceId(c), "op" to "allow") }
                         RemoteAgent.poke()
                     }
                 }
@@ -134,7 +134,7 @@ object HelpSession {
                         val st = RemoteAgent.quickState().toString()
                         sending += launch {
                             val b64 = withContext(Dispatchers.Default) { jpeg(bmp) }
-                            val r = runCatching { Web24Api(c).support("rm_shot", "device_id" to RemoteAgent.deviceId(c), "img" to b64, "state" to st) }.getOrNull()
+                            val r = runCatching { RemoteAgent.call("rm_shot", "device_id" to RemoteAgent.deviceId(c), "img" to b64, "state" to st) }.getOrNull()
                             if (r?.optBoolean("stop") == true) end()
                         }
                     }

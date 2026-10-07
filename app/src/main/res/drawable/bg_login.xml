@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Login: near-black with a violet glow top-left and a cyan glow bottom-right (the app's Future look) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="#08090C" /></shape></item>
+    <item><shape><gradient android:type="radial" android:centerX="0.12" android:centerY="0.05" android:gradientRadius="900dp"
+        android:startColor="#663A2A8C" android:centerColor="#1A1A1438" android:endColor="#0008090C" /></shape></item>
+    <item><shape><gradient android:type="radial" android:centerX="0.95" android:centerY="1.0" android:gradientRadius="700dp"
+        android:startColor="#3322D3EE" android:endColor="#0008090C" /></shape></item>
+</layer-list>

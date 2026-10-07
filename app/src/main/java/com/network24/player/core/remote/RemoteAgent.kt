@@ -118,11 +118,41 @@ object RemoteAgent {
 
     private fun loggedIn() = PreferenceManager(app).let { it.getUsername().isNotBlank() && it.getPassword().isNotBlank() }
 
+    /** Help asked on the sign-in screen (no account yet): the agent runs for it anyway, as a "guest" device. */
+    @Volatile var guest = false
+    private var lastUser = ""
+
+    /**
+     * A Remote Help call to Main: signed in = support_api with the account; on the sign-in screen = the same action as
+     * rm_guest_* (device id only; Main allows nothing but hello / help / pictures / key confirmations that way).
+     */
+    suspend fun call(action: String, vararg fields: Pair<String, String>): JSONObject {
+        if (loggedIn()) return Web24Api(app).support(action, *fields)
+        return withContext(Dispatchers.IO) {
+            val form = okhttp3.FormBody.Builder().add("action", action.replaceFirst("rm_", "rm_guest_"))
+            fields.forEach { form.add(it.first, it.second) }
+            val text = client.newCall(Request.Builder().url(PreferenceManager.SERVER_URL + "/support_api.php").post(form.build()).build()).execute().use { it.body?.string().orEmpty() }
+            val j = JSONObject(text)
+            if (!j.optBoolean("result")) throw Exception(j.optString("message", "Support could not be reached."))
+            j
+        }
+    }
+
+    /** Makes sure Main knows this device (before the first help request on the sign-in screen). */
+    suspend fun ensureKnown() {
+        if (!loggedIn()) guest = true
+        if (file == null) hello()
+        ensureLoop()
+    }
+
     private fun ensureLoop() {
-        if (loop?.isActive == true || !loggedIn()) return
+        if (loop?.isActive == true || !(loggedIn() || guest)) return
         loop = scope.launch {
             while (isActive) {
-                if (!loggedIn()) { delay(5000); continue }
+                if (!loggedIn() && !guest) { delay(5000); continue }
+                // signed in (or another account): tell Main at once
+                val user = PreferenceManager(app).getUsername()
+                if (user != lastUser) { lastUser = user; lastHello = 0L; if (user.isNotBlank()) guest = false }
                 // the first report waits for the real screen (not the logo screen the app opens on)
                 if (top?.let { isPassing(it) } == true) { delay(1000); continue }
                 if (file == null || System.currentTimeMillis() - lastHello > HELLO_EVERY_MS) hello()
@@ -146,7 +176,7 @@ object RemoteAgent {
 
     private suspend fun hello() {
         runCatching {
-            val j = Web24Api(app).support("rm_hello", "device_id" to deviceId(app), "model" to model(),
+            val j = call("rm_hello", "device_id" to deviceId(app), "model" to model(),
                 "app_ver" to "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", "state" to state().toString())
             lastHello = System.currentTimeMillis()
             val f = j.optString("file")
@@ -202,7 +232,7 @@ object RemoteAgent {
             p.edit().putInt("done_seq", done).apply()
         }
         if (ran) {
-            runCatching { Web24Api(app).support("rm_ack", "device_id" to deviceId(app), "upto" to done.toString(), "results" to results.toString(), "state" to state().toString()) }
+            runCatching { call("rm_ack", "device_id" to deviceId(app), "upto" to done.toString(), "results" to results.toString(), "state" to state().toString()) }
         }
     }
 

@@ -42,21 +42,29 @@ class TvCodePanel(private val act: AppCompatActivity, parent: ViewGroup, private
 
     init {
         val card = LinearLayout(act).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding((18 * d).toInt(), (14 * d).toInt(), (18 * d).toInt(), (14 * d).toInt())
-            background = GradientDrawable().apply { setColor(0x22FFFFFF); cornerRadius = 16 * d; setStroke((1 * d).toInt(), 0x33FFFFFF) }
+            orientation = LinearLayout.VERTICAL
+            setPadding((20 * d).toInt(), (18 * d).toInt(), (20 * d).toInt(), (18 * d).toInt())
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#E6211A3D"), Color.parseColor("#E614161B"))).apply {
+                cornerRadius = 22 * d; setStroke((1 * d).toInt().coerceAtLeast(1), 0x26FFFFFF)
+            }
         }
-        card.addView(text("No keyboard? Sign in with a code", 14f, Color.WHITE, 800))
-        val row = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, (10 * d).toInt(), 0, 0) }
-        qr = ImageView(act).apply { setBackgroundColor(Color.WHITE); setPadding((4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt(), (4 * d).toInt()) }
-        row.addView(qr, LinearLayout.LayoutParams((92 * d).toInt(), (92 * d).toInt()))
-        val words = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding((14 * d).toInt(), 0, 0, 0) }
-        codeView = text("······", 30f, Color.WHITE, 800).apply { letterSpacing = 0.12f }
+        card.addView(text("NO KEYBOARD?  SIGN IN WITH A CODE", 11f, Color.parseColor("#A894FF"), 800).apply { letterSpacing = 0.12f })
+        val row = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, (14 * d).toInt(), 0, 0) }
+        qr = ImageView(act).apply {
+            setPadding((5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt())
+            background = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = 10 * d }
+        }
+        row.addView(qr, LinearLayout.LayoutParams((96 * d).toInt(), (96 * d).toInt()))
+        val words = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding((16 * d).toInt(), 0, 0, 0) }
+        codeView = text("··· ···", 30f, Color.WHITE, 800).apply { letterSpacing = 0.1f; isSingleLine = true }
         words.addView(codeView)
-        words.addView(text("Call Network24 support and read this code,\nor scan the QR with your phone.", 12f, Color.parseColor("#C9CDD4"), 500).apply { setPadding(0, (6 * d).toInt(), 0, 0) })
-        row.addView(words)
+        words.addView(text("Call Network24 support and read them this code, or scan the QR with your phone.", 12.5f, Color.parseColor("#B8BDC7"), 500).apply {
+            setPadding(0, (8 * d).toInt(), 0, 0); maxLines = 3; setLineSpacing(0f, 1.15f)
+        })
+        row.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(row)
-        parent.addView(card, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (22 * d).toInt() })
+        // fixed width: the brand column is narrow and squeezed the code into two lines
+        parent.addView(card, LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (34 * d).toInt() })
     }
 
     private fun text(s: String, size: Float, color: Int, weight: Int) = TextView(act).apply {

@@ -51,6 +51,13 @@ class LoginActivity : BaseActivity() {
 
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // the app's own font (Manrope) on every text of the sign-in screen
+        fun font(v: android.view.View) {
+            if (v is android.widget.TextView) v.typeface = com.network24.player.features.dashboard.home.HomeFont.of(this, if (v.typeface?.isBold == true) 800 else 500)
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) font(v.getChildAt(i))
+        }
+        font(binding.root)
+        binding.btnLogin.text = "Sign in"
 
         repository = LoginRepository()
         prefs = PreferenceManager(this)
@@ -81,9 +88,27 @@ class LoginActivity : BaseActivity() {
             binding.edtUsername.setText(u); binding.edtPassword.setText(p); binding.chkRemember.isChecked = true
             login()
         }
+        addHelpButton()
     }
 
     private var tvCode: com.network24.player.core.remote.TvCodePanel? = null
+
+    /** Remote Help on the sign-in screen: support sees this screen and presses the remote (no account needed). */
+    private fun addHelpButton() {
+        val d = resources.displayMetrics.density
+        val b = android.widget.TextView(this).apply {
+            text = "🎧  Trouble signing in? Get remote help"
+            textSize = 15f
+            setTextColor(android.graphics.Color.parseColor("#F2F3F5"))
+            typeface = com.network24.player.features.dashboard.home.HomeFont.of(this@LoginActivity, 700)
+            gravity = android.view.Gravity.CENTER
+            setPadding((18 * d).toInt(), (11 * d).toInt(), (18 * d).toInt(), (11 * d).toInt())
+            setBackgroundResource(com.network24.player.R.drawable.bg_login_chip)
+            isFocusable = true; isClickable = true
+            setOnClickListener { com.network24.player.core.remote.HelpSession.request(this@LoginActivity) }
+        }
+        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (16 * d).toInt() })
+    }
 
     override fun onPause() {
         tvCode?.stop()
@@ -225,7 +250,7 @@ Body: $body
                 Toast.makeText(
                     this@LoginActivity,
                     if (vpnOn) "Unable to connect to server, Please try again."
-                    else "Unable to connect to server. If your internet provider blocks Network24, turn on VPN and tap Login again.",
+                    else "Unable to connect to server. If your internet provider blocks Network24, turn on VPN and press Sign in again.",
                     Toast.LENGTH_LONG
                 ).show()
                 if (!vpnOn) binding.loginVpnToggle.requestFocus()
@@ -334,7 +359,7 @@ Body: $body
         binding.loginVpnHint.text = when {
             vpnBusy -> "Connecting to VPN…"
             on -> "VPN connected. Tap Login."
-            else -> "Can't sign in? Turn on VPN, then tap Login."
+            else -> "Can't sign in? Turn on VPN, then press Sign in."
         }
     }
 
@@ -349,7 +374,7 @@ Body: $body
         } else {
 
             binding.loginLoadingLayout.visibility = View.GONE
-            binding.btnLogin.text = "LOGIN"
+            binding.btnLogin.text = "Sign in"
             binding.btnLogin.isEnabled = true
 
         }
