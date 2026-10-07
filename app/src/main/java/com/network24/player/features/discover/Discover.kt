@@ -105,10 +105,11 @@ class EventsActivity : FeatureListActivity() {
         }
         b.searchRow.visibility = View.GONE
         tabs()
+        intent.getStringExtra(EXTRA_TAB)?.let { tab = it; onTab() }
         load()
     }
 
-    companion object { const val EXTRA_GAME = "game_json" }
+    companion object { const val EXTRA_GAME = "game_json"; const val EXTRA_TAB = "tab" }
 
     // back from a team page: it may have followed or unfollowed the team
     override fun onRestart() {

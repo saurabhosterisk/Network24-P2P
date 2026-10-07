@@ -608,7 +608,7 @@ class HomeScreen(
         val yours = all.count { it.optBoolean("mine") }
         val sub = listOfNotNull(if (n > 0) "$n live now" else null, if (yours > 0) "$yours with your teams" else null).joinToString("  ·  ").ifBlank { "today and tomorrow" }
         addRow("sports", "Live sports", sub, all.map { gameCard(it) },
-            "Games, results, teams" to { openAct(com.network24.player.features.discover.EventsActivity::class.java) })
+            "Games, results, teams" to { openAct(com.network24.player.features.sports.SportsActivity::class.java) })
     }
 
     // ------------------------------------------------------------------------------------------------ category rows

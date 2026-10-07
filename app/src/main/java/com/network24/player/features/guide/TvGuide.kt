@@ -117,6 +117,9 @@ class TvGuideActivity : BaseActivity() {
     private val rowH by lazy { dp(58) }
     private fun xOf(t: Long) = ((t - windowStart).toDouble() / span * laneW).toInt()
 
+    /** This page's tab in the top bar: UP into the bar lands there. */
+    private var hereTab: android.view.View? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val now = System.currentTimeMillis()
@@ -210,7 +213,7 @@ class TvGuideActivity : BaseActivity() {
         status = text("Loading the guide…", 15f, textSub)
         gridBox.addView(status, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         page.addView(gridBox, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(2) })
-        page.addView(text("OK  watch · remind      Hold OK  more options      ◀ ▶ at the edge  earlier · later", 12f, textSub, 600).apply {
+        if (packageManager.hasSystemFeature("android.software.leanback")) page.addView(text("OK  watch · remind      Hold OK  more options      ◀ ▶ at the edge  earlier · later", 12f, textSub, 600).apply {
             gravity = Gravity.CENTER; setPadding(0, dp(6), 0, 0)
         }, LinearLayout.LayoutParams(-1, -2))
         setContentView(setupGlobalRightDrawer(root, menu))
@@ -236,9 +239,9 @@ class TvGuideActivity : BaseActivity() {
         fun go(cls: Class<*>, extra: (Intent.() -> Unit)? = null) { startActivity(Intent(this@TvGuideActivity, cls).apply { extra?.invoke(this) }); finish() }
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
-            "Live TV" to { go(com.network24.player.features.live.activity.LiveCategoryActivity::class.java) },
+            "Live TV" to { go(com.network24.player.features.livetv.LiveTvActivity::class.java) },
             "Movies" to { CinemaPro.open(this@TvGuideActivity) },
-            "Sports" to { go(com.network24.player.features.discover.EventsActivity::class.java) },
+            "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { rv.post { focusAt(0, System.currentTimeMillis()) } },
             "Catch-up" to { go(CatchupActivity::class.java) },
         )
@@ -250,6 +253,7 @@ class TvGuideActivity : BaseActivity() {
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
+            if (here) hereTab = t
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
         }
         addView(HorizontalScrollView(this@TvGuideActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -329,6 +333,7 @@ class TvGuideActivity : BaseActivity() {
             val t = chipRow.getChildAt(i) as TextView
             val on = t.tag == "chip:$catKey"
             t.background = shape(if (on) Color.WHITE else 0x1AFFFFFF, 18f)
+            focusable(t, 18f, 1.05f, if (on) accent else Color.WHITE)
             t.setTextColor(if (on) bg else textMain)
         }
     }
@@ -492,6 +497,7 @@ class TvGuideActivity : BaseActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (com.network24.player.core.ui.TopBarFocus.up(this, hereTab, event)) return true
         val focus = currentFocus
         val b = focus?.tag as? Block
         if (event.action == KeyEvent.ACTION_DOWN && b != null) {
@@ -547,7 +553,7 @@ class TvGuideActivity : BaseActivity() {
         val mins = ((b.end - b.start) / 60_000).toInt()
         heroMeta.text = when {
             p == null -> "No guide information for this channel"
-            isLive -> "${Fmt.clock(b.start)} – ${Fmt.clock(b.end)}  ·  ${((b.end - now) / 60_000).coerceAtLeast(0)} min left"
+            isLive -> "${Fmt.clock(b.start)} – ${Fmt.clock(b.end)}  ·  ${if (b.end - now < 60_000) "ending now" else "${(b.end - now) / 60_000} min left"}"
             past -> "${Fmt.day(b.start)} ${Fmt.clock(b.start)} – ${Fmt.clock(b.end)}  ·  $mins min"
             else -> "${Fmt.day(b.start)} ${Fmt.clock(b.start)} – ${Fmt.clock(b.end)}  ·  starts in ${untilText(b.start - now)}" + if (Reminders.has(this, b.ch.streamId, b.start)) "  ·  ⏰ reminder set" else ""
         }

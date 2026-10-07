@@ -403,6 +403,19 @@
                     android:src="@drawable/ic_ai"
                     android:tint="#FFFFFF"
                     android:focusable="true"/>
+
+                <!-- Live Chat / Watch Party (panel on the right, the picture moves left) -->
+                <ImageButton
+                    android:id="@+id/btnChat"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:padding="11dp"
+                    android:background="@drawable/bg_btn_focus_selector"
+                    android:contentDescription="Live chat"
+                    android:src="@drawable/ic_watch_chat"
+                    android:tint="#FFFFFF"
+                    android:focusable="true"/>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

@@ -51,6 +51,8 @@ open class BaseActivity : AppCompatActivity() {
             UnsupportedDeviceGate.show(this)
             return
         }
+        // Watch Party invites reach the customer on any screen
+        com.network24.player.features.chat.ChatInvites.attach(this)
         Network24CrashReporter.activityStarted(this)
         enableFullscreen()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -179,7 +181,7 @@ open class BaseActivity : AppCompatActivity() {
                 startActivity(Intent(this, MasterChannelSearchActivity::class.java))
                 true
             }
-            R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)); true }
+            R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)); true }
             R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
             R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
             R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }

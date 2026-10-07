@@ -98,6 +98,10 @@ class PlayerActivity : BaseActivity() {
     private var isSubtitleEnabled = false
     private lateinit var vpnToggle: FullscreenVpnToggle
     private lateinit var aiDrawer: AiAssistantDrawer
+    private lateinit var chatPanel: com.network24.player.features.chat.ChatPanel
+
+    /** Opens the Live Chat (a Watch Party invite accepted while this screen was open). */
+    fun openChat() { if (::chatPanel.isInitialized && !chatPanel.isOpen) chatPanel.open() }
     private lateinit var programDrawer: com.network24.player.features.player.program.ProgramInfoDrawer
 
 
@@ -542,8 +546,10 @@ class PlayerActivity : BaseActivity() {
         // players (the aspect-ratio button was replaced there already).
         vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
         aiDrawer = AiAssistantDrawer(this, binding.btnAi)
-        programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.btnProgram) { aiDrawer.close() }
-        aiDrawer.onOpen = { programDrawer.close() }
+        programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.btnProgram) { aiDrawer.close(); chatPanel.close() }
+        chatPanel = com.network24.player.features.chat.ChatPanel(this, binding.btnChat)
+        aiDrawer.onOpen = { programDrawer.close(); chatPanel.close() }
+        chatPanel.onOpen = { programDrawer.close(); aiDrawer.close() }
         com.network24.player.core.audio.AutoVolumeButton.bind(this, binding.btnAutoVolume) { showUiWithTimeout() }
         com.network24.player.core.player.SoftwareDecodingButton.bind(this, binding.btnDecoder) { showUiWithTimeout() }
         vpnToggle.register()
@@ -1135,6 +1141,7 @@ class PlayerActivity : BaseActivity() {
         // AI assistant open: the remote's arrows/OK move inside the chat panel
         // (otherwise UP/DOWN here would show the controls or change channel).
         if ((::aiDrawer.isInitialized && aiDrawer.handlesKey(keyCode)) ||
+            (::chatPanel.isInitialized && chatPanel.handlesKey(keyCode)) ||
             (::programDrawer.isInitialized && programDrawer.handlesKey(keyCode))
         ) {
             return super.onKeyDown(keyCode, event)

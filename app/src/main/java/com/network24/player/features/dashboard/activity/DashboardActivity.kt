@@ -90,9 +90,9 @@ class DashboardActivity : BaseActivity() {
         fun open(cls: Class<*>, extra: (Intent.() -> Unit)? = null) = startActivity(Intent(this, cls).apply { extra?.invoke(this) })
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to {},
-            "Live TV" to { open(LiveCategoryActivity::class.java) },
+            "Live TV" to { open(com.network24.player.features.livetv.LiveTvActivity::class.java) },
             "Movies" to { openCinemaPro3() },
-            "Sports" to { open(com.network24.player.features.discover.EventsActivity::class.java) },
+            "Sports" to { open(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { open(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { open(com.network24.player.features.catchup.CatchupActivity::class.java) },
         )
@@ -216,7 +216,7 @@ class DashboardActivity : BaseActivity() {
                 R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }
-                R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)); true }
+                R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)); true }
                 R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
                 R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
                 R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }
@@ -235,13 +235,13 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun setClickListeners() {
-        binding.cardLiveTv.setOnClickListener { startActivity(Intent(this, LiveCategoryActivity::class.java)) }
+        binding.cardLiveTv.setOnClickListener { startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java)) }
         binding.cardFavorites.setOnClickListener { startActivity(Intent(this, FavoriteChannelsActivity::class.java)) }
         binding.cardNotification.setOnClickListener { openCinemaPro3() }
         binding.cardSupport.setOnClickListener { startActivity(Intent(this, LiveSupportActivity::class.java)) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.guide.TvGuideActivity::class.java)) }
-        binding.cardEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.EventsActivity::class.java)) }
+        binding.cardEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)) }
         binding.cardCatchup.setOnClickListener { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)) }
         binding.cardTrending.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)) }
         binding.accountCard.setOnClickListener { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)) }

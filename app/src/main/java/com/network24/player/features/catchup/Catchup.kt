@@ -105,6 +105,9 @@ class CatchupActivity : BaseActivity() {
 
     private val backToOverview = object : OnBackPressedCallback(false) { override fun handleOnBackPressed() = showOverview() }
 
+    /** This page's tab in the top bar: UP into the bar lands there. */
+    private var hereTab: android.view.View? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         build()
@@ -220,9 +223,9 @@ class CatchupActivity : BaseActivity() {
         fun go(cls: Class<*>, extra: (Intent.() -> Unit)? = null) { startActivity(Intent(this@CatchupActivity, cls).apply { extra?.invoke(this) }); finish() }
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
-            "Live TV" to { go(com.network24.player.features.live.activity.LiveCategoryActivity::class.java) },
+            "Live TV" to { go(com.network24.player.features.livetv.LiveTvActivity::class.java) },
             "Movies" to { CinemaPro.open(this@CatchupActivity) },
-            "Sports" to { go(com.network24.player.features.discover.EventsActivity::class.java) },
+            "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { go(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { showOverview() },
         )
@@ -235,6 +238,7 @@ class CatchupActivity : BaseActivity() {
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
+            if (here) hereTab = t
             if (here) catchupTab = t
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(4) })
         }
@@ -744,6 +748,11 @@ class CatchupActivity : BaseActivity() {
             artFlushing = false
             if (artQueue.isNotEmpty()) handler.postDelayed(artFlush, if (r?.optBoolean("limited") == true) 20_000 else 50)
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (com.network24.player.core.ui.TopBarFocus.up(this, hereTab, event)) return true
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onDestroy() { handler.removeCallbacksAndMessages(null); super.onDestroy() }
