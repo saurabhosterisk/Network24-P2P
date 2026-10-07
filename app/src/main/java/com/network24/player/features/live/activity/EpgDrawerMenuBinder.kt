@@ -47,11 +47,11 @@ class EpgDrawerMenuBinder @JvmOverloads constructor(
                     true
                 }
                 R.id.action_refresh_all -> {
-                    activity.refreshChannelsFromMenu()
+                    activity.updateEverything()
                     true
                 }
                 R.id.action_refresh_guide -> {
-                    activity.refreshGuideFromMenu()
+                    activity.updateEverything()
                     true
                 }
                 R.id.action_master_search -> {

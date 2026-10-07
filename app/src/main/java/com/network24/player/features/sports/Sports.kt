@@ -256,13 +256,13 @@ class SportsActivity : BaseActivity() {
         }
         addView(HorizontalScrollView(this@SportsActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
-            startActivity(Intent(this@SportsActivity, com.network24.player.features.live.activity.MasterChannelSearchActivity::class.java))
+            com.network24.player.features.search.SearchOverlay.show(this@SportsActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)))
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
-            startActivity(Intent(this@SportsActivity, com.network24.player.features.support.activity.LiveSupportActivity::class.java))
+            com.network24.player.features.help.HelpCenter.show(this@SportsActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(iconButton(R.drawable.ic_h_account, "Account") {
-            startActivity(Intent(this@SportsActivity, com.network24.player.features.account.AccountActivity::class.java))
+            com.network24.player.features.account.AccountCenter.show(this@SportsActivity)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
     }

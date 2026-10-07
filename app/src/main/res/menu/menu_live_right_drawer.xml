@@ -26,10 +26,6 @@
         android:title="Catch-up TV"
         android:icon="@android:drawable/ic_menu_rotate" />
 
-    <item
-        android:id="@+id/action_find_show"
-        android:title="Find a Show"
-        android:icon="@drawable/ic_tv" />
 
     <item
         android:id="@+id/action_reminders"
@@ -43,17 +39,18 @@
 
     <item
         android:id="@+id/action_refresh_all"
-        android:title="Refresh Channels"
+        android:title="Update Channels &amp; Guide"
         android:icon="@drawable/ic_refresh" />
 
     <item
         android:id="@+id/action_refresh_guide"
         android:title="Refresh TV Guide"
+        android:visible="false"
         android:icon="@drawable/ic_schedule" />
 
     <item
         android:id="@+id/action_master_search"
-        android:title="Master Search"
+        android:title="Search"
         android:icon="@android:drawable/ic_menu_search" />
 
     <item

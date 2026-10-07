@@ -1574,7 +1574,7 @@ class FavoriteChannelsActivity : BaseActivity() {
                 R.id.action_refresh_all -> {
 
 
-                    forceRefreshData()
+                    updateEverything()
 
 
                     true
@@ -1586,7 +1586,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
                 R.id.action_refresh_guide -> {
-                    refreshTvGuide()
+                    updateEverything()
                     true
                 }
 

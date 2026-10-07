@@ -283,8 +283,8 @@ class LiveCategoryActivity : BaseActivity() {
             when (itemId) {
                 R.id.action_home -> { startActivity(Intent(this, DashboardActivity::class.java).putExtra(DashboardActivity.EXTRA_REFRESH_ACCOUNT, true)); finish(); true }
             R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
-                R.id.action_refresh_all -> { forceRefreshData(); true }
-                R.id.action_refresh_guide -> { refreshTvGuide(); true }
+                R.id.action_refresh_all -> { updateEverything(); true }
+                R.id.action_refresh_guide -> { updateEverything(); true }
                 R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }

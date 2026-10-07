@@ -19,27 +19,18 @@ class AboutDeviceActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val contentRoot = layoutInflater.inflate(R.layout.activity_about_device, null, false) as ViewGroup
-        setContentView(setupGlobalRightDrawer(contentRoot, contentRoot.findViewById(R.id.btnMore)))
-
-        findViewById<View>(R.id.aboutBack).setOnClickListener { finish() }
-
+        // built in code in the app's look
+        kit = SettingsKit(this)
+        val page = kit.page("About this device", "The app, this device and its system")
         val platform = platformName()
-        findViewById<TextView>(R.id.aboutAppName).text = getString(R.string.app_name)
-        findViewById<TextView>(R.id.aboutAppVersion).text =
-            "Version ${BuildConfig.VERSION_NAME}  •  Build ${BuildConfig.VERSION_CODE}"
-        findViewById<TextView>(R.id.aboutPlatformChip).apply {
-            text = platform
-            val accent = getColor(R.color.primary_light)
-            background.mutate().setTint(
-                android.graphics.Color.argb(
-                    0x33,
-                    android.graphics.Color.red(accent),
-                    android.graphics.Color.green(accent),
-                    android.graphics.Color.blue(accent)
-                )
-            )
-        }
+        page.hero.addView(android.widget.ImageView(this).apply { setImageResource(R.drawable.app_mark); adjustViewBounds = true }, LinearLayout.LayoutParams(kit.dp(64), kit.dp(64)))
+        page.hero.addView(kit.text(getString(R.string.app_name), 22f, kit.textMain, 800).apply { setPadding(0, kit.dp(16), 0, 0) })
+        page.hero.addView(kit.text("Version ${BuildConfig.VERSION_NAME}  ·  Build ${BuildConfig.VERSION_CODE}", 13f, kit.textSub, 600).apply { setPadding(0, kit.dp(6), 0, 0) })
+        page.hero.addView(kit.text(platform.uppercase(), 11f, kit.accentSoft, 800).apply { letterSpacing = 0.1f; setPadding(kit.dp(10), kit.dp(5), kit.dp(10), kit.dp(5)); background = kit.shape(0x267C5CFF, 8f) },
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = kit.dp(14) })
+        page.hero.addView(kit.spacer())
+        page.hero.addView(kit.text("Share these details with support when something does not work on this device.", 12f, kit.textSub, 500, lines = 3).apply { setLineSpacing(0f, 1.15f) })
+        setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         val manufacturer = Build.MANUFACTURER.orEmpty().ifBlank { "Unknown" }
         val securityPatch = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -48,7 +39,7 @@ class AboutDeviceActivity : BaseActivity() {
             "Not available"
         }
 
-        val sections = findViewById<LinearLayout>(R.id.aboutSections)
+        val sections = page.content
         addSection(
             sections, "DEVICE", listOf(
                 "Platform" to platform,
@@ -91,61 +82,21 @@ class AboutDeviceActivity : BaseActivity() {
         }
     }
 
-    /** Section header followed by a card of label / value rows. */
+    private lateinit var kit: SettingsKit
+
+    /** Section label, then a glass card of label / value rows (the card takes the remote's focus so the page scrolls). */
     private fun addSection(parent: LinearLayout, title: String, rows: List<Pair<String, String>>) {
-        val density = resources.displayMetrics.density
-        fun dp(value: Int) = (value * density).toInt()
-
-        parent.addView(TextView(this).apply {
-            text = title
-            textSize = 12f
-            letterSpacing = 0.12f
-            setTextColor(getColor(R.color.text_hint))
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                marginStart = dp(8)
-                topMargin = dp(28)
-            }
-        })
-
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.bg_settings_card)
-            setPadding(dp(20), dp(6), dp(20), dp(6))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(10) }
-        }
-        rows.forEachIndexed { index, (label, value) ->
-            if (index > 0) {
-                card.addView(View(this).apply {
-                    setBackgroundColor(getColor(R.color.text_hint))
-                    alpha = 0.15f
-                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)
-                })
-            }
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, dp(12), 0, dp(12))
-            }
-            row.addView(TextView(this).apply {
-                text = label
-                textSize = 14f
-                setTextColor(getColor(R.color.text_secondary))
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            row.addView(TextView(this).apply {
-                text = value
-                textSize = 14f
-                gravity = android.view.Gravity.END
-                setTextColor(getColor(R.color.text_primary))
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            })
+        parent.addView(kit.label(title))
+        val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(kit.dp(18), kit.dp(4), kit.dp(18), kit.dp(4)); background = kit.shape(kit.surface, 14f, kit.line) }
+        rows.forEachIndexed { i, (label, value) ->
+            if (i > 0) card.addView(View(this).apply { setBackgroundColor(kit.line) }, LinearLayout.LayoutParams(-1, 1))
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, kit.dp(12), 0, kit.dp(12)) }
+            row.addView(kit.text(label, 14f, kit.textSub, 600), LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(kit.text(value, 14f, kit.textMain, 700))
             card.addView(row)
         }
-        parent.addView(card)
+        kit.focusable(card, 14f, 1.01f)
+        parent.addView(card, LinearLayout.LayoutParams(-1, -2))
+        if (parent.childCount == 2) card.postDelayed({ card.requestFocus() }, 150)
     }
 }

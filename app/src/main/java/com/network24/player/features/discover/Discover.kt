@@ -391,78 +391,12 @@ class EventsActivity : FeatureListActivity() {
     }
 }
 
-// ------------------------------------------------------------------------------------------------ Trending now
-class TrendingActivity : FeatureListActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        title("Trending Now", "The channels most Network24 viewers are watching right now")
-        action("Refresh") { load() }
-        load()
-    }
-
-    private fun load() {
-        loading(true)
-        lifecycleScope.launch {
-            val pop = runCatching { Web24Api.objects(Web24Api(this@TrendingActivity).support("popular").optJSONArray("streams")).map { it.optInt("stream_id") to it.optInt("viewers") } }.getOrDefault(emptyList())
-            val chans = db.channelDao().getByStreamIds(pop.map { it.first }).associateBy { it.streamId }
-            val cats = db.categoryDao().getByType(CategoryType.LIVE).associate { it.categoryId to it.name.orEmpty() }
-            val list = pop.mapNotNull { (id, _) -> chans[id] }
-            val now = System.currentTimeMillis()
-            val epg = list.mapNotNull { it.epgChannelId?.takeIf { e -> e.isNotBlank() } }.distinct().let { ids -> if (ids.isEmpty()) emptyMap() else db.epgDao().getNowByEpgChannelIdsChunked(ids, now).associateBy { it.epgChannelId } }
-            loading(false)
-            show(pop.mapIndexedNotNull { i, (id, viewers) ->
-                val ch = chans[id] ?: return@mapIndexedNotNull null
-                val p = epg[ch.epgChannelId]
-                Row("t$id", ch.name.orEmpty(), cats[ch.categoryId].orEmpty(), p?.title.orEmpty(), ch.icon, lead = "#${i + 1}",
-                    badge = "$viewers watching", progress = p?.let { e -> val s = e.startTimestamp ?: 0; val t = e.stopTimestamp ?: 0; if (t > s) ((now - s) * 1000 / (t - s)).toInt().coerceIn(0, 1000) else -1 } ?: -1) {
-                    play(list, ch)
-                }
-            }, "Nothing to show right now. Try again in a minute.")
-        }
-    }
-}
-
 // ------------------------------------------------------------------------------------------------ Find a Show
-/** Search the TV guide for a show, team or film (live now, later today and the coming days). Voice search too. */
-class ShowSearchActivity : FeatureListActivity() {
-    private var job: Job? = null
-
+/** Old entry point: the app has one search now (channels, shows on now and later, sports, catch-up). */
+class ShowSearchActivity : androidx.appcompat.app.AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title("Find a Show", "Search the TV guide: what is on now and later. Select a show to watch or to set a reminder.")
-        enableSearch("Show, team, film or news…", live = true) { q -> search(q) }
-        intent.getStringExtra(EXTRA_QUERY)?.let { b.editSearch.setText(it); search(it) }
-        b.editSearch.requestFocus()
-        show(emptyList(), "Type at least 3 letters, or use the microphone.")
-    }
-
-    private fun search(q0: String) {
-        job?.cancel()
-        val q = q0.trim()
-        if (q.length < 3) { show(emptyList(), "Type at least 3 letters, or use the microphone."); return }
-        job = lifecycleScope.launch {
-            delay(350); loading(true)
-            val now = System.currentTimeMillis()
-            val progs = withContext(Dispatchers.IO) { db.epgDao().searchProgramsInWindow(q, now, now + 7 * 86_400_000L) }.take(200)
-            val chans = withContext(Dispatchers.IO) { db.channelDao().getAll() }
-            val byEpg = chans.filter { !it.epgChannelId.isNullOrBlank() }.groupBy { it.epgChannelId }
-            val named = chans.filter { it.name?.contains(q, true) == true }.take(30)
-            loading(false)
-            val rows = mutableListOf<Row>()
-            rows += named.map { ch -> Row("c${ch.streamId}", ch.name.orEmpty(), "Channel", icon = ch.icon, badge = "Watch") { play(named, ch) } }
-            progs.forEach { p ->
-                val ch = byEpg[p.epgChannelId]?.firstOrNull() ?: return@forEach
-                val s = p.startTimestamp ?: return@forEach; val e = p.stopTimestamp ?: return@forEach
-                val isNow = now in s until e
-                val set = Reminders.has(this@ShowSearchActivity, ch.streamId, s)
-                rows += Row("p${ch.streamId}@$s", p.title.orEmpty(), "${ch.name.orEmpty()}", if (isNow) "On now · ends ${Fmt.clock(e)}" else "${Fmt.day(s)} ${Fmt.clock(s)}", ch.icon,
-                    badge = when { isNow -> "LIVE"; set -> "Reminder set"; else -> "Remind me" }, badgeColor = if (isNow) LIVE else if (set) GOLD else 0,
-                    progress = if (isNow) ((now - s) * 1000 / (e - s)).toInt() else -1) {
-                    if (isNow || s - now < 10 * 60_000L) play(listOf(ch), ch) else { Reminders.toggle(this@ShowSearchActivity, ch.streamId, s, p.title.orEmpty(), ch.name.orEmpty()); search(q) }
-                }
-            }
-            show(rows, "Nothing found for \"$q\" in the TV guide.")
-        }
+        com.network24.player.features.search.SearchOverlay.show(this, intent.getStringExtra(EXTRA_QUERY)) { finish() }
     }
 
     companion object { const val EXTRA_QUERY = "query" }

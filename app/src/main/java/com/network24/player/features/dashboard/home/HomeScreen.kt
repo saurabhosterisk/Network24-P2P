@@ -79,7 +79,6 @@ object HomeFont {
 class HomeScreen(
     private val act: AppCompatActivity,
     private val openMenu: () -> Unit,
-    private val renew: () -> Unit,
     private val openAccount: () -> Unit,
     private val tabs: List<Pair<String, () -> Unit>>,
     private val support: () -> Unit,
@@ -265,7 +264,7 @@ class HomeScreen(
         addView(HorizontalScrollView(act).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 1f)
         addView(iconButton(R.drawable.ic_h_search, "Search") {
-            act.startActivity(Intent(act, com.network24.player.features.live.activity.MasterChannelSearchActivity::class.java))
+            com.network24.player.features.search.SearchOverlay.show(act)
         })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") { support() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
         // account: a round icon like its neighbours (keeps room for the tabs); opens the user info page
@@ -346,6 +345,9 @@ class HomeScreen(
         box.addView(HorizontalScrollView(act).apply {
             isHorizontalScrollBarEnabled = false; clipToPadding = false; clipChildren = false
             setPadding(dp(16), dp(14), dp(48), dp(18)); addView(strip)
+        }.also { hs ->
+            // a rebuilt row starts at its first card (after an update it opened scrolled, the first card cut at the edge)
+            hs.post { if (!hs.hasFocus()) hs.scrollTo(0, 0) }
         }, LinearLayout.LayoutParams(-1, -2).apply { marginStart = -dp(16) })
         var at = rows.childCount
         for (i in 0 until rows.childCount) if (rank(rows.getChildAt(i).tag as? String) > rank(key)) { at = i; break }
@@ -816,7 +818,6 @@ class HomeScreen(
 
     // ------------------------------------------------------------------------------------------------ account / lifecycle
     private fun daysLeft(): Long? = prefs.getExpiry().takeIf { it > 0 }?.let { com.network24.player.core.util.ExpiryDays.from(it * 1000) }
-    private fun renewSoon() = (daysLeft() ?: 999) <= 15
 
     /** Account icon: plain normally, gold from 15 days before the end, red once it has ended (details on its page). */
     fun refreshAccount() {
@@ -856,6 +857,13 @@ class HomeScreen(
      * BACK, the way TV apps do it: inside a row that is scrolled sideways -> back to the row's first card;
      * anywhere further down -> straight back to the billboard (no competing scroll animations); at the top -> leave.
      */
+    /** The remote back on Watch now (after a dialog over the home closes). */
+    fun focusWatch() {
+        scroll.scrollTo(0, 0)
+        val t = if (btnWatch.visibility == View.VISIBLE) btnWatch else rows.getChildAt(0)
+        t?.post { t.requestFocus() }
+    }
+
     fun handleBack(): Boolean {
         val f = act.currentFocus
         var p = f?.parent

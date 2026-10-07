@@ -34,7 +34,7 @@ class AutoRefreshActivity : BaseActivity() {
     private val options = listOf(
         0 to ("Off" to "Only when you tap Refresh Now"),
         4 to ("Every 4 hours" to "Best on busy game days"),
-        8 to ("Every 8 hours" to "Recommended"),
+        8 to ("Every 8 hours" to "Fresh guide, light on data"),
         12 to ("Every 12 hours" to "Twice a day"),
         24 to ("Once a day" to "Lightest on data")
     )
@@ -44,17 +44,27 @@ class AutoRefreshActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val contentRoot = layoutInflater.inflate(R.layout.activity_auto_refresh, null, false) as ViewGroup
-        setContentView(setupGlobalRightDrawer(contentRoot, contentRoot.findViewById(R.id.btnMore)))
+        // built in code in the app's look
+        kit = SettingsKit(this)
+        val page = kit.page("Auto update", "Keep channels and the TV guide fresh on their own")
+        page.hero.addView(kit.orb(R.drawable.ic_sync))
+        page.hero.addView(kit.text("LAST UPDATE", 10f, kit.textSub, 800).apply { letterSpacing = 0.14f; setPadding(0, kit.dp(22), 0, 0) })
+        statusTitle = kit.text("", 20f, kit.textMain, 800, lines = 2).apply { setPadding(0, kit.dp(6), 0, 0) }
+        page.hero.addView(statusTitle)
+        statusDetail = kit.text("", 13f, kit.textSub, 600, lines = 3).apply { setPadding(0, kit.dp(8), 0, 0); setLineSpacing(0f, 1.15f) }
+        page.hero.addView(statusDetail)
+        progress = kit.progressBar().apply { visibility = View.GONE }
+        page.hero.addView(progress, LinearLayout.LayoutParams(-1, kit.dp(6)).apply { topMargin = kit.dp(14) })
+        page.hero.addView(kit.spacer())
+        refreshNow = kit.button("Update now", true) {}
+        page.hero.addView(refreshNow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(16) })
+        page.content.addView(kit.label("How often"))
+        optionsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
+        page.content.addView(optionsContainer)
+        page.content.addView(kit.text("Updates run in the background while the device is on. A full update takes about a minute.", 12f, kit.textSub, 500, lines = 3).apply { setPadding(kit.dp(4), kit.dp(10), 0, 0) })
+        setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         prefs = PreferenceManager(this)
-        refreshNow = findViewById(R.id.btnRefreshNow)
-        statusTitle = findViewById(R.id.refreshStatusTitle)
-        statusDetail = findViewById(R.id.refreshStatusDetail)
-        progress = findViewById(R.id.refreshProgress)
-        optionsContainer = findViewById(R.id.intervalOptions)
-
-        findViewById<View>(R.id.autoRefreshBack).setOnClickListener { finish() }
         refreshNow.setOnClickListener {
             refreshStartedHere = true
             AutoRefreshWorker.refreshNow(this)
@@ -71,49 +81,21 @@ class AutoRefreshActivity : BaseActivity() {
         bindStatus()
     }
 
+    private lateinit var kit: SettingsKit
+
     private fun buildOptions() {
+        val hadFocus = optionsContainer.hasFocus()
         optionsContainer.removeAllViews()
         val selected = prefs.getAutoRefreshHours()
-        val density = resources.displayMetrics.density
         options.forEach { (hours, texts) ->
-            val (title, subtitle) = texts
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_settings_action)
-                isClickable = true
-                isFocusable = true
-                setPadding((18 * density).toInt(), 0, (18 * density).toInt(), 0)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, (64 * density).toInt()
-                ).apply { topMargin = (10 * density).toInt() }
-                setOnClickListener { selectInterval(hours) }
-            }
-            val texts = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            texts.addView(TextView(this).apply {
-                text = title
-                textSize = 16f
-                setTextColor(getColor(R.color.text_primary))
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            })
-            texts.addView(TextView(this).apply {
-                text = subtitle
-                textSize = 12f
-                setTextColor(getColor(R.color.text_hint))
-            })
-            row.addView(texts)
-            row.addView(TextView(this).apply {
-                text = "✓"
-                textSize = 22f
-                setTextColor(getColor(R.color.primary_light))
-                visibility = if (hours == selected) View.VISIBLE else View.INVISIBLE
-            })
+            val row = kit.option(texts.first, texts.second, hours == selected, if (hours == 8) "RECOMMENDED" else null) { selectInterval(hours) }
+            row.tag = hours
             optionsContainer.addView(row)
         }
+        val target = optionsContainer.findViewWithTag<View>(selected)
+        if (hadFocus || !focusedOnce) { focusedOnce = true; target?.post { target.requestFocus() } }
     }
+    private var focusedOnce = false
 
     private fun selectInterval(hours: Int) {
         if (hours == prefs.getAutoRefreshHours()) return
@@ -154,6 +136,8 @@ class AutoRefreshActivity : BaseActivity() {
     private fun onManualRefreshState(state: WorkInfo.State?) {
         val running = state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING
         refreshNow.isEnabled = !running
+        refreshNow.alpha = if (running) 0.5f else 1f
+        refreshNow.text = if (running) "Updating…" else "Update now"
         progress.visibility = if (running) View.VISIBLE else View.GONE
         if (running) {
             statusTitle.text = "Refreshing channels & TV guide…"

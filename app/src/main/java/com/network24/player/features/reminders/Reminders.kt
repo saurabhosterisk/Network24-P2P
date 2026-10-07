@@ -8,18 +8,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Bundle
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.lifecycle.lifecycleScope
 import com.network24.player.R
-import com.network24.player.features.discover.ChannelLauncher
-import com.network24.player.features.discover.FeatureListActivity
 import com.network24.player.features.discover.Fmt
-import com.network24.player.features.discover.Row
-import com.network24.player.core.database.DatabaseProvider
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,6 +30,13 @@ object Reminders {
     private fun save(c: Context, list: List<Item>) = prefs(c).edit().putString("list", JSONArray(list.map {
         JSONObject().put("s", it.streamId).put("t", it.start).put("title", it.title).put("ch", it.channel)
     }).toString()).apply()
+
+    /** Removes every reminder (and its alarm). */
+    fun clear(c: Context) {
+        val am = c.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        all(c).forEach { am.cancel(pending(c, it.streamId, it.start, it.title, it.channel)) }
+        save(c, emptyList())
+    }
 
     fun has(c: Context, streamId: Int, start: Long) = all(c).any { it.streamId == streamId && it.start == start }
 
@@ -87,23 +87,3 @@ class ReminderReceiver : BroadcastReceiver() {
     companion object { const val EXTRA_WATCH = "reminder_watch_stream" }
 }
 
-class RemindersActivity : FeatureListActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        title("Reminders", "You get a notification 2 minutes before each one. Select one to remove it.")
-        load()
-    }
-
-    private fun load() {
-        val list = Reminders.all(this)
-        lifecycleScope.launch {
-            val chans = DatabaseProvider.get(this@RemindersActivity).channelDao().getByStreamIds(list.map { it.streamId }).associateBy { it.streamId }
-            show(list.map { r ->
-                Row("${r.streamId}@${r.start}", r.title, "${Fmt.day(r.start)} ${Fmt.clock(r.start)}", r.channel, chans[r.streamId]?.icon, badge = "Remove",
-                    onLong = { chans[r.streamId]?.let { ChannelLauncher.play(this@RemindersActivity, listOf(it), it) } }) {
-                    Reminders.toggle(this@RemindersActivity, r.streamId, r.start, r.title, r.channel); load()
-                }
-            }, "No reminders.\nOpen Live Sports, Find a Show or the TV guide panel in the player to set one.")
-        }
-    }
-}

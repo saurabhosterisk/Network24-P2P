@@ -57,6 +57,8 @@ class SettingsActivity : BaseActivity() {
     // onResume() can retry the actual install instead of discarding an
     // already-finished download.
     private var awaitingUpdatePermission = false
+    private lateinit var ui: SettingsUi
+    private var startFocused = false
     private var updateProgressDialog: ProgressDialogHandle? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,11 +77,9 @@ class SettingsActivity : BaseActivity() {
             }
         }
 
-        val contentRoot = layoutInflater.inflate(
-            R.layout.activity_settings,
-            null,
-            false
-        ) as ViewGroup
+        // the screen is built in code in the app's look (same view ids as the old layout)
+        ui = SettingsUi(this)
+        val contentRoot = ui.build()
         setContentView(
             setupGlobalRightDrawer(
                 contentRoot,
@@ -101,6 +101,8 @@ class SettingsActivity : BaseActivity() {
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
             "Network24  •  Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+        // the remote starts on the first setting
+        ui.firstRow()?.postDelayed({ if (!startFocused) { startFocused = true; ui.firstRow()?.requestFocus() } }, 150)
     }
 
     override fun onResume() {
@@ -251,24 +253,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun bindActions() {
-        findViewById<android.view.View>(R.id.clearMemory).setOnClickListener {
-            MemoryCache.clearAll()
-            Toast.makeText(
-                this,
-                "Temporary memory cleared",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-
-        findViewById<android.view.View>(R.id.forceRefresh).setOnClickListener {
-            MemoryCache.clearAll()
-            prefs.setLastSyncTime(0L)
-            Toast.makeText(
-                this,
-                "Cache cleared. Fresh data will load on the next refresh.",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        findViewById<android.view.View>(R.id.forceRefresh).setOnClickListener { confirmFreshStart() }
 
         findViewById<android.view.View>(R.id.manageCategories).setOnClickListener {
             startActivity(Intent(this, ManageCategoriesActivity::class.java))
@@ -530,6 +515,38 @@ class SettingsActivity : BaseActivity() {
         }
     }
 
+    /**
+     * "Fresh start": recently watched, recent searches, saved pictures and other temporary files are cleared and
+     * the next update downloads everything new. Login, favourites, reminders, parental lock and settings stay.
+     */
+    private fun confirmFreshStart() {
+        showConfirmDialog(
+            title = "Fresh start?",
+            message = "Clears recently watched, recent searches, saved pictures and other temporary files. Your login, favorites, reminders, parental lock and settings stay as they are.",
+            positiveText = "Clear",
+            onPositive = { freshStart() }
+        )
+    }
+
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
+    private fun freshStart() {
+        lifecycleScope.launch {
+            MemoryCache.clearAll()
+            prefs.setLastSyncTime(0L)
+            runCatching { com.network24.player.core.database.repository.LiveHistoryRepository(this@SettingsActivity).clearLocal() }
+            getSharedPreferences("n24_search", MODE_PRIVATE).edit().clear().apply()
+            val freed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val loader = coil.Coil.imageLoader(this@SettingsActivity)
+                loader.memoryCache?.clear()
+                runCatching { loader.diskCache?.clear() }
+                var bytes = 0L
+                cacheDir.listFiles()?.forEach { f -> bytes += f.walkBottomUp().filter { it.isFile }.sumOf { it.length() }; f.deleteRecursively() }
+                bytes
+            }
+            Toast.makeText(this@SettingsActivity, "All clean" + (if (freed > 1_000_000) " - ${freed / 1_000_000} MB freed" else ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun showLogoutConfirmation() {
         showConfirmDialog(
             title = "Log out?",
@@ -542,6 +559,8 @@ class SettingsActivity : BaseActivity() {
             }
         )
     }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean = (::ui.isInitialized && ui.handleKey(event)) || super.dispatchKeyEvent(event)
 
     private fun showExitConfirmation() {
         showConfirmDialog(

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- play / pause: violet-cyan disc; focused = white ring -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="oval">
+            <gradient android:angle="315" android:startColor="#7C5CFF" android:endColor="#22D3EE" />
+            <stroke android:width="4dp" android:color="#FFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <gradient android:angle="315" android:startColor="#7C5CFF" android:endColor="#5B3FD9" />
+        </shape>
+    </item>
+</selector>

@@ -53,6 +53,8 @@ open class BaseActivity : AppCompatActivity() {
         }
         // Watch Party invites reach the customer on any screen
         com.network24.player.features.chat.ChatInvites.attach(this)
+        // a reminder pops up on any screen 2 minutes before it starts
+        com.network24.player.features.reminders.ReminderAlert.attach(this)
         Network24CrashReporter.activityStarted(this)
         enableFullscreen()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -172,21 +174,17 @@ open class BaseActivity : AppCompatActivity() {
                 startActivity(Intent(this, RecentlyWatchedActivity::class.java))
                 true
             }
-            R.id.action_refresh_all -> refreshAllCatalogData()
-            R.id.action_refresh_guide -> {
-                refreshTvGuide()
-                true
-            }
+            R.id.action_refresh_all -> { updateEverything(); true }
+            R.id.action_refresh_guide -> { updateEverything(); true }
             R.id.action_master_search -> {
-                startActivity(Intent(this, MasterChannelSearchActivity::class.java))
+                com.network24.player.features.search.SearchOverlay.show(this)
                 true
             }
             R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)); true }
             R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
             R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
-            R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }
             R.id.action_reminders -> { startActivity(Intent(this, com.network24.player.features.reminders.RemindersActivity::class.java)); true }
-            R.id.action_account -> { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)); true }
+            R.id.action_account -> { com.network24.player.features.account.AccountCenter.show(this); true }
             R.id.action_settings -> {
                 startActivity(Intent(this, SettingsActivity::class.java))
                 true
@@ -602,6 +600,44 @@ open class BaseActivity : AppCompatActivity() {
                     else Toast.makeText(this@BaseActivity, result.message, Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    /**
+     * The menu's "Update Channels & Guide": channels and categories first (a channel can get its guide id), then the
+     * whole TV guide, shown step by step on [com.network24.player.core.ui.UpdatePanel] with a summary at the end.
+     */
+    /** After the update panel closes (the home puts the remote back on Watch now). */
+    protected open fun onUpdateClosed() = Unit
+
+    fun updateEverything() {
+        val prefs = PreferenceManager(this)
+        if (prefs.getServer().isBlank() || prefs.getUsername().isBlank() || prefs.getPassword().isBlank()) return
+        val panel = com.network24.player.core.ui.UpdatePanel(this)
+        panel.setOnDismissListener { onUpdateClosed() }
+        panel.show()
+        lifecycleScope.launch {
+            val sync = SyncManager(this@BaseActivity)
+            panel.progress(0, -1)
+            val ch = sync.syncLiveChannelsAll(force = true) { p -> runOnUiThread { panel.progress(0, p) } }
+            if (ch is SyncResult.Error) { panel.failed(0, ch.message); return@launch }
+            val db = com.network24.player.core.database.DatabaseProvider.get(this@BaseActivity)
+            val channels = runCatching { db.channelDao().countAll() }.getOrDefault(0)
+            panel.complete(0, String.format(java.util.Locale.US, "%,d channels", channels))
+            panel.progress(1, -1)
+            var saving = false
+            val epg = sync.syncFullEpg(force = true,
+                onProgress = { p -> runOnUiThread { panel.progress(1, p) } },
+                onSaving = { p -> runOnUiThread { if (!saving) { saving = true; panel.complete(1, "Downloaded") }; panel.progress(2, p) } })
+            if (epg is SyncResult.Error) { panel.failed(if (saving) 2 else 1, epg.message); return@launch }
+            if (!saving) panel.complete(1, "Downloaded")
+            val now = System.currentTimeMillis()
+            val programmes = runCatching { db.epgDao().countProgramsInWindow(now, now + 7 * 86_400_000L) }.getOrDefault(0)
+            panel.complete(2, String.format(java.util.Locale.US, "%,d programmes", programmes))
+            prefs.setLastDataRefreshMs(now)
+            onTvGuideUpdated()
+            sendBroadcast(Intent(ACTION_EPG_UPDATED))
+            panel.success(String.format(java.util.Locale.US, "%,d channels and %,d programmes for the coming days are ready.", channels, programmes))
         }
     }
 

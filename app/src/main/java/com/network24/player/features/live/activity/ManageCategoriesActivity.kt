@@ -25,35 +25,36 @@ class ManageCategoriesActivity : BaseActivity() {
     private lateinit var prefs: PreferenceManager
     private lateinit var repository: LiveRepository
     private lateinit var settingsRepository: CategorySettingsRepository
-    private lateinit var adapter: ManageCategoryAdapter
+    private lateinit var adapter: com.network24.player.features.settings.activity.SettingsKit.CategorySwitches
+    private lateinit var kit: com.network24.player.features.settings.activity.SettingsKit
+    private lateinit var countText: TextView
     private lateinit var progress: ProgressBar
     private lateinit var emptyText: TextView
     private lateinit var recycler: RecyclerView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val contentRoot = layoutInflater.inflate(
-            R.layout.activity_manage_categories,
-            null,
-            false
-        ) as ViewGroup
-        setContentView(
-            setupGlobalRightDrawer(
-                contentRoot,
-                contentRoot.findViewById(R.id.btnMore)
-            )
-        )
+        // built in code in the app's look: the count on the left, every category with a switch on the right
+        kit = com.network24.player.features.settings.activity.SettingsKit(this)
+        val page = kit.page("Manage categories", "Choose which live categories you see", scrolls = false)
+        page.hero.addView(kit.orb(R.drawable.ic_list))
+        page.hero.addView(kit.text("SHOWN", 10f, kit.textSub, 800).apply { letterSpacing = 0.14f; setPadding(0, kit.dp(22), 0, 0) })
+        countText = kit.text("…", 26f, kit.textMain, 800).apply { setPadding(0, kit.dp(6), 0, 0); fontFeatureSettings = "tnum" }
+        page.hero.addView(countText)
+        page.hero.addView(kit.text("Switch off the categories you never watch. They disappear from Live TV, the TV Guide, Search and the home rows on every device with your login. Switch them on again any time.", 13f, kit.textSub, 600, lines = 8).apply { setPadding(0, kit.dp(10), 0, 0); setLineSpacing(0f, 1.15f) })
+        progress = kit.progressBar()
+        page.content.addView(progress, android.widget.LinearLayout.LayoutParams(-1, kit.dp(4)))
+        emptyText = kit.text("No categories yet.", 15f, kit.textSub, 600, lines = 3).apply { visibility = View.GONE; setPadding(kit.dp(8), kit.dp(30), 0, 0) }
+        page.content.addView(emptyText)
+        recycler = RecyclerView(this).apply { clipToPadding = false; setPadding(kit.dp(4), kit.dp(10), kit.dp(4), kit.dp(30)); isVerticalFadingEdgeEnabled = true; setFadingEdgeLength(kit.dp(24)) }
+        page.content.addView(recycler, android.widget.LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         prefs = PreferenceManager(this)
         repository = LiveRepository(this)
         settingsRepository = CategorySettingsRepository(FirebaseFirestore.getInstance())
 
-        findViewById<View>(R.id.manageCategoriesBack).setOnClickListener { finish() }
-        recycler = findViewById(R.id.rvManageCategories)
-        progress = findViewById(R.id.progressManageCategories)
-        emptyText = findViewById(R.id.txtManageCategoriesEmpty)
-
-        adapter = ManageCategoryAdapter(onChanged = ::onCategoryChanged)
+        adapter = kit.CategorySwitches("Shown", "Hidden") { c, on -> onCategoryChanged(c, on); updateCount() }
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
@@ -83,6 +84,7 @@ class ManageCategoriesActivity : BaseActivity() {
                     emptyText.visibility = View.VISIBLE
                 } else {
                     adapter.updateList(categories, disabled)
+                    updateCount()
                     recycler.post { recycler.getChildAt(0)?.requestFocus() }
                 }
             } catch (e: Exception) {
@@ -92,6 +94,8 @@ class ManageCategoriesActivity : BaseActivity() {
             }
         }
     }
+
+    private fun updateCount() { countText.text = "${adapter.onCount()} of ${adapter.itemCount}" }
 
     private fun onCategoryChanged(category: com.network24.player.features.live.models.LiveCategory, enabled: Boolean) {
         lifecycleScope.launch {
@@ -108,6 +112,7 @@ class ManageCategoriesActivity : BaseActivity() {
                 ).show()
             } catch (e: Exception) {
                 adapter.setEnabled(category.category_id, !enabled)
+                updateCount()
                 Toast.makeText(
                     this@ManageCategoriesActivity,
                     "Could not save category setting",

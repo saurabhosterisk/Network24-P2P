@@ -43,8 +43,8 @@
     <!-- Centered spinner (appear while buffering if you want to control from code) -->
     <ProgressBar
         android:id="@+id/progressBar"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -55,18 +55,18 @@
     <View
         android:id="@+id/topTint"
         android:layout_width="0dp"
-        android:layout_height="58dp"
-        android:background="#88000000"
+        android:layout_height="120dp"
+        android:background="@drawable/bg_player_top"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <ImageButton
         android:id="@+id/btnBack"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
-        android:layout_marginStart="8dp"
-        android:background="@drawable/bg_back_focus"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginStart="36dp"
+        android:background="@drawable/bg_player_btn"
         android:contentDescription="Back"
         android:focusable="true"
         android:padding="12dp"
@@ -84,8 +84,11 @@
         android:paddingEnd="16dp"
         android:text="4725 - USA-SD | AE"
         android:textColor="@android:color/white"
-        android:textSize="20sp"
+        android:textSize="16sp"
         android:textStyle="bold"
+        android:alpha="0.85"
+        android:shadowColor="#AA000000"
+        android:shadowRadius="8"
         app:layout_constraintTop_toTopOf="@id/topTint"
         app:layout_constraintBottom_toBottomOf="@id/topTint"
         app:layout_constraintStart_toEndOf="@id/btnBack"
@@ -115,14 +118,86 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingTop="12dp"
-        android:paddingBottom="16dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:background="#C0000000"
+        android:paddingTop="70dp"
+        android:paddingBottom="22dp"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:background="@drawable/bg_player_scrim"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
+
+        <!-- channel: logo, name, LIVE and the time -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
+
+            <ImageView
+                android:id="@+id/imgChannelLogo"
+                android:layout_width="64dp"
+                android:layout_height="40dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="Channel logo" />
+
+            <TextView
+                android:id="@+id/txtOverlayChannel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#F2F3F5"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_player_pill"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:letterSpacing="0.12"
+                android:text="LIVE"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtChannelNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_player_chip"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textColor="#C9CDD4"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/txtClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:textColor="#F2F3F5"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <!-- NOW row -->
         <LinearLayout
@@ -135,9 +210,10 @@
                 android:id="@+id/labelNow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Now:"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:text="NOW"
+                android:letterSpacing="0.12"
+                android:textColor="#A894FF"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -149,16 +225,17 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="No Program Info"
-                android:textColor="#DDDDDD"
-                android:textSize="13sp" />
+                android:textColor="#F2F3F5"
+                android:textSize="17sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/txtNowTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="03:01 PM - 03:31 PM"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#C9CDD4"
+                android:textSize="13sp" />
         </LinearLayout>
 
         <!-- Progress bar (EPG progress strip) -->
@@ -172,14 +249,14 @@
                 android:id="@+id/epgTrack"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#333333" />
+                android:background="@drawable/bg_player_track" />
 
             <View
                 android:id="@+id/epgProgress"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_gravity="start"
-                android:background="#FFC107" />
+                android:background="@drawable/bg_player_progress" />
         </FrameLayout>
 
         <!-- NEXT row -->
@@ -193,9 +270,10 @@
                 android:id="@+id/labelNext"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Next:"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:text="NEXT"
+                android:letterSpacing="0.12"
+                android:textColor="#9BA1AD"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -207,216 +285,236 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text=""
-                android:textColor="#DDDDDD"
-                android:textSize="13sp" />
+                android:textColor="#B0B5BF"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/txtNextTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="03:31 PM - 04:00 PM"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+                android:textColor="#9BA1AD"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- Divider -->
-        <View
+        <!-- the focused button's name -->
+        <TextView
+            android:id="@+id/txtFocusLabel"
             android:layout_width="match_parent"
-            android:layout_height="12dp"
-            android:background="@android:color/transparent" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:letterSpacing="0.06"
+            android:textColor="#C9CDD4"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-        <!-- Playback controls row -->
+        <!-- Controls: a glass dock for watching (guide, MultiView, chat, AI) on the left, the play cluster in the
+             middle, a dock for picture / sound / connection on the right. Equal-width sides keep Play centred. -->
         <LinearLayout
             android:id="@+id/controlsRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
-            <!-- equal-width side groups keep the playback buttons centred
-                 even when Secure Relay's server button appears -->
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="horizontal"
-                android:gravity="start|center_vertical">
+                android:layout_weight="1">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="6dp"
+                    android:background="@drawable/bg_player_dock">
+                    <ImageButton
+                        android:id="@+id/btnProgram"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="What's on"
+                        android:src="@drawable/ic_program_info"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnGrid"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="MultiView"
+                        android:src="@drawable/ic_grid"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnChat"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Live chat"
+                        android:src="@drawable/ic_watch_chat"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnAi"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="AI assistant"
+                        android:src="@drawable/ic_ai"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                </LinearLayout>
+            </FrameLayout>
 
-                <!-- Info Button -->
-                <ImageButton
-                    android:id="@+id/btnProgram"
-                    android:contentDescription="What's playing"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_program_info"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <Space android:layout_width="8dp" android:layout_height="1dp"/>
-
-                <ImageButton
-                    android:id="@+id/btnInfo"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_info"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-                <!-- Secure Relay (same as the Live TV / Favorites / EPG full screen) -->
-                <ImageButton
-                    android:id="@+id/btnVpn"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_vpn"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-                <ImageButton
-                    android:id="@+id/btnVpnRotate"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_refresh"
-                    android:tint="#FFFFFF"
-                    android:visibility="gone"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <!-- Center Controls (Prev, Play, Next) -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical">
-
+                android:gravity="center_vertical"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp">
                 <ImageButton
                     android:id="@+id/btnPrev"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:padding="14dp"
-                    android:background="@drawable/bg_btn_focus_selector"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="15dp"
+                    android:background="@drawable/bg_player_btn"
+                    android:contentDescription="Previous channel"
                     android:src="@drawable/ic_prev"
                     android:tint="#FFFFFF"
                     android:focusable="true" />
-
-                <Space android:layout_width="12dp" android:layout_height="1dp" />
-
                 <ImageButton
                     android:id="@+id/btnPlayPause"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:padding="16dp"
-                    android:background="@drawable/bg_btn_focus_selector"
+                    android:layout_width="68dp"
+                    android:layout_height="68dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="20dp"
+                    android:background="@drawable/bg_player_play"
+                    android:contentDescription="Play / pause"
                     android:src="@drawable/ic_pause"
                     android:tint="#FFFFFF"
                     android:focusable="true" />
-
-                <Space android:layout_width="12dp" android:layout_height="1dp" />
-
                 <ImageButton
                     android:id="@+id/btnNext"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:padding="14dp"
-                    android:background="@drawable/bg_btn_focus_selector"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="15dp"
+                    android:background="@drawable/bg_player_btn"
+                    android:contentDescription="Next channel"
                     android:src="@drawable/ic_next"
                     android:tint="#FFFFFF"
                     android:focusable="true" />
             </LinearLayout>
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="horizontal"
-                android:gravity="end|center_vertical">
-
-                <Space android:layout_width="8dp" android:layout_height="1dp" />
-
-                <!-- CC (Subtitle) Button -->
-                <ImageButton
-                    android:id="@+id/btnSubtitle"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_cc_on"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <ImageButton
-                    android:id="@+id/btnAutoVolume"
-                    android:contentDescription="Auto Volume Leveling"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_auto_volume"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <ImageButton
-                    android:id="@+id/btnDecoder"
-                    android:contentDescription="Hardware / software decoding"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_decoder"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <!-- Grid Button -->
-                <!-- gap: audio/video settings | navigation + help -->
-                <Space android:layout_width="20dp" android:layout_height="1dp"/>
-
-                <ImageButton
-                    android:id="@+id/btnGrid"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="10dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:src="@drawable/ic_grid"
-                    android:tint="#FFFFFF"
-                    android:focusable="true" />
-
-                <!-- AI assistant (see-through chat panel over the playing channel) -->
-                <ImageButton
-                    android:id="@+id/btnAi"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp"
-                    android:padding="11dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:contentDescription="AI assistant"
-                    android:src="@drawable/ic_ai"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
-
-                <!-- Live Chat / Watch Party (panel on the right, the picture moves left) -->
-                <ImageButton
-                    android:id="@+id/btnChat"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp"
-                    android:padding="11dp"
-                    android:background="@drawable/bg_btn_focus_selector"
-                    android:contentDescription="Live chat"
-                    android:src="@drawable/ic_watch_chat"
-                    android:tint="#FFFFFF"
-                    android:focusable="true"/>
-            </LinearLayout>
+                android:layout_weight="1">
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="6dp"
+                    android:layout_gravity="end"
+                    android:background="@drawable/bg_player_dock">
+                    <ImageButton
+                        android:id="@+id/btnSubtitle"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Subtitles"
+                        android:src="@drawable/ic_cc_on"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnAutoVolume"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Auto volume"
+                        android:src="@drawable/ic_auto_volume"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnDecoder"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Decoding (hardware / software)"
+                        android:src="@drawable/ic_decoder"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnInfo"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Stream info"
+                        android:src="@drawable/ic_info"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnVpn"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="VPN"
+                        android:src="@drawable/ic_vpn"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnVpnRotate"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Change VPN server"
+                        android:src="@drawable/ic_refresh"
+                        android:tint="#FFFFFF"
+                        android:visibility="gone"
+                        android:focusable="true" />
+                </LinearLayout>
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
 

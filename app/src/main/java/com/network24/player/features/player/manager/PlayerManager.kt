@@ -529,6 +529,7 @@ object PlayerManager {
                     .build()
 
                     .apply {
+                        com.network24.player.core.diagnostics.PlaybackLog.start()
 
 
 
@@ -564,6 +565,7 @@ object PlayerManager {
                                     ) {
 
                                         rebufferCount++
+                                        com.network24.player.core.diagnostics.PlaybackLog.add(com.network24.player.core.diagnostics.PlaybackLog.Kind.BUFFER, "Buffering started")
 
                                         bufferingStartedAtMs =
                                             System.currentTimeMillis()
@@ -602,6 +604,7 @@ object PlayerManager {
                                         ) {
 
                                             totalBufferingMs += duration
+                                            com.network24.player.core.diagnostics.PlaybackLog.add(com.network24.player.core.diagnostics.PlaybackLog.Kind.BUFFER_END, "Picture back after " + String.format(java.util.Locale.US, "%.1f s", duration / 1000.0))
                                         }
 
 
@@ -621,6 +624,12 @@ object PlayerManager {
                                                     liveRecoveryAttempt > 0 ||
                                                     liveRecoveryJob?.isActive == true
 
+                                        if (!playbackActuallyStarted && streamRequestedAtMs > 0L) {
+                                            val startup = SystemClock.elapsedRealtime() - streamRequestedAtMs
+                                            com.network24.player.core.diagnostics.PlaybackLog.lastStartupMs = startup
+                                            com.network24.player.core.diagnostics.PlaybackLog.add(com.network24.player.core.diagnostics.PlaybackLog.Kind.START, "Started in " + String.format(java.util.Locale.US, "%.1f s", startup / 1000.0))
+                                        }
+                                        if (wasRecovering) com.network24.player.core.diagnostics.PlaybackLog.add(com.network24.player.core.diagnostics.PlaybackLog.Kind.RECOVERED, "Recovered automatically")
                                         hasStartedPlaying = true
                                         playbackActuallyStarted = true
 
@@ -885,6 +894,7 @@ object PlayerManager {
             resetDiagnostics()
 
             ConnectionTimingTracker.reset()
+            com.network24.player.core.diagnostics.PlaybackLog.newChannel(PlayerState.currentChannel()?.name ?: "Channel opened")
 
 
 
@@ -1130,6 +1140,7 @@ object PlayerManager {
                 return@launch
             }
 
+            com.network24.player.core.diagnostics.PlaybackLog.add(com.network24.player.core.diagnostics.PlaybackLog.Kind.ERROR, error.errorCodeName)
             lastError = error
             streamErrorType = when (error.errorCode) {
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,

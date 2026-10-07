@@ -1,5 +1,6 @@
 package com.network24.player.features.player.activity
 
+import coil.load
 import com.network24.player.features.support.ai.AiAssistantDrawer
 import com.network24.player.features.player.ui.SubtitlePlacement
 import com.network24.player.features.vpn.util.FullscreenVpnToggle
@@ -545,6 +546,13 @@ class PlayerActivity : BaseActivity() {
         // Same Secure Relay controls as the Live TV / Favorites / EPG full-screen
         // players (the aspect-ratio button was replaced there already).
         vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
+        // the name of the focused control shows above the buttons (the icons alone said little)
+        binding.root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
+            var p: android.view.ViewParent? = now?.parent
+            var inControls = false
+            while (p != null) { if (p === binding.controlsRow) { inControls = true; break }; p = p.parent }
+            binding.txtFocusLabel.text = if (inControls) now?.contentDescription ?: "" else ""
+        }
         aiDrawer = AiAssistantDrawer(this, binding.btnAi)
         programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.btnProgram) { aiDrawer.close(); chatPanel.close() }
         chatPanel = com.network24.player.features.chat.ChatPanel(this, binding.btnChat)
@@ -554,32 +562,11 @@ class PlayerActivity : BaseActivity() {
         com.network24.player.core.player.SoftwareDecodingButton.bind(this, binding.btnDecoder) { showUiWithTimeout() }
         vpnToggle.register()
 
+        // MultiView brings its own channel picker (every category), so it opens even when this player
+        // was started with a single channel (Home "Watch now", Search, reminders)
         binding.btnGrid.setOnClickListener {
-
-
-            if (PlayerState.channels.size < 2) {
-
-
-                Toast.makeText(
-                    this,
-                    "Multi-view needs at least 2 channels",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-
-            } else {
-
-
-                startActivity(
-                    Intent(
-                        this,
-                        MultiViewActivity::class.java
-                    )
-                )
-
-
-                showUiWithTimeout()
-            }
+            startActivity(Intent(this, MultiViewActivity::class.java))
+            showUiWithTimeout()
         }
 
 
@@ -888,6 +875,7 @@ class PlayerActivity : BaseActivity() {
 
 
         if (binding.bottomOverlay.visibility != View.VISIBLE) {
+            binding.txtClock.text = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date())
 
 
 
@@ -1296,8 +1284,14 @@ class PlayerActivity : BaseActivity() {
 
 
 
-        binding.txtChannelTitle.text =
-            "$streamId${channel.name ?: "Unknown Channel"}"
+        // the name, number and logo are in the info panel now; the top bar keeps only Back
+        binding.txtChannelTitle.text = ""
+
+        // the info panel: logo, name without the country prefix, channel number
+        binding.txtOverlayChannel.text = (channel.name ?: "Unknown Channel").replace(Regex("^[A-Z]{2,3}(-[A-Z]+)?\\s*\\|\\s*"), "").trim()
+        binding.txtChannelNumber.text = channel.num?.let { "CH $it" } ?: ""
+        binding.txtChannelNumber.visibility = if (channel.num != null) View.VISIBLE else View.GONE
+        binding.imgChannelLogo.load(channel.stream_icon?.takeIf { it.isNotBlank() }) { error(R.drawable.app_logo) }
 
 
 

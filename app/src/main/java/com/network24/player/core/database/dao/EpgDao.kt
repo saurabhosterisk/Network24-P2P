@@ -88,6 +88,20 @@ interface EpgDao {
         toTs: Long
     ): List<EpgEntity>
 
+    /** Programmes whose title matches and that ended between [fromTs] and [toTs] (search: shows to watch in Catch-up). */
+    @Query("""
+        SELECT * FROM epg
+        WHERE title IS NOT NULL
+          AND LOWER(title) LIKE '%' || LOWER(:query) || '%'
+          AND startTimestamp IS NOT NULL
+          AND stopTimestamp IS NOT NULL
+          AND stopTimestamp > :fromTs
+          AND stopTimestamp <= :toTs
+        ORDER BY startTimestamp DESC
+        LIMIT 200
+    """)
+    suspend fun searchProgramsEnded(query: String, fromTs: Long, toTs: Long): List<EpgEntity>
+
     /**
      * Finds programme titles that are currently airing or start before the
      * supplied window closes. The title filter is case-insensitive so partial

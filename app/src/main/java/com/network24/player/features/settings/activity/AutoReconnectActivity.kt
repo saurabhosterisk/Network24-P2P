@@ -55,61 +55,39 @@ class AutoReconnectActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val contentRoot = layoutInflater.inflate(R.layout.activity_auto_reconnect, null, false) as ViewGroup
-        setContentView(setupGlobalRightDrawer(contentRoot, contentRoot.findViewById(R.id.btnMore)))
+        // built in code in the app's look
+        kit = SettingsKit(this)
+        val page = kit.page("Auto reconnect", "What the player does when a channel stops")
+        page.hero.addView(kit.orb(R.drawable.ic_tv))
+        page.hero.addView(kit.text("NOW", 10f, kit.textSub, 800).apply { letterSpacing = 0.14f; setPadding(0, kit.dp(22), 0, 0) })
+        statusTitle = kit.text("", 24f, kit.textMain, 800).apply { setPadding(0, kit.dp(6), 0, 0) }
+        page.hero.addView(statusTitle)
+        statusDetail = kit.text("", 13f, kit.textSub, 600, lines = 4).apply { setPadding(0, kit.dp(8), 0, 0); setLineSpacing(0f, 1.15f) }
+        page.hero.addView(statusDetail)
+        page.content.addView(kit.label("Choose"))
+        optionsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
+        page.content.addView(optionsContainer)
+        page.content.addView(kit.text("A short drop on the stream is fixed by retrying; if a channel is really down you see why after the last try.", 12f, kit.textSub, 500, lines = 3).apply { setPadding(kit.dp(4), kit.dp(10), 0, 0) })
+        setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         prefs = PreferenceManager(this)
-        statusTitle = findViewById(R.id.reconnectStatusTitle)
-        statusDetail = findViewById(R.id.reconnectStatusDetail)
-        optionsContainer = findViewById(R.id.reconnectOptions)
-
-        findViewById<View>(R.id.autoReconnectBack).setOnClickListener { finish() }
 
         buildOptions()
         bindStatus()
     }
 
+    private lateinit var kit: SettingsKit
+    private var focusedOnce = false
+
     private fun buildOptions() {
+        val hadFocus = optionsContainer.hasFocus()
         optionsContainer.removeAllViews()
         val selected = prefs.getAutoReconnectMode()
-        val density = resources.displayMetrics.density
-        options.forEach { option ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_settings_action)
-                isClickable = true
-                isFocusable = true
-                setPadding((18 * density).toInt(), 0, (18 * density).toInt(), 0)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, (64 * density).toInt()
-                ).apply { topMargin = (10 * density).toInt() }
-                setOnClickListener { selectMode(option.mode) }
-            }
-            val texts = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            }
-            texts.addView(TextView(this).apply {
-                text = option.title
-                textSize = 16f
-                setTextColor(getColor(R.color.text_primary))
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            })
-            texts.addView(TextView(this).apply {
-                text = option.subtitle
-                textSize = 12f
-                setTextColor(getColor(R.color.text_hint))
-            })
-            row.addView(texts)
-            row.addView(TextView(this).apply {
-                text = "✓"
-                textSize = 22f
-                setTextColor(getColor(R.color.primary_light))
-                visibility = if (option.mode == selected) View.VISIBLE else View.INVISIBLE
-            })
-            optionsContainer.addView(row)
+        options.forEach { o ->
+            optionsContainer.addView(kit.option(o.title, o.subtitle.removePrefix("Recommended • "), o.mode == selected, if (o.mode == AutoReconnectMode.STANDARD) "RECOMMENDED" else null) { selectMode(o.mode) }.apply { tag = o.mode })
         }
+        val target = optionsContainer.findViewWithTag<View>(selected)
+        if (hadFocus || !focusedOnce) { focusedOnce = true; target?.post { target.requestFocus() } }
     }
 
     private fun selectMode(mode: AutoReconnectMode) {

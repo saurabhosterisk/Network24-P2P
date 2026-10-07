@@ -70,7 +70,6 @@ class AiAssistantDrawer(
         Quick("No sound", "This channel has no sound", "audio"),
         Quick("TV guide wrong", "The TV guide is missing or wrong for this channel", "epg"),
         Quick("My plan", "", PLAN),
-        Quick("How do I renew?", "How do I renew my subscription?", "")
     )
 
     private val prefs = PreferenceManager(activity)
@@ -439,7 +438,7 @@ class AiAssistantDrawer(
             append(
                 when {
                     date == null -> "Your plan has no end date."
-                    days != null && days < 0 -> "It expired on $date. Tap \"How do I renew?\" to renew."
+                    days != null && days < 0 -> "It expired on $date. To keep watching, please contact the provider you got your account from."
                     else -> "It runs until $date ($days day${if (days == 1L) "" else "s"} left)."
                 }
             )

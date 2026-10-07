@@ -58,7 +58,6 @@ class DashboardActivity : BaseActivity() {
     companion object {
         const val EXTRA_REFRESH_ACCOUNT = "refresh_account_on_dashboard"
         private const val REQ_POST_NOTIFICATIONS = 9001
-        private const val PAYMENT_URL = "https://osterisktechnology.com/makepayment.html"
         private const val DISCORD_INVITE_URL = "https://discord.gg/fvPDxQK"
     }
     private lateinit var binding: ActivityDashboardBinding
@@ -96,8 +95,8 @@ class DashboardActivity : BaseActivity() {
             "TV Guide" to { open(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { open(com.network24.player.features.catchup.CatchupActivity::class.java) },
         )
-        home = com.network24.player.features.dashboard.home.HomeScreen(this, openMenu = { openRightDrawer(binding.drawerLayout) }, renew = { showRenewPaymentQr() },
-            openAccount = { open(com.network24.player.features.account.AccountActivity::class.java) }, tabs = tabs, support = { open(LiveSupportActivity::class.java) })
+        home = com.network24.player.features.dashboard.home.HomeScreen(this, openMenu = { openRightDrawer(binding.drawerLayout) },
+            openAccount = { com.network24.player.features.account.AccountCenter.show(this) }, tabs = tabs, support = { com.network24.player.features.help.HelpCenter.show(this) })
         binding.headerCard.visibility = View.GONE; binding.menuContainer.visibility = View.GONE; binding.accountCard.visibility = View.GONE
         binding.contentRoot.setPadding(0, 0, 0, 0)
         binding.contentRoot.addView(home.root, androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(0, 0).apply {
@@ -116,6 +115,8 @@ class DashboardActivity : BaseActivity() {
             && !binding.drawerLayout.isDrawerOpen(binding.rightNav) && home.handleBack()) return true
         return super.dispatchKeyEvent(event)
     }
+
+    override fun onUpdateClosed() { if (::home.isInitialized) home.focusWatch() }
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN && ::home.isInitialized) home.userActive()
@@ -158,7 +159,7 @@ class DashboardActivity : BaseActivity() {
     private fun askNotificationPermissionIfNeeded() { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_POST_NOTIFICATIONS) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults) }
     private fun hasCredentials() = prefs.getServer().isNotBlank() && prefs.getUsername().isNotBlank() && prefs.getPassword().isNotBlank()
-    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val expired = expiryDate.time <= System.currentTimeMillis(); val remainingDays = com.network24.player.core.util.ExpiryDays.from(expiryDate.time); binding.txtRemaining.text = when { expired -> "Expired"; remainingDays == 0L -> "Ends today"; remainingDays == 1L -> "1 Day"; else -> "$remainingDays Days" }; binding.btnRenew.visibility = if (remainingDays <= 15) View.VISIBLE else View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE }; if (::home.isInitialized) home.refreshAccount() }
+    private fun loadDashboard() { binding.txtUserName.text = prefs.getUsername(); binding.txtStatus.text = prefs.getStatus(); binding.txtPlan.text = if (prefs.isTrial()) "Trial" else "Premium"; binding.txtConnections.text = "${prefs.getActiveConnections()} / ${prefs.getMaxConnections()}"; val expiry = prefs.getExpiry(); if (expiry > 0) { val expiryDate = Date(expiry * 1000); binding.txtExpiry.text = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate); val expired = expiryDate.time <= System.currentTimeMillis(); val remainingDays = com.network24.player.core.util.ExpiryDays.from(expiryDate.time); binding.txtRemaining.text = when { expired -> "Expired"; remainingDays == 0L -> "Ends today"; remainingDays == 1L -> "1 Day"; else -> "$remainingDays Days" }; binding.btnRenew.visibility = View.GONE } else { binding.txtExpiry.text = "--"; binding.txtRemaining.text = "--"; binding.btnRenew.visibility = View.GONE }; if (::home.isInitialized) home.refreshAccount() }
 
     private fun refreshAccountInfo() {
         if (isAccountRefreshRunning || !hasCredentials()) return
@@ -211,17 +212,16 @@ class DashboardActivity : BaseActivity() {
             when (itemId) {
                 R.id.action_home -> { refreshAccountInfo(); closeRightDrawer(binding.drawerLayout); true }
                 R.id.action_recently_watched -> { startActivity(Intent(this, RecentlyWatchedActivity::class.java)); true }
-                R.id.action_refresh_all -> { syncInitialData(true); true }
-                R.id.action_refresh_guide -> { refreshTvGuide(); true }
-                R.id.action_master_search -> { startActivity(Intent(this, MasterChannelSearchActivity::class.java)); true }
+                R.id.action_refresh_all -> { updateEverything(); true }
+                R.id.action_refresh_guide -> { updateEverything(); true }
+                R.id.action_master_search -> { com.network24.player.features.search.SearchOverlay.show(this); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 R.id.action_exit_app -> { confirmExitApp(); true }
                 R.id.action_events -> { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)); true }
                 R.id.action_trending -> { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)); true }
                 R.id.action_catchup -> { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)); true }
-                R.id.action_find_show -> { startActivity(Intent(this, com.network24.player.features.discover.ShowSearchActivity::class.java)); true }
                 R.id.action_reminders -> { startActivity(Intent(this, com.network24.player.features.reminders.RemindersActivity::class.java)); true }
-                R.id.action_account -> { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)); true }
+                R.id.action_account -> { com.network24.player.features.account.AccountCenter.show(this); true }
                 else -> false
             }
         }
@@ -238,20 +238,18 @@ class DashboardActivity : BaseActivity() {
         binding.cardLiveTv.setOnClickListener { startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java)) }
         binding.cardFavorites.setOnClickListener { startActivity(Intent(this, FavoriteChannelsActivity::class.java)) }
         binding.cardNotification.setOnClickListener { openCinemaPro3() }
-        binding.cardSupport.setOnClickListener { startActivity(Intent(this, LiveSupportActivity::class.java)) }
+        binding.cardSupport.setOnClickListener { com.network24.player.features.help.HelpCenter.show(this) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
         binding.cardLiveEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.guide.TvGuideActivity::class.java)) }
         binding.cardEvents.setOnClickListener { startActivity(Intent(this, com.network24.player.features.sports.SportsActivity::class.java)) }
         binding.cardCatchup.setOnClickListener { startActivity(Intent(this, com.network24.player.features.catchup.CatchupActivity::class.java)) }
         binding.cardTrending.setOnClickListener { startActivity(Intent(this, com.network24.player.features.discover.TrendingActivity::class.java)) }
-        binding.accountCard.setOnClickListener { startActivity(Intent(this, com.network24.player.features.account.AccountActivity::class.java)) }
-        binding.btnRenew.setOnClickListener { showRenewPaymentQr() }
+        binding.accountCard.setOnClickListener { com.network24.player.features.account.AccountCenter.show(this) }
     }
 
     private fun openCinemaPro3() = com.network24.player.features.discover.CinemaPro.open(this)
     private fun showDiscordJoin() { val qrSize = 720; val matrix: BitMatrix = MultiFormatWriter().encode(DISCORD_INVITE_URL, BarcodeFormat.QR_CODE, qrSize, qrSize); val pixels = IntArray(qrSize * qrSize); for (y in 0 until qrSize) { val offset = y * qrSize; for (x in 0 until qrSize) pixels[offset + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE }; val qrBitmap = Bitmap.createBitmap(pixels, 0, qrSize, qrSize, qrSize, Bitmap.Config.ARGB_8888); val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(28, 8, 28, 12) }; val instruction = TextView(this).apply { text = "Join our Discord community"; gravity = Gravity.CENTER; textSize = 18f; setTextColor(Color.rgb(30, 30, 30)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(0, 4, 0, 10) }; val steps = TextView(this).apply { text = "1. Open your phone's camera.\n2. Point the camera at the QR code below.\n3. Tap the link that appears on your phone.\n4. Tap Join in Discord to enter the server."; gravity = Gravity.CENTER; textSize = 15f; setTextColor(Color.DKGRAY); setLineSpacing(2f, 1.05f); setPadding(8, 0, 8, 10) }; val imageView = ImageView(this).apply { setImageBitmap(qrBitmap); adjustViewBounds = true; setPadding(8, 8, 8, 12); contentDescription = "QR code to join our Discord server" }; val linkView = TextView(this).apply { text = DISCORD_INVITE_URL; gravity = Gravity.CENTER; textSize = 14f; setTextColor(Color.rgb(88, 101, 242)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(8, 2, 8, 8) }; container.addView(instruction); container.addView(steps); container.addView(imageView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)); container.addView(linkView); AlertDialog.Builder(this).setView(container).setNegativeButton("Close", null).setPositiveButton("Open Discord") { _, _ -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL))) }.show() }
 
-    private fun showRenewPaymentQr() { val qrSize = 720; val matrix: BitMatrix = MultiFormatWriter().encode(PAYMENT_URL, BarcodeFormat.QR_CODE, qrSize, qrSize); val pixels = IntArray(qrSize * qrSize); for (y in 0 until qrSize) { val offset = y * qrSize; for (x in 0 until qrSize) pixels[offset + x] = if (matrix[x, y]) Color.BLACK else Color.WHITE }; val qrBitmap = Bitmap.createBitmap(pixels, 0, qrSize, qrSize, qrSize, Bitmap.Config.ARGB_8888); val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(28, 8, 28, 12) }; val instruction = TextView(this).apply { text = "Renew your subscription in just a few steps"; gravity = Gravity.CENTER; textSize = 18f; setTextColor(Color.rgb(30, 30, 30)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(0, 4, 0, 10) }; val steps = TextView(this).apply { text = "1. Open your phone's camera.\n2. Point the camera at the QR code below.\n3. Tap the link that appears on your phone.\n4. Follow the instructions on the payment page to renew your subscription."; gravity = Gravity.CENTER; textSize = 15f; setTextColor(Color.DKGRAY); setLineSpacing(2f, 1.05f); setPadding(8, 0, 8, 10) }; val imageView = ImageView(this).apply { setImageBitmap(qrBitmap); adjustViewBounds = true; setPadding(8, 8, 8, 12); contentDescription = "QR code to open the subscription payment page" }; val scanHint = TextView(this).apply { text = "📱 Scan this code with another phone to open the payment page."; gravity = Gravity.CENTER; textSize = 14f; setTextColor(Color.rgb(55, 55, 55)); setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(8, 2, 8, 8) }; container.addView(instruction); container.addView(steps); container.addView(imageView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)); container.addView(scanHint); AlertDialog.Builder(this).setView(container).setNegativeButton("Close", null).setPositiveButton("Open Payment Page") { _, _ -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PAYMENT_URL))) }.show() }
     private fun syncInitialData(forceRefresh: Boolean = false) {
         if (!hasCredentials() || isInitialSyncRunning) return
         if (prefs.isFirstSetupPending()) { runFirstSetup(); return }

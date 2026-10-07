@@ -139,6 +139,8 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     }
 
     fun close() {
+        // never opened yet: nothing built to close (the AI / guide panels call this when they open)
+        if (frame == null) { isOpen = false; return }
         isOpen = false
         back.isEnabled = false
         loop?.cancel()

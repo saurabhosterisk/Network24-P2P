@@ -31,7 +31,9 @@ class ParentalLockActivity : BaseActivity() {
     private lateinit var prefs: PreferenceManager
     private lateinit var repository: LiveRepository
     private lateinit var webState: WebStateRepository
-    private lateinit var adapter: ManageCategoryAdapter
+    private lateinit var adapter: com.network24.player.features.settings.activity.SettingsKit.CategorySwitches
+    private lateinit var kit: com.network24.player.features.settings.activity.SettingsKit
+    private lateinit var stateChip: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -48,26 +50,44 @@ class ParentalLockActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val contentRoot = layoutInflater.inflate(R.layout.activity_parental_lock, null, false) as ViewGroup
-        setContentView(setupGlobalRightDrawer(contentRoot, contentRoot.findViewById(R.id.btnMore)))
+        // built in code in the app's look: the lock and its PIN on the left, the categories on the right
+        kit = com.network24.player.features.settings.activity.SettingsKit(this)
+        val page = kit.page("Parental lock", "Lock categories with a PIN - here and on play.web24.live", heroWidth = 360, scrolls = false)
+        val top = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        top.addView(kit.orb(R.drawable.ic_lock, 52))
+        stateChip = kit.text("", 11f, kit.textMain, 800).apply { letterSpacing = 0.1f; setPadding(kit.dp(10), kit.dp(5), kit.dp(10), kit.dp(5)) }
+        top.addView(stateChip, android.widget.LinearLayout.LayoutParams(-2, -2).apply { marginStart = kit.dp(14) })
+        page.hero.addView(top)
+        status = kit.text("", 12f, kit.textSub, 600, lines = 9).apply { setPadding(0, kit.dp(14), 0, 0); setLineSpacing(0f, 1.15f) }
+        page.hero.addView(status)
+        pinFirst = kit.pinField("PIN")
+        page.hero.addView(pinFirst, android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(14) })
+        pinSecond = kit.pinField("PIN")
+        page.hero.addView(pinSecond, android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(8) })
+        error = kit.text("", 12f, kit.bad, 700, lines = 3).apply { visibility = View.GONE; setPadding(0, kit.dp(8), 0, 0) }
+        page.hero.addView(error)
+        btnSave = kit.button("Turn on", true) {}
+        page.hero.addView(btnSave, android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(14) })
+        val row2 = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        btnOff = kit.button("Turn off", false, danger = true) {}
+        row2.addView(btnOff, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+        btnLockNow = kit.button("Lock now", false) {}
+        row2.addView(btnLockNow, android.widget.LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = kit.dp(8) })
+        page.hero.addView(row2, android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(8) })
+        page.content.addView(kit.label("Categories to lock"))
+        progress = kit.progressBar()
+        page.content.addView(progress, android.widget.LinearLayout.LayoutParams(-1, kit.dp(4)))
+        recycler = RecyclerView(this).apply { clipToPadding = false; setPadding(kit.dp(4), kit.dp(6), kit.dp(4), kit.dp(30)); isVerticalFadingEdgeEnabled = true; setFadingEdgeLength(kit.dp(24)) }
+        page.content.addView(recycler, android.widget.LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         prefs = PreferenceManager(this)
         repository = LiveRepository(this)
         webState = WebStateRepository(this)
 
-        findViewById<View>(R.id.parentalBack).setOnClickListener { finish() }
-        recycler = findViewById(R.id.rvParental)
-        progress = findViewById(R.id.progressParental)
-        status = findViewById(R.id.parentalStatus)
-        pinFirst = findViewById(R.id.pinFirst)
-        pinSecond = findViewById(R.id.pinSecond)
-        error = findViewById(R.id.parentalError)
-        btnSave = findViewById(R.id.btnLockSave)
-        btnOff = findViewById(R.id.btnLockOff)
-        btnLockNow = findViewById(R.id.btnLockNow)
 
         // switch on = locked
-        adapter = ManageCategoryAdapter(onLabel = "Locked", offLabel = "Not locked") { category, locked ->
+        adapter = kit.CategorySwitches("Locked", "Not locked") { category, locked ->
             if (locked) selected.add(category.category_id) else selected.remove(category.category_id)
         }
         recycler.layoutManager = LinearLayoutManager(this)
@@ -114,6 +134,9 @@ class ParentalLockActivity : BaseActivity() {
 
     private fun render() {
         val enabled = ParentalLock.isEnabled(this)
+        stateChip.text = if (enabled) "ON  ·  ${ParentalLock.lockedIds(this).size} LOCKED" else "OFF"
+        stateChip.setTextColor(if (enabled) kit.bg else kit.textMain)
+        stateChip.background = kit.shape(if (enabled) kit.good else 0x26FFFFFF, 8f)
         val allIds = categories.map { it.category_id }.toSet()
         adapter.updateList(categories, allIds - selected)
         status.text = if (enabled) {

@@ -13,7 +13,7 @@ import androidx.media3.ui.PlayerView
 object SubtitlePlacement {
 
     // The bottom overlay covers roughly the lower 30 % of the screen; captions already sit ~8 % above the edge.
-    private const val LIFT_FRACTION = 0.26f
+    private const val LIFT_FRACTION = 0.43f  // the info panel now covers the lower ~45 %
     private const val ANIM_MS = 200L
 
     fun update(playerView: PlayerView, controlsVisible: Boolean) {
