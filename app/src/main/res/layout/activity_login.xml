@@ -90,15 +90,15 @@
                 android:layout_marginTop="20dp"
                 android:includeFontPadding="false"
                 android:lineSpacingMultiplier="1.1"
-                android:text="The future of IPTV,&#10;driven by AI."
+                android:text="TV that thinks&#10;ahead of you."
                 android:textColor="#F2F3F5"
                 android:textSize="28sp"
                 android:textStyle="bold" />
 
             <!-- three promises - all real features of the app (AI auto-fix, smart search, AI assistant / remote help) -->
-            <TextView style="@style/N24LoginLine" android:layout_marginTop="16dp" android:text="✦  Channels that fix themselves." />
-            <TextView style="@style/N24LoginLine" android:text="✦  Search that understands you." />
-            <TextView style="@style/N24LoginLine" android:text="✦  Help before you even ask." />
+            <TextView style="@style/N24LoginLine" android:layout_marginTop="16dp" android:text="✦  Thousands of live channels. Zero hunting." />
+            <TextView style="@style/N24LoginLine" android:text="✦  Streams that heal themselves." />
+            <TextView style="@style/N24LoginLine" android:text="✦  Just ask for what you want to watch." />
 
             <!-- the TV code card (TvCodePanel) is added here in code -->
         </LinearLayout>
@@ -131,7 +131,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
-            android:text="Welcome back"
+            android:text="Welcome home"
             android:textColor="#F2F3F5"
             android:textSize="28sp"
             android:textStyle="bold" />
@@ -141,7 +141,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Sign in with your Network24 account"
+            android:text="Sign in to pick up where you left off."
             android:textColor="#9BA1AD"
             android:textSize="15sp" />
 

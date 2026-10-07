@@ -83,12 +83,41 @@ class LoginActivity : BaseActivity() {
             login()
         }
 
-        // Remote Help: sign in with a code that support types in the console (or the customer on the phone)
-        tvCode = com.network24.player.core.remote.TvCodePanel(this, binding.brandingContainer) { u, p ->
+        // Remote Help: sign in with a code that support types in the console (or the customer on the phone).
+        // Only on a TV: a phone has a keyboard, and it cannot scan its own QR.
+        if (isTv) tvCode = com.network24.player.core.remote.TvCodePanel(this, binding.brandingContainer) { u, p ->
             binding.edtUsername.setText(u); binding.edtPassword.setText(p); binding.chkRemember.isChecked = true
             login()
         }
         addHelpButton()
+        fitToScreen()
+    }
+
+    private val isTv by lazy {
+        packageManager.hasSystemFeature("android.software.leanback") ||
+            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+    }
+
+    /**
+     * Phones in landscape are short (~380 dp): the brand side and the sign-in card were cut at the top and bottom.
+     * Each side is scaled down just enough to fit. The tallest height seen is used, so the keyboard does not shrink them.
+     */
+    private fun fitToScreen() {
+        var tallest = 0
+        binding.root.addOnLayoutChangeListener { root, _, _, _, _, _, _, _, _ ->
+            tallest = maxOf(tallest, root.height)
+            val room = tallest - 2 * (16 * resources.displayMetrics.density)
+            fun fit(v: android.view.View, pivotLeft: Boolean) {
+                val h = v.height
+                if (h <= 0 || room <= 0) return
+                val s = minOf(1f, room / h)
+                v.pivotX = if (pivotLeft) 0f else v.width / 2f
+                v.pivotY = h / 2f
+                if (v.scaleX != s) { v.scaleX = s; v.scaleY = s }
+            }
+            fit(binding.brandingContainer, true)
+            fit(binding.loginContainer, false)
+        }
     }
 
     private var tvCode: com.network24.player.core.remote.TvCodePanel? = null
@@ -107,7 +136,7 @@ class LoginActivity : BaseActivity() {
             isFocusable = true; isClickable = true
             setOnClickListener { com.network24.player.core.remote.HelpSession.request(this@LoginActivity) }
         }
-        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (12 * d).toInt() })
+        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams(if (isTv) (360 * d).toInt() else -2, -2).apply { topMargin = ((if (isTv) 12 else 22) * d).toInt() })
     }
 
     override fun onPause() {
