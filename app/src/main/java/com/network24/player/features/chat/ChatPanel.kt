@@ -67,7 +67,7 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     private val db by lazy { DatabaseProvider.get(activity) }
     private val res = activity.resources
     private val uiScale = res.displayMetrics.let { m -> minOf(1f, m.widthPixels / m.density / 960f, m.heightPixels / m.density / 400f) }
-    private val d = res.displayMetrics.density * uiScale
+    private val d = res.displayMetrics.density * uiScale * 0.92f
     private fun dp(v: Int) = (v * d).toInt()
     private fun dpf(v: Float) = v * d
 
@@ -94,6 +94,20 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     private lateinit var input: EditText
     private lateinit var mic: ImageView
     private lateinit var status: TextView
+    private lateinit var tabChat: TextView
+    private lateinit var tabParty: TextView
+    private lateinit var chatHint: TextView
+    private lateinit var partyView: ScrollView
+    private lateinit var partyBox: LinearLayout
+    private lateinit var reactsRow: View
+    private lateinit var typeRow: View
+    private var onPartyTab = false
+    private var partyInfo: ChatApi.Room? = null
+    private var partyCode = ""
+    private var membersText: TextView? = null
+    private var emptyHint: TextView? = null
+    private lateinit var helpBar: TextView
+    private val helpDefault = "Use the arrows to move and OK to select"
     private val panelW by lazy { (res.displayMetrics.widthPixels * 0.30f).toInt().coerceIn(dp(320), dp(460)) }
 
     var isOpen = false
@@ -134,8 +148,9 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         panel.translationX = panelW.toFloat(); panel.alpha = 0f
         panel.animate().translationX(0f).alpha(1f).setDuration(220).setInterpolator(DecelerateInterpolator()).start()
         squeezeVideo(true)
+        f.post { (if (onPartyTab) tabParty else tabChat).requestFocus() }
         back.remove(); activity.onBackPressedDispatcher.addCallback(activity, back); back.isEnabled = true
-        activity.lifecycleScope.launch { if (ensureNick()) { enterRoom(); startLoop() } else close() }
+        activity.lifecycleScope.launch { if (ensureNick()) { enterRoom(); startLoop(); (if (onPartyTab) tabParty else tabChat).requestFocus() } else close() }
     }
 
     fun close() {
@@ -154,12 +169,9 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     fun handlesKey(keyCode: Int) = isOpen && keyCode in setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
         KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER)
 
-    /** The picture moves left so the chat never covers it. */
+    /** The picture keeps its full size and ratio; the chat is a glass panel over its right edge (owner: never shrink or crop it). */
     private fun squeezeVideo(on: Boolean) {
-        val v = activity.findViewById<View>(R.id.playerView) ?: return
-        val lp = v.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-        lp.marginEnd = if (on) panelW else 0
-        v.layoutParams = lp
+        activity.findViewById<View>(R.id.playerView)?.let { v -> (v.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp -> if (lp.marginEnd != 0) { lp.marginEnd = 0; v.layoutParams = lp } } }
     }
 
     // ------------------------------------------------------------------------------------------------ building
@@ -170,20 +182,28 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
 
     private fun shape(fill: Int, radius: Float, stroke: Int = 0) = GradientDrawable().apply { setColor(fill); cornerRadius = dpf(radius); if (stroke != 0) setStroke(dp(1), stroke) }
 
-    private fun focusRing(v: View, radius: Float) {
-        v.isFocusable = true; v.isClickable = true
-        val ring = GradientDrawable().apply { cornerRadius = dpf(radius); setStroke(dp(2), Color.WHITE); setColor(Color.TRANSPARENT) }
-        v.setOnFocusChangeListener { view, has -> view.foreground = if (has) ring else null; view.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(110).start() }
+    /** The focused button's job, shown in the help line at the bottom of the panel. */
+    private fun help(v: View, words: String) {
+        val old = v.onFocusChangeListener
+        v.setOnFocusChangeListener { view, has -> old?.onFocusChange(view, has); if (has) helpBar.text = words else if (helpBar.text == words) helpBar.text = helpDefault }
     }
 
-    private fun chip(label: String, onClick: () -> Unit) = text(label, 13f, textMain, 700).apply {
+    private fun focusRing(v: View, radius: Float) {
+        v.isFocusable = true; v.isFocusableInTouchMode = true; v.isClickable = true
+        val ring = GradientDrawable().apply { cornerRadius = dpf(radius); setStroke(dp(2), Color.WHITE); setColor(Color.TRANSPARENT) }
+        v.setOnFocusChangeListener { view, has -> view.foreground = if (has) ring else null }
+    }
+
+    private fun chip(label: String, hint: String = "", onClick: () -> Unit) = text(label, 13f, textMain, 700).apply {
         setPadding(dp(12), dp(7), dp(12), dp(7)); background = shape(0x1FFFFFFF, 16f); gravity = Gravity.CENTER
         setOnClickListener { onClick() }; focusRing(this, 16f)
+        if (hint.isNotEmpty()) help(this, hint)
     }
 
-    private fun icon(resId: Int, label: String, onClick: () -> Unit) = ImageView(activity).apply {
+    private fun icon(resId: Int, label: String, above: Boolean = false, onClick: () -> Unit) = ImageView(activity).apply {
         setImageResource(resId); setColorFilter(textMain); contentDescription = label; setPadding(dp(8), dp(8), dp(8), dp(8))
         background = shape(0x1AFFFFFF, 18f); setOnClickListener { onClick() }; focusRing(this, 18f)
+        help(this, label)
     }
 
     private fun isInside(group: ViewGroup, view: View): Boolean {
@@ -196,15 +216,13 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         val root = activity.findViewById<ViewGroup>(android.R.id.content)
         // the remote's focus stays inside the panel (the player's hidden controls sit underneath)
         val f = object : FrameLayout(activity) {
-            override fun focusSearch(focused: View?, direction: Int): View? {
-                val next = super.focusSearch(focused, direction)
-                return if (next == null || isInside(this, next)) next else focused
-            }
+            override fun focusSearch(focused: View?, direction: Int): View? =
+                android.view.FocusFinder.getInstance().findNextFocus(this, focused, direction) ?: focused
         }.apply { elevation = 90f; clipChildren = false }
 
         panel = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(14))
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xF00C0D12.toInt(), bg))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(18), dp(16), dp(14)); clipChildren = false; clipToPadding = false
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xD60C0D12.toInt(), 0xF40C0D12.toInt()))
             isClickable = true
         }
         f.addView(panel, FrameLayout.LayoutParams(panelW, -1, Gravity.END))
@@ -216,10 +234,19 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         sub = text("Connecting…", 11f, textSub, 600).apply { setPadding(0, dp(4), 0, 0) }
         words.addView(title); words.addView(sub)
         head.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
-        head.addView(icon(R.drawable.ic_watch_party, "Watch Party") { partyMenu() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
-        head.addView(icon(R.drawable.ic_phone_type, "Type on phone") { phone() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
-        head.addView(icon(R.drawable.ic_cu_close, "Close chat") { close() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
+        head.addView(icon(R.drawable.ic_phone_type, "Type on your phone - scan a QR code") { phone() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
+        head.addView(icon(R.drawable.ic_cu_close, "Close the chat") { close() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
         panel.addView(head)
+
+        // two clearly named tabs: the chat, and Watch Party (what it is + how to use it)
+        val tabs = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        tabChat = tab("Live chat", "Chat with everyone watching this channel right now") { setTab(false) }
+        tabParty = tab("Watch Party", "Watch the same channel together with friends, with a private chat") { setTab(true) }
+        tabs.addView(tabChat, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(6) })
+        tabs.addView(tabParty, LinearLayout.LayoutParams(0, -2, 1f))
+        panel.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        chatHint = text("", 11f, textSub, 500, lines = 2).apply { setPadding(dp(2), dp(8), dp(2), 0) }
+        panel.addView(chatHint)
 
         partyBar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8)); visibility = View.GONE
@@ -231,16 +258,20 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
 
         // messages
         list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
-        scroll = ScrollView(activity).apply { isVerticalScrollBarEnabled = false; addView(list); isVerticalFadingEdgeEnabled = true; setFadingEdgeLength(dp(24)) }
+        scroll = ScrollView(activity).apply { isVerticalScrollBarEnabled = false; isFocusable = false; addView(list); isVerticalFadingEdgeEnabled = true; setFadingEdgeLength(dp(24)) }
         panel.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8) })
         status = text("", 11f, gold, 600, lines = 2).apply { visibility = View.GONE; setPadding(0, dp(2), 0, dp(4)) }
         panel.addView(status)
 
         // one-press reactions
-        val reacts = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(2), dp(4), dp(2), dp(4)) }
-        reactions.forEach { r -> reacts.addView(chip(r) { send(r, "r") }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) }) }
-        panel.addView(HorizontalScrollView(activity).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; clipToPadding = false; addView(reacts) },
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        val reacts = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        reactions.chunked(5).forEach { part ->
+            val r1 = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+            part.forEach { r -> r1.addView(chip(r, "Send $r to everyone watching") { send(r, "r") }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6); bottomMargin = dp(6) }) }
+            reacts.addView(r1)
+        }
+        reactsRow = reacts
+        panel.addView(reactsRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
 
         // typing row
         val row = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -251,13 +282,25 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
             filters = arrayOf(android.text.InputFilter.LengthFilter(200))
             setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEND) { sendTyped(); true } else false }
         }
+        help(input, "Type a message - press OK to open the keyboard")
         row.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        mic = icon(R.drawable.ic_mic_chat, "Speak a message") { speak() }
+        mic = icon(R.drawable.ic_mic_chat, "Speak your message", above = true) { speak() }
         val canSpeak = activity.packageManager.queryIntentActivities(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
         mic.visibility = if (canSpeak) View.VISIBLE else View.GONE
         row.addView(mic, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(6) })
-        row.addView(chip("Send") { sendTyped() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+        row.addView(chip("Send", "Send your message") { sendTyped() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(6) })
+        typeRow = row
         panel.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+
+        // the Watch Party tab replaces the messages, reactions and typing row
+        partyBox = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(6), dp(10), dp(6), dp(10)) }
+        partyView = ScrollView(activity).apply { isVerticalScrollBarEnabled = false; isFocusable = false; visibility = View.GONE; clipChildren = false; clipToPadding = false; addView(partyBox) }
+        panel.addView(partyView, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // what the focused button does (a TV remote has no tooltips)
+        helpBar = text(helpDefault, 11f, textSub, 600, lines = 2).apply { setPadding(dp(10), dp(7), dp(10), dp(7)); background = shape(0x14FFFFFF, 10f) }
+        panel.addView(helpBar, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        styleTabs()
 
         root.addView(f, ViewGroup.LayoutParams(-1, -1))
         return f
@@ -323,7 +366,15 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
             room = j.optString("room"); roomTitle = j.optString("title").ifBlank { t }; isHost = j.optBoolean("host")
             nick = j.optString("nick").ifBlank { nick }
             lastId = 0L; list.removeAllViews(); partyChannelSeen = 0
-            title.text = if (room.startsWith("p_")) "🎉  " + roomTitle else roomTitle
+            title.text = if (room.startsWith("p_")) "Watch Party" else roomTitle
+            chatHint.text = when {
+                room.startsWith("p_") -> "Private chat - only the people in your Watch Party can see it."
+                room.startsWith("g_") -> "Chat with everyone watching this game right now, on any channel."
+                else -> "Chat with everyone watching this channel right now. Want to watch with friends? Open Watch Party."
+            }
+            emptyHint = text("No messages yet.\nSay hello, or press a reaction below.", 13f, textSub, 500, lines = 3).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(28), dp(8), 0) }
+            list.addView(emptyHint, LinearLayout.LayoutParams(-1, -2))
+            if (onPartyTab) renderParty()
             showStatus(null)
             refresh()
         }.onFailure { e ->
@@ -361,6 +412,7 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         }
         val atBottom = scroll.getChildAt(0).height - scroll.scrollY - scroll.height < dp(80)
         var floated = 0
+        if (r.msgs.isNotEmpty()) emptyHint?.let { list.removeView(it); emptyHint = null }
         r.msgs.filter { it.id > lastId }.forEach { m ->
             addMessage(m)
             // reactions from others float over the picture (a few at a time)
@@ -466,9 +518,12 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
 
     // ------------------------------------------------------------------------------------------------ Watch Party
     private fun showParty(r: ChatApi.Room) {
-        partyBar.visibility = View.VISIBLE
+        val firstInfo = partyInfo == null
+        partyInfo = r; if (r.code.isNotBlank()) partyCode = r.code
+        partyBar.visibility = if (onPartyTab) View.GONE else View.VISIBLE
         val who = if (r.members.size <= 3) r.members.joinToString(", ") else r.members.take(3).joinToString(", ") + " +${r.members.size - 3}"
         partyText.text = "Code ${r.code}  ·  Host ${r.host}\n$who" + if (!isHost && r.channelName.isNotBlank()) "  ·  on ${r.channelName}" else ""
+        if (onPartyTab) { if (firstInfo) renderParty() else membersText?.text = membersLine(r) }
         // guests follow the host's channel (once per change)
         if (!isHost && r.channelId > 0 && r.channelId != partyChannelSeen) {
             val first = partyChannelSeen == 0
@@ -495,28 +550,111 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         }
     }
 
-    private fun partyMenu() {
+    // ------------------------------------------------------------------------------------------------ tabs
+    private fun tab(label: String, hint: String, onClick: () -> Unit) = text(label, 14f, textMain, 800).apply {
+        gravity = Gravity.CENTER; setPadding(dp(8), dp(10), dp(8), dp(10)); setOnClickListener { onClick() }; focusRing(this, 14f)
+        help(this, hint)
+    }
+
+    private fun styleTabs() {
+        tabChat.background = if (!onPartyTab) shape(accent, 14f) else shape(0x1FFFFFFF, 14f)
+        tabParty.background = if (onPartyTab) shape(accent, 14f) else shape(0x1FFFFFFF, 14f)
+    }
+
+    private fun setTab(party: Boolean) {
+        onPartyTab = party
+        styleTabs()
+        val chatVis = if (party) View.GONE else View.VISIBLE
+        scroll.visibility = chatVis; reactsRow.visibility = chatVis; typeRow.visibility = chatVis; chatHint.visibility = chatVis
+        status.visibility = if (party || status.text.isNullOrBlank()) View.GONE else View.VISIBLE
+        partyView.visibility = if (party) View.VISIBLE else View.GONE
+        partyBar.visibility = View.GONE
+        if (party) { hideKeyboard(); renderParty() } else if (room.startsWith("p_")) partyBar.visibility = View.VISIBLE
+    }
+
+    // ------------------------------------------------------------------------------------------------ Watch Party
+    private fun big(label: String, primary: Boolean, hint: String, onClick: () -> Unit) = text(label, 14f, textMain, 800, lines = 2).apply {
+        gravity = Gravity.CENTER; setPadding(dp(14), dp(12), dp(14), dp(12)); background = shape(if (primary) accent else 0x1FFFFFFF, 14f)
+        setOnClickListener { onClick() }; focusRing(this, 14f)
+        help(this, hint)
+    }
+
+    private fun step(n: String, words: String) = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5))
+        addView(text(n, 13f, textMain, 800).apply { gravity = Gravity.CENTER; background = shape(0x337C5CFF, 14f) }, LinearLayout.LayoutParams(dp(28), dp(28)))
+        addView(text(words, 13f, textMain, 500, lines = 3), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(10) })
+    }
+
+    private fun membersLine(r: ChatApi.Room) =
+        if (r.members.isEmpty()) "Waiting for friends…" else "Watching: " + r.members.joinToString(", ")
+
+    private fun renderParty(focusFirst: Boolean = false) {
+        partyBox.removeAllViews(); membersText = null
         val inParty = room.startsWith("p_")
-        activity.lifecycleScope.launch {
-            val me = runCatching { api.me() }.getOrNull()
-            val invites = me?.optJSONArray("invites")
-            val items = mutableListOf<Pair<String, () -> Unit>>()
-            if (inParty) {
-                items += "Invite a friend (chat name)" to { askText("Invite a friend", "Their chat name") { n -> activity.lifecycleScope.launch { runCatching { api.invite(room, n) }.onSuccess { Toast.makeText(activity, "Invite sent to $it", Toast.LENGTH_SHORT).show(); refresh() }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() } } } }
-                items += (if (ChatApi.followHost(activity)) "Stop following the host's channel" else "Follow the host's channel") to { ChatApi.setFollowHost(activity, !ChatApi.followHost(activity)) }
-                items += "Leave the Watch Party" to { leaveParty() }
-            } else {
-                items += "Start a Watch Party" to { startParty() }
-                items += "Join with a party code" to { askText("Join a Watch Party", "Party code (6 letters)") { c -> joinParty { api.partyJoinCode(c) } } }
-                for (i in 0 until (invites?.length() ?: 0)) {
-                    val inv = invites!!.getJSONObject(i)
-                    items += "Join ${inv.optString("from")}'s party" + (inv.optString("channel").takeIf { it.isNotBlank() }?.let { " (on $it)" } ?: "") to { joinParty { api.partyJoinRoom(inv.optString("room")) } }
+        fun gap(h: Int) { partyBox.addView(View(activity), LinearLayout.LayoutParams(-1, dp(h))) }
+        if (!inParty) {
+            partyBox.addView(text("Watch together with friends", 18f, textMain, 800, lines = 2))
+            partyBox.addView(text("Everyone you invite watches the same channel at the same time and chats in a private room. When you change channel, their TVs follow yours.", 13f, textSub, 500, lines = 6).apply { setPadding(0, dp(6), 0, dp(10)) })
+            partyBox.addView(step("1", "Press Start a Watch Party - you get a 6-letter code."))
+            partyBox.addView(step("2", "Friends open this tab on their TV, press Join with a code and type it. Or you invite them by their chat name."))
+            partyBox.addView(step("3", "Watch and chat together."))
+            gap(12)
+            val invites = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            partyBox.addView(invites)
+            partyBox.addView(big("Start a Watch Party", true, "Creates a private room and gives you a 6-letter code to share") { startParty() }, LinearLayout.LayoutParams(-1, -2))
+            gap(8)
+            partyBox.addView(big("Join with a code", false, "Type the 6-letter code a friend shared with you") { askText("Join a Watch Party", "Party code (6 letters)") { c -> joinParty { api.partyJoinCode(c) } } }, LinearLayout.LayoutParams(-1, -2))
+            activity.lifecycleScope.launch {
+                val found = runCatching { api.me() }.getOrNull()?.optJSONArray("invites") ?: return@launch
+                for (i in 0 until found.length()) {
+                    val inv = found.getJSONObject(i)
+                    val on = inv.optString("channel").takeIf { it.isNotBlank() }?.let { " (on $it)" }.orEmpty()
+                    invites.addView(big("You're invited: join ${inv.optString("from")}'s party$on", true, "Join your friend's party right now") { joinParty { api.partyJoinRoom(inv.optString("room")) } },
+                        LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
                 }
             }
-            val labels = items.map { it.first }.toTypedArray()
-            AlertDialog.Builder(activity).setTitle(if (inParty) "Watch Party" else "Watch together")
-                .setItems(labels) { _, w -> items[w].second() }.setNegativeButton("Close", null).show()
+        } else {
+            partyBox.addView(text(if (isHost) "You are hosting" else "You joined ${partyInfo?.host.orEmpty().ifBlank { "a" }}'s party", 12f, textSub, 700))
+            partyBox.addView(text("Your party code", 12f, textSub, 600).apply { setPadding(0, dp(8), 0, dp(4)) })
+            partyBox.addView(text(partyCode.ifBlank { "······" }.uppercase().toCharArray().joinToString(" "), 30f, accentSoft, 800).apply {
+                gravity = Gravity.CENTER; setPadding(dp(8), dp(14), dp(8), dp(14)); background = shape(0x337C5CFF, 14f, 0x557C5CFF)
+            }, LinearLayout.LayoutParams(-1, -2))
+            partyBox.addView(text("Friends: open Watch Party on their TV, press Join with a code, and type this code.", 12f, textSub, 500, lines = 3).apply { setPadding(0, dp(8), 0, dp(8)) })
+            membersText = text(partyInfo?.let { membersLine(it) } ?: "Connecting…", 13f, textMain, 600, lines = 3)
+            partyBox.addView(membersText)
+            gap(12)
+            partyBox.addView(big("Invite a friend by chat name", true, "Sends an invite - they see it in their chat on any TV") {
+                askText("Invite a friend", "Their chat name") { n ->
+                    activity.lifecycleScope.launch {
+                        runCatching { api.invite(room, n) }
+                            .onSuccess { Toast.makeText(activity, "Invite sent to $it", Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }, LinearLayout.LayoutParams(-1, -2))
+            if (!isHost) {
+                gap(8)
+                val follow = big("", false, "When ON, your TV changes channel together with the host") {}
+                fun label() { follow.text = if (ChatApi.followHost(activity)) "My TV follows the host's channel: ON\n(press to turn off)" else "My TV follows the host's channel: OFF\n(press to turn on)" }
+                label()
+                follow.setOnClickListener { ChatApi.setFollowHost(activity, !ChatApi.followHost(activity)); label() }
+                partyBox.addView(follow, LinearLayout.LayoutParams(-1, -2))
+            } else {
+                partyBox.addView(text("When you change channel, everyone's TV changes with you.", 12f, textSub, 500, lines = 2).apply { setPadding(0, dp(8), 0, 0) })
+            }
+            gap(8)
+            partyBox.addView(big("Leave the Watch Party", false, "Goes back to the normal channel chat") { leaveParty() }, LinearLayout.LayoutParams(-1, -2))
         }
+        if (focusFirst) partyBox.post { firstFocusable(partyBox)?.requestFocus() }
+    }
+
+    private fun firstFocusable(g: ViewGroup): View? {
+        for (i in 0 until g.childCount) {
+            val c = g.getChildAt(i)
+            if (c.isFocusable && c.visibility == View.VISIBLE) return c
+            if (c is ViewGroup) firstFocusable(c)?.let { return it }
+        }
+        return null
     }
 
     private fun startParty() {
@@ -525,11 +663,10 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
             val name = withContext(Dispatchers.IO) { runCatching { db.channelDao().getByStreamIds(listOf(id)).firstOrNull()?.name }.getOrNull() }.orEmpty().replace(Regex("^[A-Z]{2,3}\\s*\\|\\s*"), "")
             runCatching { api.partyCreate(id, name) }.onSuccess { j ->
                 ChatApi.setParty(activity, j.optString("room"))
+                partyCode = j.optString("code"); partyInfo = null
                 enterRoom()
-                AlertDialog.Builder(activity).setTitle("Your Watch Party is on")
-                    .setMessage("Party code: ${j.optString("code")}\n\nFriends enter this code in their chat (Watch Party → Join with a party code), or invite them by their chat name. When you switch channel, their TVs follow you.")
-                    .setPositiveButton("Invite a friend") { _, _ -> askText("Invite a friend", "Their chat name") { n -> activity.lifecycleScope.launch { runCatching { api.invite(room, n) }.onSuccess { Toast.makeText(activity, "Invite sent to $it", Toast.LENGTH_SHORT).show() }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() } } } }
-                    .setNegativeButton("Done", null).show()
+                renderParty(true)
+                Toast.makeText(activity, "Your Watch Party is on - share the code with your friends", Toast.LENGTH_LONG).show()
             }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() }
         }
     }
@@ -538,7 +675,9 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         activity.lifecycleScope.launch {
             runCatching { call() }.onSuccess { j ->
                 ChatApi.setParty(activity, j.optString("room"))
+                partyCode = j.optString("code").ifBlank { partyCode }; partyInfo = null
                 enterRoom()
+                renderParty(true)
                 j.optJSONObject("channel")?.let { c -> if (c.optInt("id") != PlayerManager.currentStreamId && ChatApi.followHost(activity)) followTo(c.optInt("id"), c.optString("name")) }
             }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show() }
         }
@@ -548,7 +687,7 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         val r = room
         ChatApi.setParty(activity, null)
         partyBar.visibility = View.GONE
-        activity.lifecycleScope.launch { api.leave(r, party = true); room = ""; enterRoom() }
+        activity.lifecycleScope.launch { api.leave(r, party = true); room = ""; partyInfo = null; partyCode = ""; enterRoom(); if (onPartyTab) renderParty(true) }
     }
 
     private fun askText(t: String, hint: String, onOk: (String) -> Unit) {

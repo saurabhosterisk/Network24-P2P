@@ -509,7 +509,7 @@
                         android:layout_marginEnd="2dp"
                         android:padding="10dp"
                         android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Live chat"
+                        android:contentDescription="Live chat &amp; Watch Party"
                         android:src="@drawable/ic_watch_chat"
                         android:tint="#FFFFFF"
                         android:focusable="true" />
