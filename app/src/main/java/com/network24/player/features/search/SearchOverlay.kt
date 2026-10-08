@@ -119,7 +119,7 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
         window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            setSoftInputMode(if (isTv) WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN else WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+            setSoftInputMode(if (isTv) WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING else WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
         }
         setContentView(build())
         window?.decorView?.alpha = 0f
@@ -166,6 +166,21 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
         if (isTv) {
             queryView = text("", 22f, textMain, 700).apply { setPadding(dp(14), dp(12), dp(8), dp(12)) }
             head.addView(queryView, LinearLayout.LayoutParams(0, -2, 1f))
+            // a real (invisible) text field, so the system keyboard - Gboard or the Fire TV keyboard, with the remote's
+            // voice key - types into the app's own search; testers wanted a mic that never leaves the app
+            val et = EditText(act).apply {
+                alpha = 0f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH; inputType = android.text.InputType.TYPE_CLASS_TEXT
+                isFocusable = false; isFocusableInTouchMode = false
+                addTextChangedListener(object : TextWatcher {
+                    override fun afterTextChanged(s: Editable?) { if (hasFocus()) setQuery(s?.toString().orEmpty(), fromField = true) }
+                    override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                })
+                setOnEditorActionListener { _, _, _ -> leaveVoice(); true }
+            }
+            editText = et
+            head.addView(et, LinearLayout.LayoutParams(1, 1))
+            head.addView(roundIcon(R.drawable.ic_mic_chat, "Speak") { voiceKeyboard() }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
         } else {
             val et = EditText(act).apply {
                 hint = "Search channels, shows, teams…"; setHintTextColor(textSub); setTextColor(textMain); background = null
@@ -252,6 +267,8 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isTv && event.action == KeyEvent.ACTION_DOWN && editText?.hasFocus() == true
+            && event.keyCode in setOf(KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BACK)) { leaveVoice(); return true }
         val f = currentFocus
         if (isTv && event.action == KeyEvent.ACTION_DOWN && f != null) {
             val inKb = keyboard?.let { isInside(f, it) } == true
@@ -285,10 +302,29 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
         super.onStart()
         if (isTv) keyboard?.post { keyboard?.let { firstKey(it) }?.requestFocus() } else editText?.requestFocus()
         setQuery(initial.orEmpty())
-        setOnDismissListener { onClose?.invoke() }
+        setOnDismissListener { editText?.let { hideKeyboard(it) }; onClose?.invoke() }
     }
 
     private fun hideKeyboard(v: View) { (act.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(v.windowToken, 0) }
+
+    /** The mic on a TV: the system keyboard with its voice key, inside the app (no global Alexa / Assistant search). */
+    private fun voiceKeyboard() {
+        val et = editText ?: return
+        et.isFocusable = true; et.isFocusableInTouchMode = true
+        et.setText(query); et.setSelection(et.length())
+        et.requestFocus()
+        (act.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(et, InputMethodManager.SHOW_FORCED)
+        status.text = "Press the microphone button on your remote and say a channel, a show or a team."
+    }
+
+    private fun leaveVoice() {
+        val et = editText ?: return
+        hideKeyboard(et)
+        et.clearFocus()
+        et.isFocusable = false; et.isFocusableInTouchMode = false
+        // the keyboard goes away a moment later; only then can the results take the focus
+        list.postDelayed({ (firstResult() ?: keyboard?.let { firstKey(it) })?.requestFocus() }, 200)
+    }
 
     private fun speak() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
