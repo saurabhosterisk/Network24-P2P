@@ -18,11 +18,11 @@
 
     <!-- the three promise lines under the sign-in headline -->
     <style name="N24LoginLine">
-        <item name="android:layout_width">360dp</item>
+        <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">6dp</item>
         <item name="android:textColor">#C9C2FF</item>
-        <item name="android:textSize">16sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:singleLine">true</item>
     </style>
 </resources>

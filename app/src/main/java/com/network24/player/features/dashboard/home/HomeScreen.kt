@@ -225,60 +225,45 @@ class HomeScreen(
         page.addView(topBar(), LinearLayout.LayoutParams(-1, -2).apply { marginEnd = dp(48) })
         // the billboard text sits low in the picture; the first row starts where the picture fades out
         heroBox = hero()
-        val heroArea = FrameLayout(act).apply { clipChildren = false; clipToPadding = false; minimumHeight = (screenH * 0.66f).toInt() - dp(24 + 42 + 36) }
+        val heroArea = FrameLayout(act).apply { clipChildren = false; clipToPadding = false; minimumHeight = (screenH * 0.58f).toInt() - dp(24 + 36 + 28) }
         heroArea.addView(heroBox, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
-        page.addView(heroArea, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(36) })
+        page.addView(heroArea, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         rows = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         page.addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
     }
 
     private fun topBar() = LinearLayout(act).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        // brand: the N mark exactly as tall as the two-line wordmark next to it (NETWORK24 / FUTURE)
-        val mark = ImageView(act).apply { setImageResource(R.drawable.app_mark); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-        val words = LinearLayout(act).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(24), 0)
-            addView(text("NETWORK24", 16f, weight = 800).apply { letterSpacing = 0.02f }, LinearLayout.LayoutParams(-2, -2))
-            addView(text("FUTURE", 10f, weight = 800).apply {
-                letterSpacing = 0.08f; setPadding(dp(1), 0, 0, 0)
-                paint.shader = android.graphics.LinearGradient(0f, 0f, dpf(70f), 0f, Color.parseColor("#7C5CFF"), Color.parseColor("#22D3EE"), android.graphics.Shader.TileMode.CLAMP)
-            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = -dp(3) })
-        }
-        addView(mark, LinearLayout.LayoutParams(-2, dp(28)))
-        addView(words)
-        words.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
-            val h = bottom - top
-            if (h > 0 && mark.layoutParams.height != h) mark.post { mark.layoutParams = mark.layoutParams.apply { height = h }; mark.requestLayout() }
-        }
-        val tabRow = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        // brand: the Network24 logo - mark and wordmark in one image (4:1)
+        addView(ImageView(act).apply { setImageResource(R.drawable.app_logo_wide); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(16) })
+        val tabRow = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), dp(3), dp(3), dp(3)); background = shape(0x14FFFFFF, 21f, 0x1FFFFFFF) }
         tabs.forEachIndexed { i, (label, onClick) ->
             val home = i == 0
-            val t = text(label, 14f, if (home) textMain else textSub, if (home) 700 else 600).apply {
-                setPadding(dp(9), dp(9), dp(9), dp(9))
-                background = if (home) shape(0x1FFFFFFF, 18f) else null
+            val t = text(label, 13.5f, if (home) Color.parseColor("#08090C") else textSub, if (home) 700 else 600).apply {
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                background = if (home) shape(Color.WHITE, 18f) else null
                 setOnClickListener { if (!home) onClick() }
             }
             focusable(t, 18f, 1.04f)
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
-        addView(HorizontalScrollView(act).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(HorizontalScrollView(act).apply { isHorizontalScrollBarEnabled = false; isFillViewport = true; addView(android.widget.FrameLayout(act).apply { addView(tabRow, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)) }) }, LinearLayout.LayoutParams(0, -2, 1f))
         clock = text("", 1f)
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(act)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
-        addView(iconButton(R.drawable.ic_live_chat, "Live Support") { support() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(12) })
+        addView(iconButton(R.drawable.ic_live_chat, "Live Support") { support() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
         // account: a round icon like its neighbours (keeps room for the tabs); opens the user info page
         chip = iconButton(R.drawable.ic_h_account, "Account") { openAccount() }
-        addView(chip, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_settings, "Settings") { act.startActivity(android.content.Intent(act, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_more_vert, "More") { openMenu() }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        // account and settings are in the More menu (the owner wants a shorter bar)
+        addView(iconButton(R.drawable.ic_more_vert, "More") { openMenu() }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
     }
 
     private fun iconButton(icon: Int, label: String, onClick: () -> Unit) = ImageView(act).apply {
-        setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
-        background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
-        layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
-        focusable(this, 21f, 1.08f)
+        setImageResource(icon); setColorFilter(textMain); setPadding(dp(8), dp(8), dp(8), dp(8)); contentDescription = label
+        background = shape(0x14FFFFFF, 18f, 0x1FFFFFFF); setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+        focusable(this, 18f, 1.08f)
         com.network24.player.core.ui.IconHint.attach(this, label)
     }
 

@@ -470,27 +470,15 @@ open class BaseActivity : AppCompatActivity() {
         })
     }
 
-    private var loadingDialog: AlertDialog? = null
+    private var loadingPanel: com.network24.player.core.ui.LoadingPanel? = null
 
     internal fun showLoader(message: String = "Loading...") {
-        if (loadingDialog == null) {
-            val view = LayoutInflater.from(this).inflate(R.layout.dialog_loading, null)
-            loadingDialog = AlertDialog.Builder(this)
-                .setView(view)
-                .setCancelable(false)
-                .create()
-            loadingDialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        }
-        if (!isFinishing && loadingDialog?.isShowing == false) {
-            loadingDialog?.show()
-        }
-        loadingDialog?.findViewById<TextView>(R.id.txtLoadingMessage)?.text = message
+        if (isFinishing || isDestroyed) return
+        (loadingPanel ?: com.network24.player.core.ui.LoadingPanel(this).also { loadingPanel = it }).show(message)
     }
 
     internal fun hideLoader() {
-        if (loadingDialog != null && loadingDialog!!.isShowing) {
-            loadingDialog?.dismiss()
-        }
+        loadingPanel?.hide()
     }
 
     protected val ACTION_EPG_UPDATED: String = "ACTION_EPG_UPDATED"
@@ -610,17 +598,30 @@ open class BaseActivity : AppCompatActivity() {
     /** After the update panel closes (the home puts the remote back on Watch now). */
     protected open fun onUpdateClosed() = Unit
 
-    fun updateEverything() {
+    /**
+     * @param setup first start after a login: the same panel titled "Setting up Network24", the categories are
+     *        downloaded too (nothing is saved yet), and [onFinished] says whether everything was saved.
+     */
+    fun updateEverything(setup: Boolean = false, onFinished: ((Boolean) -> Unit)? = null) {
         val prefs = PreferenceManager(this)
         if (prefs.getServer().isBlank() || prefs.getUsername().isBlank() || prefs.getPassword().isBlank()) return
-        val panel = com.network24.player.core.ui.UpdatePanel(this)
+        val panel = if (setup) com.network24.player.core.ui.UpdatePanel(this,
+            title = "Setting up Network24",
+            intro = "Downloading your channels and the TV guide for the first time. This takes a minute - keep the app open.",
+            doneTitle = "You're all set")
+        else com.network24.player.core.ui.UpdatePanel(this)
         panel.setOnDismissListener { onUpdateClosed() }
         panel.show()
         lifecycleScope.launch {
             val sync = SyncManager(this@BaseActivity)
             panel.progress(0, -1)
+            if (setup) {
+                val cats = sync.syncLiveCategories(force = true)
+                if (cats is SyncResult.Error) { panel.failed(0, cats.message); onFinished?.invoke(false); return@launch }
+            }
             val ch = sync.syncLiveChannelsAll(force = true) { p -> runOnUiThread { panel.progress(0, p) } }
-            if (ch is SyncResult.Error) { panel.failed(0, ch.message); return@launch }
+            if (ch is SyncResult.Error) { panel.failed(0, ch.message); onFinished?.invoke(false); return@launch }
+            if (setup) { com.network24.player.core.cache.memory.MemoryCache.clearAll(); prefs.setLastSyncTime(System.currentTimeMillis()) }
             val db = com.network24.player.core.database.DatabaseProvider.get(this@BaseActivity)
             val channels = runCatching { db.channelDao().countAll() }.getOrDefault(0)
             panel.complete(0, String.format(java.util.Locale.US, "%,d channels", channels))
@@ -629,7 +630,7 @@ open class BaseActivity : AppCompatActivity() {
             val epg = sync.syncFullEpg(force = true,
                 onProgress = { p -> runOnUiThread { panel.progress(1, p) } },
                 onSaving = { p -> runOnUiThread { if (!saving) { saving = true; panel.complete(1, "Downloaded") }; panel.progress(2, p) } })
-            if (epg is SyncResult.Error) { panel.failed(if (saving) 2 else 1, epg.message); return@launch }
+            if (epg is SyncResult.Error) { panel.failed(if (saving) 2 else 1, epg.message); onFinished?.invoke(false); return@launch }
             if (!saving) panel.complete(1, "Downloaded")
             val now = System.currentTimeMillis()
             val programmes = runCatching { db.epgDao().countProgramsInWindow(now, now + 7 * 86_400_000L) }.getOrDefault(0)
@@ -638,6 +639,7 @@ open class BaseActivity : AppCompatActivity() {
             onTvGuideUpdated()
             sendBroadcast(Intent(ACTION_EPG_UPDATED))
             panel.success(String.format(java.util.Locale.US, "%,d channels and %,d programmes for the coming days are ready.", channels, programmes))
+            onFinished?.invoke(true)
         }
     }
 

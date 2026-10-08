@@ -128,9 +128,9 @@ class SportsActivity : BaseActivity() {
     }
 
     private fun iconButton(icon: Int, label: String, onClick: () -> Unit) = ImageView(this).apply {
-        setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
-        background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
-        focusable(this, 21f, 1.08f)
+        setImageResource(icon); setColorFilter(textMain); setPadding(dp(8), dp(8), dp(8), dp(8)); contentDescription = label
+        background = shape(0x14FFFFFF, 18f, 0x1FFFFFFF); setOnClickListener { onClick() }
+        focusable(this, 18f, 1.08f)
         com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
@@ -190,7 +190,7 @@ class SportsActivity : BaseActivity() {
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2))
 
         heroBox = FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
-        page.addView(heroBox, LinearLayout.LayoutParams(-1, heroH - dp(24) - dp(42)))
+        page.addView(heroBox, LinearLayout.LayoutParams(-1, heroH - dp(24) - dp(36) - dp(20)).apply { topMargin = dp(20) })
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         btnWatch = pill("▶  Watch", true) { heroItem?.let { watch(it) } }
         btnInfo = pill("Game Center", false) { heroItem?.let { open(it) } }
@@ -220,21 +220,8 @@ class SportsActivity : BaseActivity() {
 
     private fun topBar(menu: View) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        val mark = ImageView(this@SportsActivity).apply { setImageResource(R.drawable.app_mark); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-        val words = LinearLayout(this@SportsActivity).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(24), 0)
-            addView(text("NETWORK24", 16f, weight = 800).apply { letterSpacing = 0.02f }, LinearLayout.LayoutParams(-2, -2))
-            addView(text("FUTURE", 10f, weight = 800).apply {
-                letterSpacing = 0.08f; setPadding(dp(1), 0, 0, 0)
-                paint.shader = android.graphics.LinearGradient(0f, 0f, dpf(70f), 0f, accent, Color.parseColor("#22D3EE"), android.graphics.Shader.TileMode.CLAMP)
-            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = -dp(3) })
-        }
-        addView(mark, LinearLayout.LayoutParams(-2, dp(28)))
-        addView(words)
-        words.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
-            val h = bottom - top
-            if (h > 0 && mark.layoutParams.height != h) mark.post { mark.layoutParams = mark.layoutParams.apply { height = h }; mark.requestLayout() }
-        }
+        // brand: the Network24 logo - mark and wordmark in one image (4:1)
+        addView(ImageView(this@SportsActivity).apply { setImageResource(R.drawable.app_logo_wide); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(16) })
         fun go(cls: Class<*>) { startActivity(Intent(this@SportsActivity, cls)); finish() }
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
@@ -244,29 +231,26 @@ class SportsActivity : BaseActivity() {
             "TV Guide" to { go(TvGuideActivity::class.java) },
             "Catch-up" to { go(CatchupActivity::class.java) },
         )
-        val tabRow = LinearLayout(this@SportsActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val tabRow = LinearLayout(this@SportsActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), dp(3), dp(3), dp(3)); background = shape(0x14FFFFFF, 21f, 0x1FFFFFFF) }
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Sports"
-            val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(9), dp(9), dp(9), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
+            val t = text(label, 13.5f, if (here) Color.parseColor("#08090C") else textSub, if (here) 700 else 600).apply {
+                setPadding(dp(12), dp(7), dp(12), dp(7)); background = if (here) shape(Color.WHITE, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
-        addView(HorizontalScrollView(this@SportsActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(HorizontalScrollView(this@SportsActivity).apply { isHorizontalScrollBarEnabled = false; isFillViewport = true; addView(android.widget.FrameLayout(this@SportsActivity).apply { addView(tabRow, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)) }) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@SportsActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@SportsActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_h_account, "Account") {
-            com.network24.player.features.account.AccountCenter.show(this@SportsActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
+        // account and settings are in the More menu (the owner wants a shorter bar)
+        addView(menu, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
     }
 
     // ------------------------------------------------------------------------------------------------ data

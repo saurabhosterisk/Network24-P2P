@@ -83,9 +83,18 @@ class LoginActivity : BaseActivity() {
             login()
         }
 
-        // Remote Help: sign in with a code that support types in the console (or the customer on the phone).
-        // Only on a TV: a phone has a keyboard, and it cannot scan its own QR.
-        if (isTv) tvCode = com.network24.player.core.remote.TvCodePanel(this, binding.brandingContainer) { u, p ->
+        // The brand column is exactly as wide as its widest line (the one-line tagline), so nothing wraps or is cut;
+        // the code card and the help button below take the same width.
+        val brand = binding.brandingContainer
+        val any = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+        val natural = (0 until brand.childCount).maxOf { i -> brand.getChildAt(i).also { it.measure(any, any) }.measuredWidth }
+        brand.layoutParams = brand.layoutParams.apply { width = maxOf(natural, (330 * resources.displayMetrics.density).toInt()) }
+
+        // free space between the promises and the code card: the column ends exactly at the sign-in card's bottom
+        brand.addView(android.view.View(this), android.widget.LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // Remote Help: sign in with a code that support types in the console, or the customer scans the QR
+        tvCode = com.network24.player.core.remote.TvCodePanel(this, brand) { u, p ->
             binding.edtUsername.setText(u); binding.edtPassword.setText(p); binding.chkRemember.isChecked = true
             login()
         }
@@ -93,30 +102,41 @@ class LoginActivity : BaseActivity() {
         fitToScreen()
     }
 
-    private val isTv by lazy {
-        packageManager.hasSystemFeature("android.software.leanback") ||
-            (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK) == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    }
-
     /**
-     * Phones in landscape are short (~380 dp): the brand side and the sign-in card were cut at the top and bottom.
-     * Each side is scaled down just enough to fit. The tallest height seen is used, so the keyboard does not shrink them.
+     * The left side (brand, promises, sign in with a code) is exactly as tall as the sign-in card: same top and bottom
+     * (the layout gives both the same margins and max height), the logo at the card's top edge and the help button at
+     * its bottom edge, free space in between. When there is not enough room (phones in landscape are ~380 dp tall),
+     * each side is scaled down just enough to fit. The tallest size seen is used, so the keyboard does not shrink them.
      */
     private fun fitToScreen() {
-        var tallest = 0
-        binding.root.addOnLayoutChangeListener { root, _, _, _, _, _, _, _, _ ->
-            tallest = maxOf(tallest, root.height)
-            val room = tallest - 2 * (16 * resources.displayMetrics.density)
-            fun fit(v: android.view.View, pivotLeft: Boolean) {
-                val h = v.height
-                if (h <= 0 || room <= 0) return
-                val s = minOf(1f, room / h)
-                v.pivotX = if (pivotLeft) 0f else v.width / 2f
-                v.pivotY = h / 2f
-                if (v.scaleX != s) { v.scaleX = s; v.scaleY = s }
+        var roomL = 0
+        var roomR = 0
+        binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val l = binding.leftPanel
+            val r = binding.loginCard
+            roomL = maxOf(roomL, l.height)
+            roomR = maxOf(roomR, r.height - r.paddingTop - r.paddingBottom)
+
+            // left: width first (the one-line tagline), then height
+            val brand = binding.brandingContainer
+            if (roomL > 0 && brand.width > 0) {
+                val content = (0 until brand.childCount).map { brand.getChildAt(it) }.filter { (it.layoutParams as? android.widget.LinearLayout.LayoutParams)?.weight != 1f }
+                    .sumOf { v -> val lp = v.layoutParams as android.view.ViewGroup.MarginLayoutParams; v.measuredHeight + lp.topMargin + lp.bottomMargin }
+                var s = minOf(1f, (l.width - l.paddingStart - l.paddingEnd).toFloat() / brand.width)
+                if (content * s > roomL) s = roomL.toFloat() / content
+                val h = (roomL / s).toInt()
+                if (brand.layoutParams.height != h) brand.layoutParams = brand.layoutParams.apply { height = h }
+                brand.pivotX = 0f; brand.pivotY = h / 2f
+                if (brand.scaleX != s) { brand.scaleX = s; brand.scaleY = s }
             }
-            fit(binding.brandingContainer, true)
-            fit(binding.loginContainer, false)
+
+            // right: the sign-in form inside its card
+            val form = binding.loginContainer
+            if (roomR > 0 && form.height > 0) {
+                val s = minOf(1f, roomR.toFloat() / form.height)
+                form.pivotX = form.width / 2f; form.pivotY = form.height / 2f
+                if (form.scaleX != s) { form.scaleX = s; form.scaleY = s }
+            }
         }
     }
 
@@ -136,7 +156,7 @@ class LoginActivity : BaseActivity() {
             isFocusable = true; isClickable = true
             setOnClickListener { com.network24.player.core.remote.HelpSession.request(this@LoginActivity) }
         }
-        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams(if (isTv) (360 * d).toInt() else -2, -2).apply { topMargin = ((if (isTv) 12 else 22) * d).toInt() })
+        binding.brandingContainer.addView(b, android.widget.LinearLayout.LayoutParams(-1, -2).apply { topMargin = (12 * d).toInt() })
     }
 
     override fun onPause() {

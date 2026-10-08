@@ -63,8 +63,8 @@ class TvCodePanel(private val act: AppCompatActivity, parent: ViewGroup, private
         })
         row.addView(words, LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(row)
-        // fixed width: the brand column is narrow and squeezed the code into two lines
-        parent.addView(card, LinearLayout.LayoutParams((360 * d).toInt(), -2).apply { topMargin = (20 * d).toInt() })
+        // as wide as the brand column (the login screen gives that column a fixed width)
+        parent.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (20 * d).toInt() })
     }
 
     private fun text(s: String, size: Float, color: Int, weight: Int) = TextView(act).apply {

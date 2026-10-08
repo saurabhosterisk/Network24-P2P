@@ -22,7 +22,12 @@ import com.network24.player.features.dashboard.home.HomeFont
  * the TV guide, saving it), each with its own bar and a ✓ when done, then a summary (how many channels and
  * programmes) and Done. Back cannot cancel half-way (a half-saved guide would be worse than the old one).
  */
-class UpdatePanel(context: Context) : Dialog(context, android.R.style.Theme_Black_NoTitleBar_Fullscreen) {
+class UpdatePanel(
+    context: Context,
+    private val title: String = "Updating channels & guide",
+    private val intro: String = "Getting the newest channels and the full TV guide. This can take a minute - keep the app open.",
+    private val doneTitle: String = "Everything is up to date"
+) : Dialog(context, android.R.style.Theme_Black_NoTitleBar_Fullscreen) {
     private val res = context.resources
     private val uiScale = res.displayMetrics.let { m -> minOf(1f, m.widthPixels / m.density / 960f, m.heightPixels / m.density / 400f) }
     private val d = res.displayMetrics.density * uiScale
@@ -48,7 +53,12 @@ class UpdatePanel(context: Context) : Dialog(context, android.R.style.Theme_Blac
         window?.apply { setBackgroundDrawableResource(android.R.color.transparent); setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT) }
         setCancelable(false)
         val root = FrameLayout(context).apply { setBackgroundColor(0xE608090C.toInt()) }
-        val card = LinearLayout(context).apply {
+        // measured at its full height even when taller than the screen (otherwise the last row, Done, is squeezed
+        // out of the card); the listener below then scales the whole card down to fit
+        val card = object : LinearLayout(context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) =
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+        }.apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(30), dp(26), dp(30), dp(24))
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#FF1E1A3A"), Color.parseColor("#FF14161B"))).apply { cornerRadius = dpf(20f); setStroke(dp(1), 0x337C5CFF) }
         }
@@ -58,19 +68,29 @@ class UpdatePanel(context: Context) : Dialog(context, android.R.style.Theme_Blac
         orb.addView(spinner, FrameLayout.LayoutParams(-1, -1))
         card.addView(orb, LinearLayout.LayoutParams(dp(52), dp(52)).apply { bottomMargin = dp(16) })
         spinner.animate().rotationBy(360f * 400).setDuration(1_200_000L).setInterpolator(android.view.animation.LinearInterpolator()).start()
-        heading = text("Updating channels & guide", 22f, textMain, 800)
+        heading = text(title, 22f, textMain, 800)
         card.addView(heading)
-        note = text("Getting the newest channels and the full TV guide. This can take a minute - keep the app open.", 13f, textSub, 600, 3).apply { setPadding(0, dp(6), 0, dp(14)); setLineSpacing(0f, 1.15f) }
+        note = text(intro, 13f, textSub, 600, 3).apply { minLines = 2; setPadding(0, dp(6), 0, dp(14)); setLineSpacing(0f, 1.15f) }
         card.addView(note)
         listOf("Channels & categories", "Downloading the TV guide", "Saving the TV guide").forEach { card.addView(step(it)) }
         done = text("Done", 15f, Color.parseColor("#08090C"), 800).apply {
-            gravity = Gravity.CENTER; setPadding(dp(28), dp(11), dp(28), dp(11)); background = shape(Color.WHITE, 12f); visibility = View.GONE
+            gravity = Gravity.CENTER; setPadding(dp(28), dp(11), dp(28), dp(11)); background = shape(Color.WHITE, 12f); visibility = View.INVISIBLE
             isFocusable = true; isClickable = true; setOnClickListener { dismiss() }
             val ring = GradientDrawable().apply { cornerRadius = dpf(12f); setStroke(dp(3), accent); setColor(Color.TRANSPARENT) }
             setOnFocusChangeListener { v, has -> v.foreground = if (has) ring else null }
         }
         card.addView(done, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(18); gravity = Gravity.END })
         root.addView(card, FrameLayout.LayoutParams(dp(520).coerceAtMost(res.displayMetrics.widthPixels - dp(32)), -2, Gravity.CENTER))
+        // phones in landscape are shorter than the card: scale it down just enough to fit. Done is INVISIBLE (not
+        // GONE) from the start so the card has one height, and one size, from the first frame to the last.
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val room = root.height - dp(24)
+            if (card.height <= 0 || room <= 0) return@addOnLayoutChangeListener
+            if (card.scaleX != 1f) return@addOnLayoutChangeListener
+            val s = minOf(1f, room.toFloat() / card.height)
+            card.pivotX = card.width / 2f; card.pivotY = card.height / 2f
+            if (card.scaleX != s) { card.scaleX = s; card.scaleY = s }
+        }
         setContentView(root)
     }
 
@@ -115,7 +135,7 @@ class UpdatePanel(context: Context) : Dialog(context, android.R.style.Theme_Blac
 
     fun success(summary: String) {
         finished = true
-        heading.text = "Everything is up to date"
+        heading.text = doneTitle
         note.text = summary
         showDone()
     }

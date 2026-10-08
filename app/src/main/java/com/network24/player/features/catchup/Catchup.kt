@@ -146,9 +146,9 @@ class CatchupActivity : BaseActivity() {
     }
 
     private fun iconButton(icon: Int, label: String, onClick: () -> Unit) = ImageView(this).apply {
-        setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
-        background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
-        focusable(this, 21f, 1.08f)
+        setImageResource(icon); setColorFilter(textMain); setPadding(dp(8), dp(8), dp(8), dp(8)); contentDescription = label
+        background = shape(0x14FFFFFF, 18f, 0x1FFFFFFF); setOnClickListener { onClick() }
+        focusable(this, 18f, 1.08f)
         com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
@@ -193,9 +193,9 @@ class CatchupActivity : BaseActivity() {
         val menu = iconButton(R.drawable.ic_more_vert, "More") {}
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2).apply { marginEnd = dp(48) })
         heroBox = hero()
-        val heroArea = FrameLayout(this).apply { clipChildren = false; clipToPadding = false; minimumHeight = (screenH * 0.58f).toInt() - dp(24 + 42 + 36) }
+        val heroArea = FrameLayout(this).apply { clipChildren = false; clipToPadding = false; minimumHeight = (screenH * 0.54f).toInt() - dp(24 + 36 + 28) }
         heroArea.addView(heroBox, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
-        page.addView(heroArea, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(36) })
+        page.addView(heroArea, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         status = text("Loading the recordings…", 15f, textSub, 500).apply { setPadding(0, dp(24), 0, 0) }
         page.addView(status)
         rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
@@ -206,21 +206,8 @@ class CatchupActivity : BaseActivity() {
     /** The home's top bar with Catch-up selected; the other tabs lead to their pages the same way as on the home. */
     private fun topBar(menu: View) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        val mark = ImageView(this@CatchupActivity).apply { setImageResource(R.drawable.app_mark); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-        val words = LinearLayout(this@CatchupActivity).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(24), 0)
-            addView(text("NETWORK24", 16f, weight = 800).apply { letterSpacing = 0.02f }, LinearLayout.LayoutParams(-2, -2))
-            addView(text("FUTURE", 10f, weight = 800).apply {
-                letterSpacing = 0.08f; setPadding(dp(1), 0, 0, 0)
-                paint.shader = android.graphics.LinearGradient(0f, 0f, dpf(70f), 0f, Color.parseColor("#7C5CFF"), Color.parseColor("#22D3EE"), android.graphics.Shader.TileMode.CLAMP)
-            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = -dp(3) })
-        }
-        addView(mark, LinearLayout.LayoutParams(-2, dp(28)))
-        addView(words)
-        words.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
-            val h = bottom - top
-            if (h > 0 && mark.layoutParams.height != h) mark.post { mark.layoutParams = mark.layoutParams.apply { height = h }; mark.requestLayout() }
-        }
+        // brand: the Network24 logo - mark and wordmark in one image (4:1)
+        addView(ImageView(this@CatchupActivity).apply { setImageResource(R.drawable.app_logo_wide); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(16) })
         fun go(cls: Class<*>, extra: (Intent.() -> Unit)? = null) { startActivity(Intent(this@CatchupActivity, cls).apply { extra?.invoke(this) }); finish() }
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
@@ -230,12 +217,12 @@ class CatchupActivity : BaseActivity() {
             "TV Guide" to { go(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { showOverview() },
         )
-        val tabRow = LinearLayout(this@CatchupActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val tabRow = LinearLayout(this@CatchupActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), dp(3), dp(3), dp(3)); background = shape(0x14FFFFFF, 21f, 0x1FFFFFFF) }
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Catch-up"
-            val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(9), dp(9), dp(9), dp(9))
-                background = if (here) shape(0x1FFFFFFF, 18f) else null
+            val t = text(label, 13.5f, if (here) Color.parseColor("#08090C") else textSub, if (here) 700 else 600).apply {
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                background = if (here) shape(Color.WHITE, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
@@ -243,18 +230,15 @@ class CatchupActivity : BaseActivity() {
             if (here) catchupTab = t
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
-        addView(HorizontalScrollView(this@CatchupActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(HorizontalScrollView(this@CatchupActivity).apply { isHorizontalScrollBarEnabled = false; isFillViewport = true; addView(android.widget.FrameLayout(this@CatchupActivity).apply { addView(tabRow, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)) }) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@CatchupActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@CatchupActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_h_account, "Account") {
-            com.network24.player.features.account.AccountCenter.show(this@CatchupActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
+        // account and settings are in the More menu (the owner wants a shorter bar)
+        addView(menu, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
     }
 
     /** Billboard: a recorded show - its channel, title (or the show's title logo), when it aired, what it is about. */
@@ -263,7 +247,7 @@ class CatchupActivity : BaseActivity() {
         val tagRow = LinearLayout(this@CatchupActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         tagRow.addView(text("CATCH-UP", 11f, Color.WHITE, 800).apply {
             letterSpacing = 0.12f; setPadding(dp(8), dp(4), dp(8), dp(4)); background = shape(Color.parseColor("#7C5CFF"), 4f)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(12) })
         heroChLogo = ImageView(this@CatchupActivity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
         tagRow.addView(heroChLogo, LinearLayout.LayoutParams(dp(44), dp(24)).apply { marginStart = dp(12) })
         heroTag = text("WATCH WHAT YOU MISSED", 12f, Color.parseColor("#D9F2F3F5"), 700).apply { letterSpacing = 0.12f; setPadding(dp(10), 0, 0, 0) }

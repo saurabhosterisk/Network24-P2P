@@ -310,51 +310,13 @@ class DashboardActivity : BaseActivity() {
      */
     private fun runFirstSetup() {
         isInitialSyncRunning = true
-        val channelsMessage = "Setting up Network24… downloading your channels"
-        showLoader(channelsMessage)
-        repository.syncAllData(
-            server = prefs.getServer(),
-            username = prefs.getUsername(),
-            password = prefs.getPassword(),
-            callback = object : SyncCallback {
-                override fun onSuccess() {
-                    runOnUiThread {
-                        prefs.setLastSyncTime(System.currentTimeMillis())
-                        refreshTvGuide(
-                            loadingMessage = "Setting up your TV Guide… This can take a minute.",
-                            refreshChannelsFirst = false
-                        ) { saved ->
-                            isInitialSyncRunning = false
-                            if (saved) {
-                                prefs.setFirstSetupPending(false)
-                            } else {
-                                Toast.makeText(
-                                    this@DashboardActivity,
-                                    "The TV Guide could not be downloaded right now. Network24 will try again the next time you open the app, or use ⋮ → Refresh TV Guide.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    }
-                }
-
-                override fun onError(message: String) {
-                    runOnUiThread {
-                        isInitialSyncRunning = false
-                        hideLoader()
-                        Toast.makeText(
-                            this@DashboardActivity,
-                            "Could not download the channels right now ($message). Network24 will try again the next time you open the app.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-
-                override fun onProgress(percent: Int) {
-                    runOnUiThread { showLoader("$channelsMessage $percent%") }
-                }
-            }
-        )
+        // the same step-by-step panel as the menu's "Update Channels & Guide", titled "Setting up Network24"
+        updateEverything(setup = true) { saved ->
+            isInitialSyncRunning = false
+            if (saved) prefs.setFirstSetupPending(false)
+            // the home was built before anything was downloaded: build it again with the new channels and guide
+            if (::home.isInitialized) { homeLoadedAt = System.currentTimeMillis(); home.load() }
+        }
     }
 
     private fun refreshInitialEpgInBackground() {

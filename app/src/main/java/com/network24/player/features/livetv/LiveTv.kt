@@ -169,9 +169,9 @@ class LiveTvActivity : BaseActivity() {
     }
 
     private fun iconButton(icon: Int, label: String, onClick: () -> Unit) = ImageView(this).apply {
-        setImageResource(icon); setColorFilter(textMain); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = label
-        background = shape(0x1AFFFFFF, 21f); setOnClickListener { onClick() }
-        focusable(this, 21f, 1.08f)
+        setImageResource(icon); setColorFilter(textMain); setPadding(dp(8), dp(8), dp(8), dp(8)); contentDescription = label
+        background = shape(0x14FFFFFF, 18f, 0x1FFFFFFF); setOnClickListener { onClick() }
+        focusable(this, 18f, 1.08f)
         com.network24.player.core.ui.IconHint.attach(this, label)
     }
 
@@ -217,7 +217,7 @@ class LiveTvActivity : BaseActivity() {
         page.addView(topBar(menu), LinearLayout.LayoutParams(-1, -2))
 
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
-        page.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(14) })
+        page.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(26) })
 
         // left: categories
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
@@ -234,7 +234,7 @@ class LiveTvActivity : BaseActivity() {
         // right: the channel in focus, then the channels
         val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), 0, 0, 0); clipChildren = false; clipToPadding = false }
         // at least the picture area; taller when the text needs it (phones: "Up next" was cut by the list title)
-        right.addView(hero().apply { minimumHeight = heroH - dp(24) - dp(42) - dp(14) - dp(30) }, LinearLayout.LayoutParams(-1, -2))
+        right.addView(hero().apply { minimumHeight = heroH - dp(24) - dp(36) - dp(26) - dp(30) }, LinearLayout.LayoutParams(-1, -2))
         val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM; setPadding(dp(4), dp(6), 0, dp(8)) }
         listTitle = text("", 18f, textMain, 800)
         head.addView(listTitle)
@@ -259,21 +259,8 @@ class LiveTvActivity : BaseActivity() {
 
     private fun topBar(menu: View) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        val mark = ImageView(this@LiveTvActivity).apply { setImageResource(R.drawable.app_mark); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }
-        val words = LinearLayout(this@LiveTvActivity).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(24), 0)
-            addView(text("NETWORK24", 16f, weight = 800).apply { letterSpacing = 0.02f }, LinearLayout.LayoutParams(-2, -2))
-            addView(text("FUTURE", 10f, weight = 800).apply {
-                letterSpacing = 0.08f; setPadding(dp(1), 0, 0, 0)
-                paint.shader = android.graphics.LinearGradient(0f, 0f, dpf(70f), 0f, accent, Color.parseColor("#22D3EE"), android.graphics.Shader.TileMode.CLAMP)
-            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = -dp(3) })
-        }
-        addView(mark, LinearLayout.LayoutParams(-2, dp(28)))
-        addView(words)
-        words.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
-            val h = bottom - top
-            if (h > 0 && mark.layoutParams.height != h) mark.post { mark.layoutParams = mark.layoutParams.apply { height = h }; mark.requestLayout() }
-        }
+        // brand: the Network24 logo - mark and wordmark in one image (4:1)
+        addView(ImageView(this@LiveTvActivity).apply { setImageResource(R.drawable.app_logo_wide); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_START }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(16) })
         fun go(cls: Class<*>) { stopPreview(); startActivity(Intent(this@LiveTvActivity, cls)); finish() }
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
@@ -283,29 +270,26 @@ class LiveTvActivity : BaseActivity() {
             "TV Guide" to { go(TvGuideActivity::class.java) },
             "Catch-up" to { go(CatchupActivity::class.java) },
         )
-        val tabRow = LinearLayout(this@LiveTvActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val tabRow = LinearLayout(this@LiveTvActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(3), dp(3), dp(3), dp(3)); background = shape(0x14FFFFFF, 21f, 0x1FFFFFFF) }
         tabs.forEachIndexed { i, (label, onClick) ->
             val here = label == "Live TV"
-            val t = text(label, 14f, if (here) textMain else textSub, if (here) 700 else 600).apply {
-                setPadding(dp(9), dp(9), dp(9), dp(9)); background = if (here) shape(0x1FFFFFFF, 18f) else null
+            val t = text(label, 13.5f, if (here) Color.parseColor("#08090C") else textSub, if (here) 700 else 600).apply {
+                setPadding(dp(12), dp(7), dp(12), dp(7)); background = if (here) shape(Color.WHITE, 18f) else null
                 setOnClickListener { onClick() }
             }
             focusable(t, 18f, 1.04f)
             if (here) hereTab = t
             tabRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = dp(2) })
         }
-        addView(HorizontalScrollView(this@LiveTvActivity).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(HorizontalScrollView(this@LiveTvActivity).apply { isHorizontalScrollBarEnabled = false; isFillViewport = true; addView(android.widget.FrameLayout(this@LiveTvActivity).apply { addView(tabRow, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.CENTER)) }) }, LinearLayout.LayoutParams(0, -2, 1f))
         addView(iconButton(R.drawable.ic_h_search, "Search") {
             com.network24.player.features.search.SearchOverlay.show(this@LiveTvActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(12) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(12) })
         addView(iconButton(R.drawable.ic_live_chat, "Live Support") {
             com.network24.player.features.help.HelpCenter.show(this@LiveTvActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_h_account, "Account") {
-            com.network24.player.features.account.AccountCenter.show(this@LiveTvActivity)
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(iconButton(R.drawable.ic_settings, "Settings") { context.startActivity(android.content.Intent(context, com.network24.player.features.settings.activity.SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
-        addView(menu, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(10) })
+        }, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
+        // account and settings are in the More menu (the owner wants a shorter bar)
+        addView(menu, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(8) })
     }
 
     /** The channel in focus: LIVE, channel, programme, time left, what is next. */
