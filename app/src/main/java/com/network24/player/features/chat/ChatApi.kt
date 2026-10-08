@@ -1,35 +1,47 @@
 package com.network24.player.features.chat
 
 import android.content.Context
+import com.google.android.gms.tasks.Task
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.AggregateSource
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.network24.player.core.api.Web24Api
 import com.network24.player.core.preferences.PreferenceManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
+import java.util.Date
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
- * Live Chat / Watch Party on Main (support_api.php chat_* actions). A room's last 80 messages are a plain file
- * that nginx serves (/chat/r/<room>.json); polling it with If-Modified-Since costs Main almost nothing.
+ * Live Chat / Watch Party. Main (support_api.php chat_* actions) keeps the chat name, bans, parties, invites and
+ * reports and signs a Firebase custom token; the messages, presence and party state live in Firestore (project
+ * network24), so every TV sees a line the moment it is sent and Main does nothing per message.
  */
 class ChatApi(private val context: Context) {
     private val api = Web24Api(context)
+    private val db get() = FirebaseFirestore.getInstance()
 
-    data class Msg(val id: Long, val nick: String, val kind: String, val text: String, val at: Long)
+    /** [id] is the message's Firestore path (chat_rooms/<room>/msgs/<id>) - what a report names. */
+    data class Msg(val id: String, val nick: String, val kind: String, val text: String, val at: Long)
     data class Room(
-        val room: String, val kind: String, val title: String, val watching: Int, val msgs: List<Msg>,
-        val host: String = "", val code: String = "", val channelId: Int = 0, val channelName: String = "", val members: List<String> = emptyList(),
+        val room: String, val kind: String, val title: String, val host: String = "", val hostUid: String = "", val code: String = "",
+        val channelId: Int = 0, val channelName: String = "", val members: List<String> = emptyList(),
     )
 
-    suspend fun me(): JSONObject = api.support("chat_me")
+    // ------------------------------------------------------------------------------------------------ Main
+    /** Who I am in the chat; also signs this device in to Firestore with the token Main put in the reply. */
+    suspend fun me(): JSONObject = api.support("chat_me").also { signIn(it) }
     suspend fun setNick(nick: String): String = api.support("chat_nick", "nick" to nick).optString("nick")
     suspend fun join(room: String, title: String): JSONObject = api.support("chat_join", "room" to room, "title" to title)
-    suspend fun ping(room: String) { api.support("chat_ping", "room" to room) }
     suspend fun leave(room: String, party: Boolean = false) { runCatching { api.support("chat_leave", "room" to room, "party" to if (party) "1" else "") } }
-    suspend fun post(room: String, text: String, kind: String = "m") { api.support("chat_post", "room" to room, "text" to text, "kind" to kind) }
-    suspend fun report(id: Long) { api.support("chat_report", "id" to id.toString()) }
+    suspend fun report(id: String) { api.support("chat_report", "id" to id) }
     suspend fun partyCreate(streamId: Int, channel: String): JSONObject = api.support("chat_party_create", "stream_id" to streamId.toString(), "channel_name" to channel)
     suspend fun partyJoinCode(code: String): JSONObject = api.support("chat_party_join", "code" to code)
     suspend fun partyJoinRoom(room: String): JSONObject = api.support("chat_party_join", "room" to room)
@@ -38,37 +50,105 @@ class ChatApi(private val context: Context) {
     suspend fun partyChannel(room: String, streamId: Int, name: String) { runCatching { api.support("chat_party_channel", "room" to room, "stream_id" to streamId.toString(), "channel_name" to name) } }
     suspend fun pair(room: String): String = api.support("chat_pair", "room" to room).optString("url")
 
-    private var lastModified: String? = null
-    private var lastFile: String? = null
-
-    /** The room file; null when it did not change since the last read (304) or could not be read. */
-    suspend fun read(file: String): Room? = withContext(Dispatchers.IO) {
-        if (file != lastFile) { lastFile = file; lastModified = null }
-        val b = Request.Builder().url(PreferenceManager.SERVER_URL + file).header("User-Agent", "Web24Chat")
-        lastModified?.let { b.header("If-Modified-Since", it) }
-        runCatching {
-            client.newCall(b.build()).execute().use { r ->
-                if (r.code == 304 || !r.isSuccessful) return@use null
-                lastModified = r.header("Last-Modified")
-                parse(JSONObject(r.body?.string().orEmpty()))
-            }
-        }.getOrNull()
+    /** Firebase sign-in with Main's 1-hour custom token (skipped while this account's session is fresh). */
+    suspend fun signIn(me: JSONObject) {
+        val token = me.optString("token"); val uid = me.optString("uid"); val nick = me.optString("nick")
+        if (token.isBlank() || uid.isBlank()) return
+        val auth = FirebaseAuth.getInstance()
+        if (auth.currentUser?.uid == uid && signedNick == nick && System.currentTimeMillis() - signedAt < 50 * 60_000L) return
+        auth.signInWithCustomToken(token).await()
+        signedNick = nick; signedAt = System.currentTimeMillis()
     }
 
-    private fun parse(j: JSONObject): Room {
-        val a = j.optJSONArray("msgs")
-        val msgs = (0 until (a?.length() ?: 0)).mapNotNull { i -> a?.optJSONObject(i) }.map {
-            Msg(it.optLong("id"), it.optString("n"), it.optString("k"), it.optString("t"), it.optLong("at"))
+    val uid: String get() = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    // ------------------------------------------------------------------------------------------------ Firestore
+    private fun roomDoc(room: String) = db.collection("chat_rooms").document(room)
+
+    /** The room's last 80 lines, again every time one is added (hidden ones are left out). */
+    fun listenMessages(room: String, onChange: (List<Msg>) -> Unit): ListenerRegistration =
+        roomDoc(room).collection("msgs").orderBy("at", Query.Direction.DESCENDING).limit(80).addSnapshotListener { s, _ ->
+            if (s == null) return@addSnapshotListener
+            onChange(s.documents.filter { it.getBoolean("hidden") != true }.map { d ->
+                Msg(d.reference.path, d.getString("n").orEmpty(), d.getString("k") ?: "m", d.getString("t").orEmpty(),
+                    d.getTimestamp("at")?.toDate()?.time ?: System.currentTimeMillis())
+            }.asReversed())
         }
-        val ch = j.optJSONObject("channel")
-        val mem = j.optJSONArray("members")
-        return Room(j.optString("room"), j.optString("kind"), j.optString("title"), j.optInt("watching"), msgs,
-            j.optString("host"), j.optString("code"), ch?.optInt("id") ?: 0, ch?.optString("name").orEmpty(),
-            (0 until (mem?.length() ?: 0)).map { mem!!.optString(it) })
+
+    /** Writes a line straight to the room (the rules check the name, length, links and the ban). */
+    suspend fun send(room: String, nick: String, text: String, kind: String) {
+        val k = if (kind == "r") "r" else "m"
+        val t = if (k == "r") text else clean(text)
+        if (t.isBlank() || t == "[link removed]") throw IllegalStateException("Nothing to send.")
+        val now = System.currentTimeMillis()
+        if (now - lastSend < 2_000) throw IllegalStateException("Slow down a little - one message every few seconds.")
+        lastSend = now
+        try {
+            roomDoc(room).collection("msgs").add(mapOf("n" to nick, "uid" to uid, "k" to k, "t" to t, "at" to FieldValue.serverTimestamp())).await()
+        } catch (e: FirebaseFirestoreException) {
+            throw IllegalStateException(if (e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) "You cannot chat right now." else "Not sent - check the connection.")
+        }
+    }
+
+    /** "I am here": the viewer's own presence line, refreshed while the chat is open. */
+    suspend fun heartbeat(room: String, nick: String) {
+        runCatching { roomDoc(room).collection("presence").document(uid).set(mapOf("n" to nick, "at" to FieldValue.serverTimestamp())).await() }
+    }
+
+    suspend fun leavePresence(room: String) {
+        if (uid.isEmpty()) return
+        runCatching { roomDoc(room).collection("presence").document(uid).delete().await() }
+    }
+
+    /** How many are in the chat right now (presence lines of the last 90 s). */
+    suspend fun watching(room: String): Int = runCatching {
+        roomDoc(room).collection("presence").whereGreaterThan("at", Timestamp(Date(System.currentTimeMillis() - 90_000)))
+            .count().get(AggregateSource.SERVER).await().count.toInt()
+    }.getOrDefault(0)
+
+    /** A Watch Party's document: members, code and the host's channel (null once the party is gone). */
+    fun listenRoom(room: String, onChange: (Room?) -> Unit): ListenerRegistration =
+        roomDoc(room).addSnapshotListener { d, _ -> onChange(d?.takeIf { it.exists() }?.let { parseRoom(room, it) }) }
+
+    private fun parseRoom(room: String, d: DocumentSnapshot): Room {
+        val members = (d.get("members") as? Map<*, *>)?.values?.map { it.toString() } ?: emptyList()
+        return Room(room, d.getString("kind") ?: "p", d.getString("title").orEmpty(), d.getString("host").orEmpty(), d.getString("hostUid").orEmpty(),
+            d.getString("code").orEmpty(), (d.getLong("channelId") ?: 0L).toInt(), d.getString("channelName").orEmpty(), members)
+    }
+
+    /** The account's own document: Watch Party invites arrive here the moment a friend sends them. */
+    fun listenInvites(onChange: (List<JSONObject>) -> Unit): ListenerRegistration? {
+        val u = uid
+        if (u.isEmpty()) return null
+        return db.collection("chat_users").document(u).addSnapshotListener { d, _ ->
+            val inv = d?.get("invites") as? Map<*, *> ?: emptyMap<Any, Any>()
+            onChange(inv.entries.map { (k, v) ->
+                val m = v as? Map<*, *>
+                JSONObject().put("room", k.toString()).put("from", m?.get("from")?.toString().orEmpty())
+                    .put("title", m?.get("title")?.toString().orEmpty()).put("channel", m?.get("channel")?.toString().orEmpty())
+            })
+        }
     }
 
     companion object {
-        private val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).build()
+        private var signedNick = ""
+        private var signedAt = 0L
+        private var lastSend = 0L
+
+        private val words = listOf("fuck", "shit", "bitch", "cunt", "nigger", "nigga", "faggot", "retard", "whore", "slut", "dick", "pussy", "asshole", "bastard", "motherfucker", "chutiya", "madarchod", "behenchod", "bhenchod", "randi", "gandu")
+
+        /** Same clean-up Main applies: no control characters, no links, swear words starred, 200 characters. */
+        fun clean(text: String): String {
+            var t = text.replace(Regex("[\\x00-\\x1F\\x7F]+"), " ").replace(Regex("\\s+"), " ").trim()
+            t = t.replace(Regex("\\b(?:https?://|www\\.)\\S+|\\b[a-z0-9-]+\\.(?:com|net|org|io|tv|live|xyz|me|ru|biz|info)\\b\\S*", RegexOption.IGNORE_CASE), "[link removed]")
+            for (w in words) t = t.replace(Regex(Regex.escape(w), RegexOption.IGNORE_CASE), "*".repeat(w.length))
+            return t.take(200)
+        }
+
+        suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { c ->
+            addOnSuccessListener { if (c.isActive) c.resume(it) }
+            addOnFailureListener { if (c.isActive) c.resumeWithException(it) }
+        }
 
         // the Watch Party this device is in (survives screens; cleared on Leave)
         private const val PREFS = "n24_chat"

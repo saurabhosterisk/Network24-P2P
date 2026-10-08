@@ -24,7 +24,7 @@ android {
         minSdk = 21
         targetSdk = 35
 
-        versionCode = 99
+        versionCode = 100
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -172,6 +172,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.firestore.ktx)
+    implementation(libs.firebase.auth.ktx)
 
 
     // Room Database

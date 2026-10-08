@@ -8,7 +8,7 @@
          and see the "device not supported" screen (UnsupportedDeviceGate)
          instead of Android's bare "App not installed". On those devices the
          app stops before login, so no VPN code ever runs. -->
-    <uses-sdk tools:overrideLibrary="com.wireguard.android.tunnel" />
+    <uses-sdk tools:overrideLibrary="com.wireguard.android.tunnel,com.google.firebase.auth,com.google.firebase.auth.ktx" />
 
 
     <!-- Internet -->

@@ -118,11 +118,14 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     private var room = ""
     private var roomTitle = ""
     private var isHost = false
-    private var lastId = 0L
+    private val seen = HashSet<String>()
     private var streamSeen = 0
     private var partyChannelSeen = 0
     private var loop: Job? = null
-    private var lastPing = 0L
+    private var lastBeat = 0L
+    private var lastCount = 0L
+    private var msgReg: com.google.firebase.firestore.ListenerRegistration? = null
+    private var roomReg: com.google.firebase.firestore.ListenerRegistration? = null
 
     private val back = object : OnBackPressedCallback(false) { override fun handleOnBackPressed() = close() }
 
@@ -133,8 +136,8 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     init {
         button.setOnClickListener { if (isOpen) close() else open() }
         activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStop(owner: LifecycleOwner) { if (room.isNotEmpty()) { val r = room; activity.lifecycleScope.launch { api.leave(r) } } }
-            override fun onStart(owner: LifecycleOwner) { if (isOpen) startLoop() }
+            override fun onStop(owner: LifecycleOwner) { detach(); if (room.isNotEmpty()) { val r = room; activity.lifecycleScope.launch { api.leavePresence(r); api.leave(r) } } }
+            override fun onStart(owner: LifecycleOwner) { if (isOpen && room.isNotEmpty()) { attach(); lastBeat = 0L; startLoop() } }
         })
         if (openOnNextPlayer) { openOnNextPlayer = false; button.post { open() } }
     }
@@ -159,10 +162,11 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         isOpen = false
         back.isEnabled = false
         loop?.cancel()
+        detach()
         hideKeyboard()
         squeezeVideo(false)
         frame?.let { f -> panel.animate().translationX(panelW.toFloat()).alpha(0f).setDuration(200).withEndAction { if (!isOpen) f.visibility = View.GONE }.start() }
-        if (room.isNotEmpty()) { val r = room; activity.lifecycleScope.launch { api.leave(r) } }
+        if (room.isNotEmpty()) { val r = room; activity.lifecycleScope.launch { api.leavePresence(r); api.leave(r) } }
     }
 
     /** Remote keys the open panel keeps for itself (the player would change channel / show its controls). */
@@ -362,10 +366,10 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         val (r, t) = pickRoom()
         if (r == "c_0") { showStatus("Start a channel to chat about it."); return }
         runCatching { api.join(r, t) }.onSuccess { j ->
-            if (room.isNotEmpty() && room != r) api.leave(room)
+            if (room.isNotEmpty() && room != r) { detach(); api.leavePresence(room); api.leave(room) }
             room = j.optString("room"); roomTitle = j.optString("title").ifBlank { t }; isHost = j.optBoolean("host")
             nick = j.optString("nick").ifBlank { nick }
-            lastId = 0L; list.removeAllViews(); partyChannelSeen = 0
+            seen.clear(); list.removeAllViews(); partyChannelSeen = 0; partyInfo = null
             title.text = if (room.startsWith("p_")) "Watch Party" else roomTitle
             chatHint.text = when {
                 room.startsWith("p_") -> "Private chat - only the people in your Watch Party can see it."
@@ -376,7 +380,9 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
             list.addView(emptyHint, LinearLayout.LayoutParams(-1, -2))
             if (onPartyTab) renderParty()
             showStatus(null)
-            refresh()
+            updateWatching(1)
+            attach()
+            lastBeat = 0L; lastCount = 0L
         }.onFailure { e ->
             // a party this account left elsewhere: back to the normal chat
             if (room.startsWith("p_") || r.startsWith("p_")) { ChatApi.setParty(activity, null); room = ""; enterRoom() } else showStatus(e.message)
@@ -393,35 +399,50 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
                     streamSeen = id
                     if (room.startsWith("p_")) { if (isHost) hostSwitched(id) } else enterRoom()
                 }
-                if (room.isNotEmpty()) refresh()
-                if (room.isNotEmpty() && System.currentTimeMillis() - lastPing > 30_000) {
-                    lastPing = System.currentTimeMillis()
-                    runCatching { api.ping(room) }.onFailure { if (room.startsWith("p_")) { ChatApi.setParty(activity, null); enterRoom() } }
-                }
+                // "I am here" every 45 s, the head count every 20 s (the lines themselves arrive by listener)
+                val now = System.currentTimeMillis()
+                if (room.isNotEmpty() && now - lastBeat > 45_000) { lastBeat = now; api.heartbeat(room, nick) }
+                if (room.isNotEmpty() && now - lastCount > 20_000) { lastCount = now; updateWatching(api.watching(room)) }
                 delay(2_000)
             }
         }
     }
 
-    private suspend fun refresh() {
-        val r = api.read("/chat/r/$room.json") ?: return
+    /** Live listeners on the room: lines the moment they are written, and the party document (code, members, the host's channel). */
+    private fun attach() {
+        detach()
+        if (room.isEmpty()) return
+        msgReg = api.listenMessages(room) { onMessages(it) }
+        if (room.startsWith("p_")) roomReg = api.listenRoom(room) { r ->
+            if (r != null) showParty(r)
+            else if (room.startsWith("p_")) { ChatApi.setParty(activity, null); room = ""; activity.lifecycleScope.launch { enterRoom() } }
+        }
+    }
+
+    private fun detach() { msgReg?.remove(); msgReg = null; roomReg?.remove(); roomReg = null }
+
+    private fun updateWatching(n: Int) {
         sub.text = SpannableStringBuilder().apply {
             append("●  ", ForegroundColorSpan(live), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            append("${r.watching} in chat  ·  you are ")
+            append("${maxOf(n, 1)} in chat  ·  you are ")
             append(nick, StyleSpan(android.graphics.Typeface.BOLD), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
+    }
+
+    private fun onMessages(msgs: List<ChatApi.Msg>) {
+        if (!isOpen) return
         val atBottom = scroll.getChildAt(0).height - scroll.scrollY - scroll.height < dp(80)
+        val first = seen.isEmpty()
         var floated = 0
-        if (r.msgs.isNotEmpty()) emptyHint?.let { list.removeView(it); emptyHint = null }
-        r.msgs.filter { it.id > lastId }.forEach { m ->
+        if (msgs.isNotEmpty()) emptyHint?.let { list.removeView(it); emptyHint = null }
+        msgs.filter { it.id !in seen }.forEach { m ->
+            seen += m.id
             addMessage(m)
             // reactions from others float over the picture (a few at a time)
-            if (m.kind == "r" && lastId > 0 && floated < 4) { floatReaction(m.text); floated++ }
+            if (m.kind == "r" && !first && m.nick != nick && floated < 4) { floatReaction(m.text); floated++ }
         }
-        r.msgs.lastOrNull()?.let { lastId = maxOf(lastId, it.id) }
         while (list.childCount > 150) list.removeViewAt(0)
-        if (atBottom) scroll.post { scroll.scrollTo(0, list.height) }
-        if (r.kind == "p") showParty(r)
+        if (atBottom || first) scroll.post { scroll.scrollTo(0, list.height) }
     }
 
     private fun addMessage(m: ChatApi.Msg) {
@@ -485,8 +506,8 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
     private fun send(t: String, kind: String) {
         if (room.isEmpty()) return
         activity.lifecycleScope.launch {
-            runCatching { api.post(room, t, kind) }
-                .onSuccess { showStatus(null); if (kind == "r") floatReaction(t); refresh(); scroll.post { scroll.scrollTo(0, list.height) } }
+            runCatching { api.send(room, nick, t, kind) }
+                .onSuccess { showStatus(null); if (kind == "r") floatReaction(t); scroll.post { scroll.scrollTo(0, list.height) } }
                 .onFailure { showStatus(it.message) }
         }
     }

@@ -1,51 +1,47 @@
 package com.network24.player.features.chat
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.firestore.ListenerRegistration
 import com.network24.player.core.database.DatabaseProvider
 import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.features.player.activity.PlayerActivity
 import com.network24.player.features.player.state.PlayerState
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /**
- * Watch Party invites reach the customer on whatever screen is open: "SkipperFan invited you to a Watch Party
- * on ESPN - Join?". Only accounts that use the chat (have a chat name) are asked, once a minute while the app is
- * in front. Join plays the party's channel with the chat open.
+ * Watch Party invites reach the customer on whatever screen is open, the moment a friend sends one: "SkipperFan
+ * invited you to a Watch Party on ESPN - Join?". Only accounts that use the chat (have a chat name) listen. Join
+ * plays the party's channel with the chat open.
  */
 object ChatInvites {
     private val shown = HashSet<String>()
-    private var lastCheck = 0L
+    private var lastMe = 0L
 
     fun attach(activity: AppCompatActivity) {
-        var job: Job? = null
+        var reg: ListenerRegistration? = null
         activity.lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onResume(owner: LifecycleOwner) {
-                job = activity.lifecycleScope.launch {
-                    while (isActive) {
-                        if (ChatApi.used(activity) && System.currentTimeMillis() - lastCheck > 55_000) { lastCheck = System.currentTimeMillis(); check(activity) }
-                        delay(60_000)
-                    }
+                if (!ChatApi.used(activity)) return
+                activity.lifecycleScope.launch {
+                    val api = ChatApi(activity)
+                    // the Firebase session comes from Main's token (once, then it lives on)
+                    if (api.uid.isEmpty() || System.currentTimeMillis() - lastMe > 50 * 60_000L) { lastMe = System.currentTimeMillis(); runCatching { api.me() } }
+                    reg?.remove()
+                    reg = api.listenInvites { list -> offer(activity, api, list) }
                 }
             }
-            override fun onPause(owner: LifecycleOwner) { job?.cancel() }
+            override fun onPause(owner: LifecycleOwner) { reg?.remove(); reg = null }
         })
     }
 
-    private suspend fun check(activity: AppCompatActivity) {
-        val api = ChatApi(activity)
-        val me = runCatching { api.me() }.getOrNull() ?: return
-        val inv = me.optJSONArray("invites") ?: return
-        for (i in 0 until inv.length()) {
-            val o = inv.getJSONObject(i)
+    private fun offer(activity: AppCompatActivity, api: ChatApi, invites: List<JSONObject>) {
+        for (o in invites) {
             val room = o.optString("room")
             if (room in shown || room == ChatApi.party(activity)) continue
             shown += room
@@ -55,7 +51,7 @@ object ChatInvites {
                 title = "${o.optString("from")} invited you",
                 body = "Watch together$on and chat during the game.",
                 buttons = listOf("Join" to { join(activity, room) }, "Not now" to {}, "Decline" to { activity.lifecycleScope.launch { api.declineInvite(room) }; Unit }),
-                chip = "🎉  Watch Party", chipColor = android.graphics.Color.parseColor("#A894FF"))
+                chip = "Watch Party", chipColor = android.graphics.Color.parseColor("#A894FF"))
             return
         }
     }
