@@ -471,37 +471,67 @@ class HomeScreen(
         }
     }
 
-    /** Game / event card from Live Sports: league, LIVE or start time, both teams with their real logos and score. */
-    private fun gameCard(g: JSONObject) = LinearLayout(act).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12))
-        background = shape(surface, 12f, line)
+    /** A team's colour for a card tint; near-black / near-white team colours fall back to the app accent. */
+    private fun teamGlow(t: JSONObject): Int {
+        val c = GameCenter.color(t, accent)
+        val l = androidx.core.graphics.ColorUtils.calculateLuminance(c)
+        return if (l < 0.03 || l > 0.85) accent else c
+    }
+
+    /**
+     * Game / event card from Live Sports, as a small scoreboard: the two teams' colours as a diagonal tint, the home
+     * team's logo faded in behind, a red glow while the game is live, big logos and scores. Events (golf, racing...)
+     * get the accent tint and their league as a big faded word.
+     */
+    private fun gameCard(g: JSONObject) = FrameLayout(act).apply {
         layoutParams = LinearLayout.LayoutParams(dp(288), dp(162))
+        clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         val state = g.optString("state")
+        val isLive = state == "in"
         val start = g.optLong("start") * 1000
-        val head = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        head.addView(text((if (g.optBoolean("mine")) "★  " else "") + g.optString("league_name").uppercase(), 11f, if (g.optBoolean("mine")) gold else textSub, 700).apply { letterSpacing = 0.1f }, LinearLayout.LayoutParams(0, -2, 1f))
-        head.addView(if (state == "in") text("LIVE", 10f, Color.WHITE, 800).apply { letterSpacing = 0.1f; setPadding(dp(6), dp(3), dp(6), dp(3)); background = shape(live, 4f) }
-            else text("${Fmt.day(start)} · ${Fmt.clock(start)}", 11f, textSub, 600))
-        addView(head)
         val teams = Web24Api.objects(g.optJSONArray("teams"))
-        if (!g.has("kind") && teams.size == 2) {
-            val away = teams.firstOrNull { !it.optBoolean("home") } ?: teams[0]
-            val home = teams.firstOrNull { it !== away } ?: teams[1]
-            val a = away.optString("score").toIntOrNull(); val h = home.optString("score").toIntOrNull()
+        val isGame = !g.has("kind") && teams.size == 2
+        val away = if (isGame) teams.firstOrNull { !it.optBoolean("home") } ?: teams[0] else null
+        val home = if (isGame) teams.firstOrNull { it !== away } ?: teams[1] else null
+        val cA = away?.let { teamGlow(it) } ?: accent
+        val cH = home?.let { teamGlow(it) } ?: Color.parseColor("#22D3EE")
+        val blend = androidx.core.graphics.ColorUtils::blendARGB
+        background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(blend(surface, cA, 0.42f), blend(surface, cA, 0.14f), surface, blend(surface, cH, 0.30f))).apply {
+            cornerRadius = dpf(14f); setStroke(dp(1), if (isLive) 0xB3E5484D.toInt() else 0x33FFFFFF)
+        }
+        // watermark: the home team's logo (or the league name for an event), big and faint, bottom right
+        if (home != null) {
+            addView(ImageView(act).apply { alpha = 0.16f; scaleType = ImageView.ScaleType.FIT_CENTER; GameCenter.logo(this, home.optString("logo")) },
+                FrameLayout.LayoutParams(dp(150), dp(150), Gravity.END or Gravity.BOTTOM).apply { setMargins(0, 0, -dp(30), -dp(34)) })
+        } else {
+            addView(text(g.optString("league_name").uppercase(), 44f, Color.WHITE, 900).apply { alpha = 0.07f; letterSpacing = -0.02f; maxLines = 1 },
+                FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, 0, -dp(6), -dp(8)) })
+        }
+        // soft dark veil so the text always reads, stronger at the bottom
+        addView(View(act).apply { background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x4D000000)) }, FrameLayout.LayoutParams(-1, -1))
+        val body = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }
+        val head = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(text((if (g.optBoolean("mine")) "★  " else "") + g.optString("league_name").uppercase(), 11f, if (g.optBoolean("mine")) gold else Color.parseColor("#D7D9DE"), 800).apply { letterSpacing = 0.1f }, LinearLayout.LayoutParams(0, -2, 1f))
+        head.addView(if (isLive) text("●  LIVE", 10f, Color.WHITE, 800).apply { letterSpacing = 0.1f; setPadding(dp(7), dp(3), dp(7), dp(3)); background = shape(live, 6f) }
+            else text("${Fmt.day(start)} · ${Fmt.clock(start)}", 11f, textSub, 700).apply { setPadding(dp(7), dp(3), dp(7), dp(3)); background = shape(0x26FFFFFF, 6f) })
+        body.addView(head)
+        if (isGame) {
+            val a = away!!.optString("score").toIntOrNull(); val h = home!!.optString("score").toIntOrNull()
             listOf(away to (a != null && h != null && a < h), home to (a != null && h != null && h < a)).forEach { (t, behind) ->
-                val r = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, 0) }
-                r.addView(ImageView(act).apply { GameCenter.logo(this, t.optString("logo")) }, LinearLayout.LayoutParams(dp(28), dp(28)))
-                r.addView(text(GameCenter.short(t), 15f, textMain, 700).apply { setPadding(dp(10), 0, 0, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
-                if (state != "pre") r.addView(text(t.optString("score"), 18f, if (behind) textSub else textMain, 800).apply { fontFeatureSettings = "tnum" })
-                addView(r)
+                val r = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(9), 0, 0) }
+                r.addView(ImageView(act).apply { GameCenter.logo(this, t.optString("logo")) }, LinearLayout.LayoutParams(dp(34), dp(34)))
+                r.addView(text(GameCenter.short(t), 16f, if (behind && state == "post") textSub else textMain, 800).apply { setPadding(dp(10), 0, 0, 0); maxLines = 1 }, LinearLayout.LayoutParams(0, -2, 1f))
+                if (state != "pre") r.addView(text(t.optString("score"), 22f, if (behind) textSub else textMain, 900).apply { fontFeatureSettings = "tnum" })
+                body.addView(r)
             }
         } else {
-            addView(text(g.optString("name"), 15f, weight = 700).apply { maxLines = 2; setPadding(0, dp(12), 0, 0) })
+            body.addView(text(g.optString("name"), 16f, weight = 800).apply { maxLines = 2; setPadding(0, dp(12), 0, 0) })
             val sub = g.optString("headline").ifBlank { EventCenter.list(g.optJSONArray("live")).firstOrNull().orEmpty() }
-            if (sub.isNotBlank()) addView(text(sub, 12f, textSub, 500).apply { maxLines = 2; setPadding(0, dp(6), 0, 0) })
+            if (sub.isNotBlank()) body.addView(text(sub, 12.5f, Color.parseColor("#C9CCD3"), 600).apply { maxLines = 2; setPadding(0, dp(6), 0, 0) })
         }
+        addView(body, FrameLayout.LayoutParams(-1, -1))
         setOnClickListener { if (g.has("kind")) EventCenter.open(act, g, g.optString("league_name")) else GameCenter.open(act, g) }
-        focusable(this, 12f)
+        focusable(this, 14f)
     }
 
     // ------------------------------------------------------------------------------------------------ data
