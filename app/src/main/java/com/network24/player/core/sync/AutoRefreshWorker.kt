@@ -41,6 +41,7 @@ class AutoRefreshWorker(
         }
 
         prefs.setLastDataRefreshMs(System.currentTimeMillis())
+        prefs.setRefreshedVersionCode(com.network24.player.BuildConfig.VERSION_CODE)
         // Open screens reload their guide (BaseActivity listens for this).
         applicationContext.sendBroadcast(
             Intent(ACTION_EPG_UPDATED).setPackage(applicationContext.packageName)
@@ -97,26 +98,22 @@ class AutoRefreshWorker(
         }
 
         /**
-         * Fire OS and battery savers may delay periodic jobs a lot, so when
-         * the app is opened with data older than the interval, refresh now.
+         * Whenever the app is opened with data older than an hour, or on the first
+         * launch after an app update, refresh channels, categories and the guide now
+         * (Fire OS and battery savers also delay the periodic job a lot).
          */
         fun refreshIfDue(context: Context) {
             val prefs = PreferenceManager(context)
-            val hours = prefs.getAutoRefreshHours()
-            if (hours <= 0 || prefs.getLoginCredentials() == null) return
-            if (prefs.getLastDataRefreshMs() == 0L) {
-                // First run after install/update: login and the dashboard have
-                // just loaded fresh data, so start the clock instead of
-                // downloading everything again.
-                prefs.setLastDataRefreshMs(System.currentTimeMillis())
-                return
-            }
+            if (prefs.getLoginCredentials() == null) return
+            val updated = prefs.getRefreshedVersionCode() != com.network24.player.BuildConfig.VERSION_CODE
             val age = System.currentTimeMillis() - prefs.getLastDataRefreshMs()
-            if (age < TimeUnit.HOURS.toMillis(hours.toLong())) return
+            val stale = prefs.getAutoRefreshHours() > 0 && age >= TimeUnit.HOURS.toMillis(1)
+            if (!updated && !stale) return
             WorkManager.getInstance(context).enqueueUniqueWork(
                 CATCH_UP_WORK,
                 ExistingWorkPolicy.KEEP,
                 OneTimeWorkRequestBuilder<AutoRefreshWorker>()
+                    .setInputData(androidx.work.workDataOf(KEY_MANUAL to true))
                     .setConstraints(networkRequired)
                     .build()
             )

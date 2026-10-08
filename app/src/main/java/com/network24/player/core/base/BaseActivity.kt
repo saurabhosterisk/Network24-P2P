@@ -592,7 +592,7 @@ open class BaseActivity : AppCompatActivity() {
                 is SyncResult.Success -> {
                     // Channels + guide were just refreshed by hand; Auto Refresh
                     // counts its interval from here.
-                    PreferenceManager(this@BaseActivity).setLastDataRefreshMs(System.currentTimeMillis())
+                    PreferenceManager(this@BaseActivity).apply { setLastDataRefreshMs(System.currentTimeMillis()); setRefreshedVersionCode(com.network24.player.BuildConfig.VERSION_CODE) }
                     Toast.makeText(this@BaseActivity, "TV Guide Updated", Toast.LENGTH_SHORT).show()
                     onTvGuideUpdated()
                     sendBroadcast(Intent(ACTION_EPG_UPDATED))
@@ -650,7 +650,7 @@ open class BaseActivity : AppCompatActivity() {
             val now = System.currentTimeMillis()
             val programmes = runCatching { db.epgDao().countProgramsInWindow(now, now + 7 * 86_400_000L) }.getOrDefault(0)
             panel.complete(2, String.format(java.util.Locale.US, "%,d programmes", programmes))
-            prefs.setLastDataRefreshMs(now)
+            prefs.setLastDataRefreshMs(now); prefs.setRefreshedVersionCode(com.network24.player.BuildConfig.VERSION_CODE)
             onTvGuideUpdated()
             sendBroadcast(Intent(ACTION_EPG_UPDATED))
             panel.success(String.format(java.util.Locale.US, "%,d channels and %,d programmes for the coming days are ready.", channels, programmes))

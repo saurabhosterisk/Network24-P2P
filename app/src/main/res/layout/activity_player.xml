@@ -345,27 +345,27 @@
                         android:tint="#FFFFFF"
                         android:focusable="true" />
                     <ImageButton
-                        android:id="@+id/btnGrid"
+                        android:id="@+id/btnInfo"
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:layout_marginStart="2dp"
                         android:layout_marginEnd="2dp"
                         android:padding="10dp"
                         android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="MultiView"
-                        android:src="@drawable/ic_grid"
+                        android:contentDescription="Stream info"
+                        android:src="@drawable/ic_info"
                         android:tint="#FFFFFF"
                         android:focusable="true" />
                     <ImageButton
-                        android:id="@+id/btnChat"
+                        android:id="@+id/btnDecoder"
                         android:layout_width="44dp"
                         android:layout_height="44dp"
                         android:layout_marginStart="2dp"
                         android:layout_marginEnd="2dp"
                         android:padding="10dp"
                         android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Live chat"
-                        android:src="@drawable/ic_watch_chat"
+                        android:contentDescription="Decoding (hardware / software)"
+                        android:src="@drawable/ic_decoder"
                         android:tint="#FFFFFF"
                         android:focusable="true" />
                     <ImageButton
@@ -378,6 +378,18 @@
                         android:background="@drawable/bg_player_btn_flat"
                         android:contentDescription="AI assistant"
                         android:src="@drawable/ic_ai"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnAspect"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Picture size"
+                        android:src="@drawable/ic_aspect"
                         android:tint="#FFFFFF"
                         android:focusable="true" />
                 </LinearLayout>
@@ -441,18 +453,6 @@
                     android:layout_gravity="end"
                     android:background="@drawable/bg_player_dock">
                     <ImageButton
-                        android:id="@+id/btnAspect"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:padding="10dp"
-                        android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Picture size"
-                        android:src="@drawable/ic_aspect"
-                        android:tint="#FFFFFF"
-                        android:focusable="true" />
-                    <ImageButton
                         android:id="@+id/btnSubtitle"
                         android:layout_width="44dp"
                         android:layout_height="44dp"
@@ -462,42 +462,6 @@
                         android:background="@drawable/bg_player_btn_flat"
                         android:contentDescription="Subtitles"
                         android:src="@drawable/ic_cc_on"
-                        android:tint="#FFFFFF"
-                        android:focusable="true" />
-                    <ImageButton
-                        android:id="@+id/btnAutoVolume"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:padding="10dp"
-                        android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Auto volume"
-                        android:src="@drawable/ic_auto_volume"
-                        android:tint="#FFFFFF"
-                        android:focusable="true" />
-                    <ImageButton
-                        android:id="@+id/btnDecoder"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:padding="10dp"
-                        android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Decoding (hardware / software)"
-                        android:src="@drawable/ic_decoder"
-                        android:tint="#FFFFFF"
-                        android:focusable="true" />
-                    <ImageButton
-                        android:id="@+id/btnInfo"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:padding="10dp"
-                        android:background="@drawable/bg_player_btn_flat"
-                        android:contentDescription="Stream info"
-                        android:src="@drawable/ic_info"
                         android:tint="#FFFFFF"
                         android:focusable="true" />
                     <ImageButton
@@ -524,6 +488,30 @@
                         android:src="@drawable/ic_refresh"
                         android:tint="#FFFFFF"
                         android:visibility="gone"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnGrid"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="MultiView"
+                        android:src="@drawable/ic_grid"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
+                        android:id="@+id/btnChat"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Live chat"
+                        android:src="@drawable/ic_watch_chat"
+                        android:tint="#FFFFFF"
                         android:focusable="true" />
                 </LinearLayout>
             </FrameLayout>

@@ -223,6 +223,10 @@ class PreferenceManager(context: Context) {
         prefs.edit().putLong(KEY_LAST_DATA_REFRESH_MS, timeMs).apply()
     }
 
+    /** App build the data was last refreshed under, so an app update refreshes on its first launch. */
+    fun getRefreshedVersionCode(): Int = prefs.getInt("refreshed_version_code", 0)
+    fun setRefreshedVersionCode(code: Int) { prefs.edit().putInt("refreshed_version_code", code).apply() }
+
     /** Settings > Auto clean: every N days (0 = off). Default every week. */
     /** Player > Picture size: 0 = Fit, 1 = Zoom (fill, crop the edges), 2 = Stretch. */
     fun getAspectMode(): Int = prefs.getInt(KEY_ASPECT_MODE, 0)

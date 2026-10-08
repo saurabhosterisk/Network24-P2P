@@ -581,7 +581,6 @@ class PlayerActivity : BaseActivity() {
         chatPanel = com.network24.player.features.chat.ChatPanel(this, binding.btnChat)
         aiDrawer.onOpen = { programDrawer.close(); chatPanel.close() }
         chatPanel.onOpen = { programDrawer.close(); aiDrawer.close() }
-        com.network24.player.core.audio.AutoVolumeButton.bind(this, binding.btnAutoVolume) { showUiWithTimeout() }
         com.network24.player.core.player.SoftwareDecodingButton.bind(this, binding.btnDecoder) { showUiWithTimeout() }
         vpnToggle.register()
 
