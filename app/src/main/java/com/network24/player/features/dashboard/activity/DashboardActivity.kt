@@ -176,6 +176,8 @@ class DashboardActivity : BaseActivity() {
                 )
                 val userInfo = response.body()?.user_info
                 if (response.isSuccessful && userInfo?.auth == 1) {
+                    // heal logins typed in another letter case (channels got 401 from the load balancers)
+                    prefs.fixCredentialCase(userInfo.username, userInfo.password)
                     prefs.saveUserInfo(
                         username = userInfo.username ?: prefs.getUsername(),
                         status = userInfo.status ?: prefs.getStatus(),

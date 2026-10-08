@@ -67,6 +67,19 @@ class PreferenceManager(context: Context) {
     // Login / Credentials
     // -------------------------
 
+    /**
+     * The panel accepts a login typed in another letter case (MySQL compares without case), but the load
+     * balancers compare the password exactly and refuse every channel with 401. player_api's user_info carries the
+     * stored spelling: keep that one.
+     */
+    fun fixCredentialCase(username: String?, password: String?) {
+        val u = getUsername(); val p = getPassword()
+        val e = prefs.edit(); var changed = false
+        if (!username.isNullOrBlank() && username != u && username.equals(u, ignoreCase = true)) { e.putString(KEY_USERNAME, username); changed = true }
+        if (!password.isNullOrBlank() && password != p && password.equals(p, ignoreCase = true)) { e.putString(KEY_PASSWORD, password); changed = true }
+        if (changed) e.apply()
+    }
+
     fun saveLogin(
         server: String,
         username: String,

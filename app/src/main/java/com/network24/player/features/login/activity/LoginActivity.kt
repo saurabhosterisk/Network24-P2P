@@ -227,6 +227,8 @@ class LoginActivity : BaseActivity() {
                         password,
                         binding.chkRemember.isChecked
                     )
+                    // the stored spelling of the login (a different letter case logs in but every channel gets 401)
+                    prefs.fixCredentialCase(userInfo.username, userInfo.password)
                     // Dashboard downloads the channels + full TV Guide on screen right after this login
                     prefs.setFirstSetupPending(true)
 
