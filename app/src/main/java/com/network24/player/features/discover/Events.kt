@@ -183,7 +183,7 @@ class EventActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         if (blockedByGate) return
         brief = runCatching { JSONObject(intent.getStringExtra(EXTRA_EVENT).orEmpty()) }.getOrNull() ?: run { finish(); return }
-        val root = FrameLayout(this).apply { setBackgroundResource(R.drawable.bg_dashboard) }
+        val root = FrameLayout(this).apply { background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(android.graphics.Color.parseColor("#FF15112E"), android.graphics.Color.parseColor("#FF08090C"), android.graphics.Color.parseColor("#FF08090C"))) }
         val scroll = ScrollView(this).apply { isFillViewport = true; isFocusable = false }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(12), dp(18), dp(24)) }
         scroll.addView(body)
@@ -210,19 +210,19 @@ class EventActivity : BaseActivity() {
 
     // ------------------------------------------------------------------------------------------------ views
     private fun text(s: String, size: Float, color: Int = col(R.color.text_primary), bold: Boolean = false) = TextView(this).apply {
-        text = s; textSize = size; setTextColor(color); if (bold) setTypeface(typeface, Typeface.BOLD)
+        text = s; textSize = size; setTextColor(color); Skin.font(this, bold)
     }
 
     private fun card(focusable: Boolean) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundResource(R.drawable.bg_settings_action)
         setPadding(dp(18), dp(14), dp(18), dp(14))
         isFocusable = focusable
+        Skin.card(this, 16, focusable)
     }
 
     private fun add(v: View, top: Int = 12) = body.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) })
 
-    private fun heading(t: String) = text(t.uppercase(), 12f, col(R.color.primary_light), true).apply { letterSpacing = 0.12f; setPadding(dp(4), dp(18), 0, dp(2)) }
+    private fun heading(t: String) = text(t.uppercase(), 12f, col(R.color.skin_accent), true).apply { letterSpacing = 0.12f; setPadding(dp(4), dp(18), 0, dp(2)) }
 
     /** One focusable line of a list (a fight, a player, a session, a match): the remote walks the list row by row. */
     private fun item(key: String) = card(true).apply { tag = key; setPadding(dp(16), dp(10), dp(16), dp(10)) }
@@ -317,7 +317,7 @@ class EventActivity : BaseActivity() {
                 "in" -> "LIVE"
                 else -> Fmt.clock(b.optLong("start") * 1000)
             }
-            c.addView(row(text(top, 12f, if (i == 0) col(R.color.primary_light) else col(R.color.text_hint), true) to 1f,
+            c.addView(row(text(top, 12f, if (i == 0) col(R.color.skin_accent) else col(R.color.text_hint), true) to 1f,
                 text(status, 13f, if (state == "in") live else col(R.color.text_secondary), state != "pre") to 0f))
             fun fighter(x: JSONObject?, end: Boolean) = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = if (end) Gravity.END else Gravity.START
@@ -387,7 +387,7 @@ class EventActivity : BaseActivity() {
         res.take(25).forEach { r ->
             val c = item("r" + done.optString("id") + r.optString("id"))
             val p = r.optInt("pos")
-            c.addView(row(text(if (p > 0) "$p" else "-", 16f, if (p in 1..3) col(R.color.primary_light) else col(R.color.text_hint), true) to 0.5f,
+            c.addView(row(text(if (p > 0) "$p" else "-", 16f, if (p in 1..3) col(R.color.skin_accent) else col(R.color.text_hint), true) to 0.5f,
                 text(r.optString("name"), 16f, bold = p in 1..3) to 3f, text(r.optString("country"), 13f, col(R.color.text_hint)).apply { gravity = Gravity.END } to 1.5f))
             add(c, 6)
         }
@@ -406,7 +406,7 @@ class EventActivity : BaseActivity() {
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
         }
         val note = e.optString("note")
-        if (note.isNotBlank()) board.addView(text(note, 15f, col(R.color.primary_light), true).apply { setPadding(0, dp(10), 0, 0) })
+        if (note.isNotBlank()) board.addView(text(note, 15f, col(R.color.skin_accent), true).apply { setPadding(0, dp(10), 0, 0) })
         val desc = e.optString("description")
         if (desc.isNotBlank()) board.addView(text(desc, 13f, col(R.color.text_hint)).apply { setPadding(0, dp(6), 0, 0) })
         EventCenter.list(e.optJSONArray("notes")).forEach { board.addView(text(it, 13f, col(R.color.text_hint)).apply { setPadding(0, dp(2), 0, 0) }) }

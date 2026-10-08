@@ -29,7 +29,9 @@ import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.core.database.repository.LiveHistoryRepository
 import com.network24.player.core.parental.ParentalLock
 import com.network24.player.core.preferences.PreferenceManager
+import com.network24.player.features.dashboard.home.HomeFont
 import com.network24.player.features.live.models.LiveChannel
+import android.graphics.drawable.GradientDrawable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -97,36 +99,59 @@ class MultiViewPicker(
     }
 
     // ------------------------------------------------------------------------------------------------ layout
-    private fun text(s: String, size: Float, color: Int = col(R.color.text_primary), bold: Boolean = false) = TextView(activity).apply {
-        text = s; textSize = size; setTextColor(color); if (bold) setTypeface(typeface, Typeface.BOLD)
+    // the app look: Manrope, dark glass rows with a white focus ring, violet accent
+    private val surface = Color.parseColor("#14161B")
+    private val line = Color.parseColor("#1FFFFFFF")
+    private val accent = Color.parseColor("#7C5CFF")
+    private val accentSoft = Color.parseColor("#A894FF")
+    private val textSub = Color.parseColor("#9BA1AD")
+
+    private fun text(s: String, size: Float, color: Int = Color.parseColor("#F2F3F5"), bold: Boolean = false) = TextView(activity).apply {
+        text = s; textSize = size; setTextColor(color); typeface = HomeFont.of(activity, if (bold) 800 else 500); includeFontPadding = false
+    }
+
+    private fun shape(fill: Int, radius: Float, stroke: Int = 0) = GradientDrawable().apply {
+        setColor(fill); cornerRadius = dp(radius.toInt()).toFloat(); if (stroke != 0) setStroke(dp(1), stroke)
+    }
+
+    /** Rounded row with a 3 dp white ring while it has the focus (the same ring as the rest of the app). */
+    private fun glass(v: View, radius: Int, selected: () -> Boolean = { false }) {
+        val ring = GradientDrawable().apply { cornerRadius = dp(radius) - dp(3) / 2f; setStroke(dp(3), Color.WHITE); setColor(Color.TRANSPARENT) }
+        fun paint() { v.background = if (selected()) GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor("#3A2C7A"), Color.parseColor("#1E1A3A"))).apply { cornerRadius = dp(radius).toFloat(); setStroke(dp(1), 0x667C5CFF) } else shape(surface, radius.toFloat(), line) }
+        paint()
+        val old = v.onFocusChangeListener
+        v.setOnFocusChangeListener { x, has -> x.foreground = if (has) ring else null; x.animate().scaleX(if (has) 1.02f else 1f).scaleY(if (has) 1.02f else 1f).setDuration(120).start(); old?.onFocusChange(x, has) }
+        v.tag = (v.tag as? Runnable) ?: Runnable { paint() }
     }
 
     private fun build() {
         val p = FrameLayout(activity).apply {
-            setBackgroundColor(Color.parseColor("#F20E0E12")); isClickable = true; elevation = dp(30).toFloat()
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#FF15112E"), Color.parseColor("#FF08090C"), Color.parseColor("#FF08090C"))); isClickable = true; elevation = dp(30).toFloat()
         }
-        val col = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(16), dp(24), dp(12)) }
+        val col = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(48), dp(24), dp(48), dp(16)) }
         p.addView(col, FrameLayout.LayoutParams(-1, -1))
 
         val head = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         head.addView(text("MultiView · choose channels", 22f, bold = true), LinearLayout.LayoutParams(0, -2, 1f))
         head.addView(TextView(activity).apply {
-            text = "Done"; textSize = 15f; setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            setBackgroundResource(R.drawable.bg_primary_action); setPadding(dp(26), dp(10), dp(26), dp(10))
+            text = "Done"; textSize = 15f; typeface = HomeFont.of(activity, 800); setTextColor(Color.parseColor("#08090C")); gravity = Gravity.CENTER
+            setPadding(dp(28), dp(11), dp(28), dp(11)); background = shape(Color.WHITE, 22f)
             isFocusable = true; isClickable = true; setOnClickListener { close() }
+            glass(this, 22)
+            background = shape(Color.WHITE, 22f)
         })
         col.addView(head)
 
         chips = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(chips, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        hint = text("", 13f, col(R.color.text_hint)).apply { setPadding(dp(2), dp(8), 0, dp(8)) }
+        hint = text("", 13f, textSub).apply { setPadding(dp(2), dp(8), 0, dp(8)) }
         col.addView(hint)
 
         val body = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val left = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("CATEGORIES", 12f, col(R.color.primary_light), true).apply { letterSpacing = 0.12f; setPadding(dp(4), 0, 0, dp(6)) })
+        left.addView(text("CATEGORIES", 12f, accentSoft, true).apply { letterSpacing = 0.12f; setPadding(dp(4), 0, 0, dp(6)) })
         catList = RecyclerView(activity).apply {
             layoutManager = LinearLayoutManager(activity); adapter = catAdapter; id = View.generateViewId(); clipToPadding = false
             (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
@@ -137,7 +162,7 @@ class MultiViewPicker(
 
         val right = FrameLayout(activity)
         val rightCol = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        chTitle = text("", 12f, col(R.color.primary_light), true).apply { letterSpacing = 0.12f; setPadding(dp(4), 0, 0, dp(6)) }
+        chTitle = text("", 12f, accentSoft, true).apply { letterSpacing = 0.12f; setPadding(dp(4), 0, 0, dp(6)) }
         rightCol.addView(chTitle)
         chList = RecyclerView(activity).apply {
             layoutManager = LinearLayoutManager(activity); adapter = chAdapter; id = View.generateViewId(); clipToPadding = false
@@ -163,10 +188,10 @@ class MultiViewPicker(
             val ch = w[i]
             val v = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(8))
-                setBackgroundResource(R.drawable.bg_interactive_chip); isFocusable = true; isClickable = true; isLongClickable = true
-                isSelected = i == target
-                addView(text("WINDOW ${i + 1}" + if (i == target) "  ◀ next" else "", 11f, if (i == target) col(R.color.primary_light) else col(R.color.text_hint), true))
-                addView(text(ch?.name ?: "Empty", 14f, if (ch == null) col(R.color.text_hint) else Color.WHITE, ch != null).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                isFocusable = true; isClickable = true; isLongClickable = true
+                isSelected = i == target; glass(this, 14) { i == target }
+                addView(text("WINDOW ${i + 1}" + if (i == target) "  ◀ next" else "", 11f, if (i == target) accentSoft else textSub, true))
+                addView(text(ch?.name ?: "Empty", 14f, if (ch == null) textSub else Color.WHITE, ch != null).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                 setOnClickListener { target = i; refreshChips(); chAdapter.refresh() }
                 setOnLongClickListener { if (windows()[i] != null) { onPick(i, null); refreshChips(); chAdapter.refresh() }; true }
             }
@@ -273,11 +298,11 @@ class MultiViewPicker(
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val v = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_settings_action); setPadding(dp(14), dp(11), dp(14), dp(11))
-                isFocusable = true; isClickable = true
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                isFocusable = true; isClickable = true; glass(this, 14) { this.isSelected }
                 layoutParams = RecyclerView.LayoutParams(-1, -2).apply { bottomMargin = dp(6) }
                 addView(text("", 15f, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(text("", 12f, col(R.color.text_hint)))
+                addView(text("", 12f, textSub))
             }
             return object : RecyclerView.ViewHolder(v) {}
         }
@@ -286,9 +311,9 @@ class MultiViewPicker(
             val c = cats[position]
             val v = h.itemView as LinearLayout
             val sel = position == catIndex
-            (v.getChildAt(0) as TextView).apply { text = c.name; setTextColor(if (sel) col(R.color.primary_light) else Color.WHITE) }
+            (v.getChildAt(0) as TextView).apply { text = c.name; setTextColor(if (sel) accentSoft else Color.WHITE) }
             (v.getChildAt(1) as TextView).text = if (c.count >= 0) "${c.count}" else ""
-            v.isSelected = sel
+            v.isSelected = sel; (v.tag as? Runnable)?.run()
             v.setOnClickListener { selectCat(h.bindingAdapterPosition, focus = false); chList.post { chList.getChildAt(0)?.requestFocus() } }
             // moving through the categories shows their channels (after a short pause, not on every step)
             v.setOnFocusChangeListener { _, has ->
@@ -325,16 +350,16 @@ class MultiViewPicker(
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val v = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_settings_action); setPadding(dp(12), dp(8), dp(14), dp(8))
-                isFocusable = true; isClickable = true
+                setPadding(dp(14), dp(9), dp(16), dp(9))
+                isFocusable = true; isClickable = true; glass(this, 14)
                 layoutParams = RecyclerView.LayoutParams(-1, -2).apply { bottomMargin = dp(6) }
                 addView(ImageView(activity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(dp(60), dp(40)))
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, dp(8), 0)
                     addView(text("", 16f, bold = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
-                    addView(text("", 13f, col(R.color.text_hint)).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    addView(text("", 13f, textSub).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                 }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(text("", 13f, Color.WHITE, true).apply { setBackgroundResource(R.drawable.bg_program_pill); setPadding(dp(12), dp(4), dp(12), dp(4)) })
+                addView(text("", 13f, Color.WHITE, true).apply { background = shape(0x26FFFFFF, 14f); setPadding(dp(14), dp(6), dp(14), dp(6)) })
             }
             return object : RecyclerView.ViewHolder(v) {}
         }
@@ -350,7 +375,7 @@ class MultiViewPicker(
             val inWin = windows().indexOfFirst { it?.stream_id == c.streamId }
             (v.getChildAt(2) as TextView).apply {
                 text = if (inWin >= 0) "▶ Window ${inWin + 1}" else "+ Window ${target + 1}"
-                setTextColor(if (inWin >= 0) col(R.color.primary_light) else col(R.color.text_hint))
+                setTextColor(if (inWin >= 0) accentSoft else textSub)
             }
             v.setOnClickListener { pick(c) }
             v.setOnKeyListener { _, code, e ->

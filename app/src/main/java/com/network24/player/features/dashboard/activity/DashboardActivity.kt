@@ -210,6 +210,7 @@ class DashboardActivity : BaseActivity() {
     private fun enlargeDashboardIcons(card: ViewGroup, sizeDp: Int) { val sizePx = (sizeDp * resources.displayMetrics.density).toInt(); for (index in 0 until card.childCount) when (val child = card.getChildAt(index)) { is ImageView -> { child.layoutParams = child.layoutParams.apply { width = sizePx; height = sizePx }; child.scaleType = ImageView.ScaleType.CENTER_INSIDE; child.requestLayout() }; is ViewGroup -> enlargeDashboardIcons(child, sizeDp) } }
     private fun setupDrawerAndMenu() {
         binding.btnMore.setOnClickListener { openRightDrawer(binding.drawerLayout) }
+        styleNavDrawer(binding.rightNav)
         setupOptionalRightDrawerMenu(binding.drawerLayout, binding.rightNav) { itemId ->
             when (itemId) {
                 R.id.action_home -> { refreshAccountInfo(); closeRightDrawer(binding.drawerLayout); true }

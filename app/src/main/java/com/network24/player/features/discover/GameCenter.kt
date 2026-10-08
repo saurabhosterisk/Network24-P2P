@@ -106,7 +106,7 @@ class GameActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         if (blockedByGate) return
         game = runCatching { JSONObject(intent.getStringExtra(EXTRA_GAME).orEmpty()) }.getOrNull() ?: run { finish(); return }
-        val root = FrameLayout(this).apply { setBackgroundResource(R.drawable.bg_dashboard) }
+        val root = FrameLayout(this).apply { background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(android.graphics.Color.parseColor("#FF15112E"), android.graphics.Color.parseColor("#FF08090C"), android.graphics.Color.parseColor("#FF08090C"))) }
         val scroll = ScrollView(this).apply { isFillViewport = true; isFocusable = false }
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(12), dp(18), dp(24)) }
         scroll.addView(body)
@@ -132,20 +132,20 @@ class GameActivity : BaseActivity() {
 
     // ------------------------------------------------------------------------------------------------ drawing
     private fun text(s: String, size: Float, color: Int = col(R.color.text_primary), bold: Boolean = false) = TextView(this).apply {
-        text = s; textSize = size; setTextColor(color); if (bold) setTypeface(typeface, Typeface.BOLD)
+        text = s; textSize = size; setTextColor(color); Skin.font(this, bold)
     }
 
     /** A card that takes the remote's focus, so DOWN walks (and scrolls) through the sections. */
     private fun card(focusable: Boolean = true) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundResource(R.drawable.bg_settings_action)
         setPadding(dp(18), dp(14), dp(18), dp(14))
         isFocusable = focusable; isClickable = false
+        Skin.card(this, 16, focusable)
     }
 
     private fun add(v: View, top: Int = 12) = body.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) })
 
-    private fun section(title: String) = card().also { it.tag = title; it.addView(text(title.uppercase(), 12f, col(R.color.primary_light), true).apply { letterSpacing = 0.12f }) }
+    private fun section(title: String) = card().also { it.tag = title; it.addView(text(title.uppercase(), 12f, col(R.color.skin_accent), true).apply { letterSpacing = 0.12f }) }
 
     private fun draw() {
         val focused = currentFocus?.tag
@@ -290,7 +290,7 @@ class GameActivity : BaseActivity() {
         val cols = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(away, home).forEach { t ->
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(8), dp(12), 0) }
-            box.addView(text(GameCenter.short(t), 15f, GameCenter.color(t, col(R.color.primary_light)).let { if (Color.luminance(it) < 0.15f) col(R.color.primary_light) else it }, true))
+            box.addView(text(GameCenter.short(t), 15f, GameCenter.color(t, col(R.color.skin_accent)).let { if (Color.luminance(it) < 0.15f) col(R.color.skin_accent) else it }, true))
             all.firstOrNull { it.optString("team") == t.optString("id") }?.let { tl ->
                 Web24Api.objects(tl.optJSONArray("items")).forEach { i ->
                     box.addView(text(i.optString("category"), 12f, col(R.color.text_hint)).apply { setPadding(0, dp(8), 0, 0) })
@@ -325,9 +325,9 @@ class GameActivity : BaseActivity() {
             val an = number(av, eff); val hn = number(hv, eff)
             if (an != null && hn != null && an + hn > 0) {
                 val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(4), 0, 0) }
-                bar.addView(View(this).apply { setBackgroundColor(if (an >= hn) col(R.color.primary_light) else Color.parseColor("#444444")) }, LinearLayout.LayoutParams(0, dp(4), an.toFloat().coerceAtLeast(0.01f)))
+                bar.addView(View(this).apply { setBackgroundColor(if (an >= hn) col(R.color.skin_accent) else Color.parseColor("#444444")) }, LinearLayout.LayoutParams(0, dp(4), an.toFloat().coerceAtLeast(0.01f)))
                 bar.addView(View(this), LinearLayout.LayoutParams(dp(4), dp(4)))
-                bar.addView(View(this).apply { setBackgroundColor(if (hn >= an) col(R.color.primary_light) else Color.parseColor("#444444")) }, LinearLayout.LayoutParams(0, dp(4), hn.toFloat().coerceAtLeast(0.01f)))
+                bar.addView(View(this).apply { setBackgroundColor(if (hn >= an) col(R.color.skin_accent) else Color.parseColor("#444444")) }, LinearLayout.LayoutParams(0, dp(4), hn.toFloat().coerceAtLeast(0.01f)))
                 c.addView(bar)
             }
         }

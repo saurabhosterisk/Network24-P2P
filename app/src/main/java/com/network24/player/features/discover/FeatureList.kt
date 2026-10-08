@@ -57,6 +57,7 @@ class RowAdapter : RecyclerView.Adapter<RowAdapter.VH>() {
         val r = rows[position]
         h.b.txtTitle.text = r.title
         h.b.txtSub.text = r.sub; h.b.txtSub.visibility = if (r.sub.isBlank()) View.GONE else View.VISIBLE
+        run { val tf = com.network24.player.features.dashboard.home.HomeFont.of(h.itemView.context, 700); h.b.txtTitle.typeface = tf; h.b.txtLead.typeface = tf; h.b.txtBadge.typeface = tf; val tf5 = com.network24.player.features.dashboard.home.HomeFont.of(h.itemView.context, 500); h.b.txtSub.typeface = tf5; h.b.txtSub2.typeface = tf5 }
         h.b.txtSub2.text = r.sub2; h.b.txtSub2.visibility = if (r.sub2.isBlank()) View.GONE else View.VISIBLE
         h.b.txtLead.text = r.lead; h.b.txtLead.visibility = if (r.lead.isBlank()) View.GONE else View.VISIBLE
         h.b.imgIcon.visibility = if (r.showIcon) View.VISIBLE else View.GONE
@@ -86,6 +87,8 @@ abstract class FeatureListActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityFeatureListBinding.inflate(layoutInflater)
         setContentView(setupGlobalRightDrawer(b.root, b.btnMore))
+        // the app font on every text of the list pages (rows are bound later and get it in RowAdapter)
+        run { val tf = com.network24.player.features.dashboard.home.HomeFont.of(this, 700); fun walk(v: View) { if (v is TextView) v.typeface = tf; if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i)) }; walk(b.root) }
         b.btnBack.setOnClickListener { finish() }
         b.rvItems.layoutManager = LinearLayoutManager(this)
         b.rvItems.adapter = adapter
@@ -168,10 +171,11 @@ abstract class FeatureListActivity : BaseActivity() {
                 id = View.generateViewId()
                 text = label; textSize = 14f; isFocusable = true; isClickable = true
                 setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-                setBackgroundResource(R.drawable.bg_interactive_chip)
+                setBackgroundResource(R.drawable.bg_feature_pill)
                 setPadding((16 * d).toInt(), (9 * d).toInt(), (16 * d).toInt(), (9 * d).toInt())
                 isSelected = k == selected
-                if (k == selected) { setTextColor(ContextCompat.getColor(context, R.color.primary_light)); setTypeface(typeface, android.graphics.Typeface.BOLD) }
+                typeface = com.network24.player.features.dashboard.home.HomeFont.of(context, if (k == selected) 800 else 600)
+                if (k == selected) setTextColor(android.graphics.Color.parseColor("#08090C"))
                 setOnClickListener { pendingChipFocus = row; redraw(k); onPick(k) }
             }
             row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = (8 * d).toInt() })

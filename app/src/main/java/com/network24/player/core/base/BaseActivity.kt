@@ -111,6 +111,20 @@ open class BaseActivity : AppCompatActivity() {
      * Adds the same right-side menu used by the dashboard to activities whose
      * layout does not need a permanent DrawerLayout of its own.
      */
+    /** The app look for the More drawer: dark panel (as the sign-in card), more room per row, Manrope text, rounded focus pill. */
+    protected fun styleNavDrawer(nav: NavigationView) {
+        nav.setBackgroundColor(android.graphics.Color.parseColor("#FF14161B"))
+        nav.itemBackground = ContextCompat.getDrawable(this, R.drawable.bg_drawer_item)
+        nav.itemVerticalPadding = dp(8)
+        nav.itemHorizontalPadding = dp(24)
+        nav.itemIconPadding = dp(18)
+        nav.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val tf = com.network24.player.features.dashboard.home.HomeFont.of(this, 700)
+            fun walk(x: View) { if (x is TextView) { x.typeface = tf; x.textSize = 16f }; if (x is ViewGroup) for (i in 0 until x.childCount) walk(x.getChildAt(i)) }
+            walk(v)
+        }
+    }
+
     protected fun setupGlobalRightDrawer(
         contentRoot: ViewGroup,
         moreButton: View
@@ -133,6 +147,7 @@ open class BaseActivity : AppCompatActivity() {
             itemIconTintList = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
             itemTextColor = ContextCompat.getColorStateList(context, R.color.navigation_item_content)
             inflateMenu(R.menu.menu_live_right_drawer)
+            styleNavDrawer(this)
         }
         drawerLayout.addView(
             navView,

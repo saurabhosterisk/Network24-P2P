@@ -9,8 +9,8 @@
     android:clickable="true"
     android:focusable="true"
     android:minHeight="72dp"
-    app:cardBackgroundColor="@color/interactive_card_background"
-    app:cardCornerRadius="12dp"
+    app:cardBackgroundColor="#FF14161B"
+    app:cardCornerRadius="14dp"
     app:cardElevation="0dp"
     app:strokeColor="@color/interactive_card_stroke"
     app:strokeWidth="1dp">
@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
             android:gravity="center"
-            android:textColor="@color/primary_light"
+            android:textColor="#FFA894FF"
             android:textSize="13sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -68,7 +68,7 @@
                 android:layout_marginTop="2dp"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:textColor="@color/primary_light"
+                android:textColor="#FFA894FF"
                 android:textSize="14sp" />
 
             <TextView

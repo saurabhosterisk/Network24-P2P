@@ -3,4 +3,5 @@
     <!-- Right-hand menu: dark like the rest of the app (was white). -->
     <color name="drawer_bg">#1C1C1E</color>
     <color name="drawer_item_text">#E6E6E6</color>
+    <color name="skin_accent">#A894FF</color>
 </resources>
