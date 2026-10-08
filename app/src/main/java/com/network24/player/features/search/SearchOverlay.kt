@@ -99,6 +99,7 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
     private var job: Job? = null
     private lateinit var queryView: TextView
     private var editText: EditText? = null
+    private var micView: View? = null
     private lateinit var status: TextView
     private lateinit var list: RecyclerView
     private var keyboard: LinearLayout? = null
@@ -180,7 +181,8 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
             }
             editText = et
             head.addView(et, LinearLayout.LayoutParams(1, 1))
-            head.addView(roundIcon(R.drawable.ic_mic_chat, "Speak") { voiceKeyboard() }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
+            micView = roundIcon(R.drawable.ic_mic_chat, "Speak") { voiceKeyboard() }
+            head.addView(micView, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
         } else {
             val et = EditText(act).apply {
                 hint = "Search channels, shows, teams…"; setHintTextColor(textSub); setTextColor(textMain); background = null
@@ -300,7 +302,7 @@ class SearchOverlay private constructor(private val act: AppCompatActivity, priv
 
     override fun onStart() {
         super.onStart()
-        if (isTv) keyboard?.post { keyboard?.let { firstKey(it) }?.requestFocus() } else editText?.requestFocus()
+        if (isTv) keyboard?.post { (micView ?: keyboard?.let { firstKey(it) })?.requestFocus() } else editText?.requestFocus()
         setQuery(initial.orEmpty())
         setOnDismissListener { editText?.let { hideKeyboard(it) }; onClose?.invoke() }
     }
