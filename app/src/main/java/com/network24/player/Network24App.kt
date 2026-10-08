@@ -34,6 +34,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         com.network24.player.core.net.ServerRoute.init(this)
         // Settings > Auto Refresh (channels + TV guide on a schedule)
         AutoRefreshWorker.schedule(this)
+        // Settings > Auto clean (the Fresh start clean-up on a schedule)
+        com.network24.player.core.sync.AutoCleanWorker.schedule(this)
         // Events & Scores > My teams: alert 5 minutes before a followed team's game
         com.network24.player.features.discover.TeamAlerts.schedule(this)
         // Settings > Auto Volume Leveling (read by the player's audio processor)

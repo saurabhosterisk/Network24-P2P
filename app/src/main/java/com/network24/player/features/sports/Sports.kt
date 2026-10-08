@@ -226,7 +226,7 @@ class SportsActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
             "Live TV" to { go(LiveTvActivity::class.java) },
-            "Movies" to { CinemaPro.open(this@SportsActivity) },
+            "Cinema Pro" to { CinemaPro.open(this@SportsActivity) },
             "Sports" to { focusFirstCard() },
             "TV Guide" to { go(TvGuideActivity::class.java) },
             "Catch-up" to { go(CatchupActivity::class.java) },

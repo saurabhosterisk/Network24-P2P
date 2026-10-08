@@ -265,7 +265,7 @@ class LiveTvActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
             "Live TV" to { focusChannel(lastChannelPos) },
-            "Movies" to { stopPreview(); CinemaPro.open(this@LiveTvActivity) },
+            "Cinema Pro" to { stopPreview(); CinemaPro.open(this@LiveTvActivity) },
             "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { go(TvGuideActivity::class.java) },
             "Catch-up" to { go(CatchupActivity::class.java) },

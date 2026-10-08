@@ -209,6 +209,10 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
         <activity
+            android:name=".features.settings.activity.AutoCleanActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+        <activity
             android:name=".features.settings.activity.AutoReconnectActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />

@@ -229,7 +229,7 @@ class TvGuideActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
             "Live TV" to { go(com.network24.player.features.livetv.LiveTvActivity::class.java) },
-            "Movies" to { CinemaPro.open(this@TvGuideActivity) },
+            "Cinema Pro" to { CinemaPro.open(this@TvGuideActivity) },
             "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { rv.post { focusAt(0, System.currentTimeMillis()) } },
             "Catch-up" to { go(CatchupActivity::class.java) },

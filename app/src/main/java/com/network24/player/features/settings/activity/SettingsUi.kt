@@ -104,7 +104,7 @@ class SettingsUi(private val act: AppCompatActivity) {
             row(R.id.manageCategories, R.drawable.ic_list, "#7C5CFF", "Manage categories", "Choose which live categories you see", null)
             row(R.id.parentalLock, R.drawable.ic_lock, "#E5484D", "Parental lock", "Lock categories (like Adults Only) with a PIN", null, subId = R.id.parentalLockStatus)
             row(R.id.autoRefresh, R.drawable.ic_sync, "#22D3EE", "Auto update channels & guide", "", null, subId = R.id.autoRefreshSummary)
-            row(R.id.forceRefresh, R.drawable.ic_clear_cache, "#F5B841", "Fresh start", "Clear recently watched, recent searches and temporary files", null, arrow = false)
+            row(R.id.forceRefresh, R.drawable.ic_clear_cache, "#F5B841", "Auto clean", "", null, subId = R.id.autoCleanSummary)
         }
         group("Playback") {
             row(R.id.autoReconnect, R.drawable.ic_tv, "#7C5CFF", "Auto reconnect", "", null, subId = R.id.autoReconnectSummary)

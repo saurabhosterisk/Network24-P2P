@@ -48,6 +48,9 @@ class PreferenceManager(context: Context) {
         private const val KEY_AUTO_RECONNECT_MODE = "auto_reconnect_mode"
         private const val KEY_AUTO_REFRESH_HOURS = "auto_refresh_hours"
         private const val KEY_LAST_DATA_REFRESH_MS = "last_data_refresh_ms"
+        private const val KEY_AUTO_CLEAN_DAYS = "auto_clean_days"
+        private const val KEY_LAST_CLEAN_MS = "last_clean_ms"
+        private const val KEY_LAST_CLEAN_FREED = "last_clean_freed"
         // Settings > Auto Refresh default: every 8 hours (0 = off)
         const val DEFAULT_AUTO_REFRESH_HOURS = 8
         private const val KEY_SUBTITLES_ENABLED = "subtitles_enabled"
@@ -218,6 +221,14 @@ class PreferenceManager(context: Context) {
     fun setLastDataRefreshMs(timeMs: Long) {
         prefs.edit().putLong(KEY_LAST_DATA_REFRESH_MS, timeMs).apply()
     }
+
+    /** Settings > Auto clean: every N days (0 = off). Default every week. */
+    fun getAutoCleanDays(): Int = prefs.getInt(KEY_AUTO_CLEAN_DAYS, 7)
+    fun setAutoCleanDays(days: Int) { prefs.edit().putInt(KEY_AUTO_CLEAN_DAYS, days).apply() }
+    fun getLastCleanMs(): Long = prefs.getLong(KEY_LAST_CLEAN_MS, 0L)
+    fun setLastCleanMs(timeMs: Long) { prefs.edit().putLong(KEY_LAST_CLEAN_MS, timeMs).apply() }
+    fun getLastCleanFreedBytes(): Long = prefs.getLong(KEY_LAST_CLEAN_FREED, 0L)
+    fun setLastCleanFreedBytes(bytes: Long) { prefs.edit().putLong(KEY_LAST_CLEAN_FREED, bytes).apply() }
 
     fun setAutoReconnectMode(mode: AutoReconnectMode) {
         prefs.edit().putString(KEY_AUTO_RECONNECT_MODE, mode.name).apply()

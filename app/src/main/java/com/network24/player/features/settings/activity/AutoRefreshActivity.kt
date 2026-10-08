@@ -56,12 +56,12 @@ class AutoRefreshActivity : BaseActivity() {
         progress = kit.progressBar().apply { visibility = View.GONE }
         page.hero.addView(progress, LinearLayout.LayoutParams(-1, kit.dp(6)).apply { topMargin = kit.dp(14) })
         page.hero.addView(kit.spacer())
+        page.hero.addView(kit.text("Updates run in the background while the device is on. A full update takes about a minute.", 12f, kit.textSub, 500, lines = 4).apply { setPadding(0, kit.dp(12), 0, 0); setLineSpacing(0f, 1.2f) })
         refreshNow = kit.button("Update now", true) {}
         page.hero.addView(refreshNow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = kit.dp(16) })
         page.content.addView(kit.label("How often"))
         optionsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         page.content.addView(optionsContainer)
-        page.content.addView(kit.text("Updates run in the background while the device is on. A full update takes about a minute.", 12f, kit.textSub, 500, lines = 3).apply { setPadding(kit.dp(4), kit.dp(10), 0, 0) })
         setContentView(setupGlobalRightDrawer(page.root, page.menu))
 
         prefs = PreferenceManager(this)

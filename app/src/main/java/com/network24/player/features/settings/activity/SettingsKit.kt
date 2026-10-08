@@ -94,6 +94,8 @@ class SettingsKit(private val act: AppCompatActivity) {
         val body = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = true }  // a scrolled list never draws over the title
         val hero = LinearLayout(act).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(22), dp(22), dp(20))
+            // a focused button grows 5% and draws its ring at its own edge: nothing in the card may clip that
+            clipChildren = false; clipToPadding = false
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#FF241D4A"), surface)).apply { cornerRadius = dpf(20f); setStroke(dp(1), 0x337C5CFF) }
             visibility = if (heroWidth > 0) View.VISIBLE else View.GONE
         }

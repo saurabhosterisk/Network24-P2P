@@ -97,7 +97,8 @@ class SettingsActivity : BaseActivity() {
             .setOnClickListener { refreshAccount() }
         findViewById<TextView>(R.id.accountUpdated).text = "Tap refresh for the latest account details"
         updateAutoReconnectSummary()
-        updateAutoRefreshSummary()
+        updateAutoRefreshSummary(); updateAutoCleanSummary()
+        updateAutoCleanSummary()
 
         findViewById<android.widget.TextView>(R.id.appVersion).text =
             "Network24  •  Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
@@ -118,7 +119,7 @@ class SettingsActivity : BaseActivity() {
         findViewById<SwitchMaterial>(R.id.autoVolumeSwitch)?.isChecked = prefs.isAutoVolumeEnabled()
         findViewById<SwitchMaterial>(R.id.softwareDecodingSwitch)?.isChecked =
             com.network24.player.core.player.SoftwareDecoding.enabled
-        updateAutoRefreshSummary()
+        updateAutoRefreshSummary(); updateAutoCleanSummary()
         updateAutoReconnectSummary()
         // Secure Relay turns itself off whenever the app leaves the
         // foreground (Network24App), so the switch needs to reflect that
@@ -256,7 +257,7 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun bindActions() {
-        findViewById<android.view.View>(R.id.forceRefresh).setOnClickListener { confirmFreshStart() }
+        findViewById<android.view.View>(R.id.forceRefresh).setOnClickListener { startActivity(Intent(this, AutoCleanActivity::class.java)) }
 
         findViewById<android.view.View>(R.id.manageCategories).setOnClickListener {
             startActivity(Intent(this, ManageCategoriesActivity::class.java))
@@ -349,6 +350,18 @@ class SettingsActivity : BaseActivity() {
             ).toString().lowercase()
         }
         findViewById<TextView>(R.id.autoRefreshSummary).text = interval + lastText
+    }
+
+    private fun updateAutoCleanSummary() {
+        val days = prefs.getAutoCleanDays()
+        val interval = when (days) { 0 -> "Off"; 1 -> "Every day"; 7 -> "Every week"; 14 -> "Every 2 weeks"; else -> "Every $days days" }
+        val last = prefs.getLastCleanMs()
+        val lastText = when {
+            last <= 0L -> " • clears temporary files"
+            System.currentTimeMillis() - last < 60_000L -> " • last cleaned just now"
+            else -> " • last cleaned " + android.text.format.DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS).toString().lowercase()
+        }
+        findViewById<TextView>(R.id.autoCleanSummary).text = interval + lastText
     }
 
     private fun updateAutoReconnectSummary() {
@@ -544,21 +557,10 @@ class SettingsActivity : BaseActivity() {
         )
     }
 
-    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     private fun freshStart() {
         lifecycleScope.launch {
-            MemoryCache.clearAll()
-            prefs.setLastSyncTime(0L)
-            runCatching { com.network24.player.core.database.repository.LiveHistoryRepository(this@SettingsActivity).clearLocal() }
-            getSharedPreferences("n24_search", MODE_PRIVATE).edit().clear().apply()
-            val freed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                val loader = coil.Coil.imageLoader(this@SettingsActivity)
-                loader.memoryCache?.clear()
-                runCatching { loader.diskCache?.clear() }
-                var bytes = 0L
-                cacheDir.listFiles()?.forEach { f -> bytes += f.walkBottomUp().filter { it.isFile }.sumOf { it.length() }; f.deleteRecursively() }
-                bytes
-            }
+            val freed = com.network24.player.core.sync.AutoCleanWorker.clean(this@SettingsActivity)
+            updateAutoCleanSummary()
             Toast.makeText(this@SettingsActivity, "All clean" + (if (freed > 1_000_000) " - ${freed / 1_000_000} MB freed" else ""), Toast.LENGTH_LONG).show()
         }
     }
