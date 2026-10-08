@@ -646,6 +646,7 @@ class HomeScreen(
     private var catPlan: List<com.network24.player.core.database.entity.CategoryEntity> = emptyList()
     private var catBuilt = 0
     private var catBusy = false
+    private var popScores: Map<Int, Float> = emptyMap()
 
     /**
      * Up to 10 category rows: the categories this viewer watches most first, then Live TV's own order. Categories
@@ -656,6 +657,8 @@ class HomeScreen(
         val adult = Regex("ADULT|XXX|18\\+", RegexOption.IGNORE_CASE)
         val cats = withContext(Dispatchers.IO) { db.categoryDao().getByType(com.network24.player.core.database.entity.CategoryType.LIVE).sortedBy { it.position } }
             .filter { it.categoryId !in locked && it.categoryId !in off && !adult.containsMatchIn(it.name) }
+        // the channels people watch most go first in every row (Main's rolling viewer score); no data = alphabetical
+        popScores = runCatching { com.network24.player.core.api.Popularity.scores(act) }.getOrDefault(emptyMap())
         val watched = recent.mapNotNull { it.categoryId }.groupingBy { it }.eachCount()
         catPlan = (cats.filter { it.categoryId in watched }.sortedByDescending { watched[it.categoryId] } + cats.filter { it.categoryId !in watched }).take(10)
         catBuilt = 0
@@ -679,7 +682,7 @@ class HomeScreen(
                 catBuilt++
                 // the row shows 15 cards, but the player gets the whole category so channel up/down goes through all of it
                 val all = withContext(Dispatchers.IO) { db.channelDao().getByCategory(c.categoryId) }
-                val list = all.take(15)
+                val list = com.network24.player.core.api.Popularity.rank(all, popScores) { it.streamId }.take(15)
                 if (list.isEmpty()) return@repeat
                 val now = nowPlaying(list)
                 addRow("cat:" + c.categoryId, niceName(c.name), "", list.map { channelCard(it, now[it.epgChannelId], all) },
