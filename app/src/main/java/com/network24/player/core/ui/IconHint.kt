@@ -17,16 +17,29 @@ import com.network24.player.features.dashboard.home.HomeFont
 object IconHint {
     private const val TAG = "n24_icon_hint"
 
-    /** Call after the icon's own focus handling is set: it keeps that and adds the hint. */
-    fun attach(icon: View, label: String) {
+    /** Call after the icon's own focus handling is set: it keeps that and adds the hint ([above]: over the icon,
+     * for a bar at the bottom of the screen like the player controls). */
+    fun attach(icon: View, label: String, above: Boolean = false) = attach(icon, above) { label }
+
+    /** [label] is read each time the hint shows, so a button whose name changes (Picture: Fit / Zoom) stays right. */
+    fun attach(icon: View, above: Boolean = false, label: () -> String) {
         val old = icon.onFocusChangeListener
         icon.setOnFocusChangeListener { v, has ->
             old?.onFocusChange(v, has)
-            if (has) show(v, label) else hide(v)
+            if (has) show(v, label(), above) else hide(v)
         }
     }
 
-    private fun show(icon: View, label: String) {
+    /** Shows the hint again with the current name (after a click changed it). */
+    fun refresh(icon: View) { if (icon.isFocused) icon.onFocusChangeListener?.onFocusChange(icon, true) }
+
+    /** Removes any hint on screen (the controls that own it were hidden while the icon kept the focus). */
+    fun hideAll(a: Activity) {
+        val decor = a.window?.decorView as? ViewGroup ?: return
+        for (i in decor.childCount - 1 downTo 0) if (decor.getChildAt(i).tag == TAG) decor.removeViewAt(i)
+    }
+
+    private fun show(icon: View, label: String, above: Boolean = false) {
         val a = icon.context as? Activity ?: return
         val decor = a.window?.decorView as? ViewGroup ?: return
         hide(icon)
@@ -51,9 +64,9 @@ object IconHint {
             val at = IntArray(2).also { icon.getLocationInWindow(it) }
             val cx = at[0] + icon.width / 2f
             val margin = 12 * k
-            val top = at[1] + icon.height * 1.08f + 8 * k
+            val top = if (above) at[1] - icon.height * 0.04f - 8 * k - pill.height else at[1] + icon.height * 1.08f + 8 * k
             pill.translationX = (cx - pill.width / 2f).coerceIn(margin, decor.width - pill.width - margin)
-            pill.translationY = top - 4 * k
+            pill.translationY = top + (if (above) 4 else -4) * k
             pill.animate().alpha(1f).translationY(top).setDuration(140).start()
         }
     }

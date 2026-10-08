@@ -110,8 +110,20 @@ class PlayerActivity : BaseActivity() {
         Handler(Looper.getMainLooper())
 
 
+    private fun aspectName(mode: Int) = when (mode) { 1 -> "Zoom"; 2 -> "Stretch"; else -> "Fit" }
+
+    private fun applyAspect(mode: Int) {
+        binding.playerView.resizeMode = when (mode) {
+            1 -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            2 -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL
+            else -> androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+        }
+        binding.btnAspect.contentDescription = "Picture: " + aspectName(mode)
+    }
+
     private val hideRunnable = Runnable {
         SubtitlePlacement.update(binding.playerView, controlsVisible = false)
+        com.network24.player.core.ui.IconHint.hideAll(this)
 
         val d = 300L
 
@@ -546,12 +558,23 @@ class PlayerActivity : BaseActivity() {
         // Same Secure Relay controls as the Live TV / Favorites / EPG full-screen
         // players (the aspect-ratio button was replaced there already).
         vpnToggle = FullscreenVpnToggle(this, binding.btnVpn, binding.btnVpnRotate) { showUiWithTimeout() }
-        // the name of the focused control shows above the buttons (the icons alone said little)
-        binding.root.viewTreeObserver.addOnGlobalFocusChangeListener { _, now ->
-            var p: android.view.ViewParent? = now?.parent
-            var inControls = false
-            while (p != null) { if (p === binding.controlsRow) { inControls = true; break }; p = p.parent }
-            binding.txtFocusLabel.text = if (inControls) now?.contentDescription ?: "" else ""
+        // the name of the focused control shows right above that button (a tester: the one label above Play was
+        // too far from the icon on the left he was looking at)
+        binding.txtFocusLabel.visibility = View.GONE
+        fun hintAll(v: View) {
+            if (v is android.view.ViewGroup) { for (i in 0 until v.childCount) hintAll(v.getChildAt(i)); return }
+            if (v.isFocusable && !v.contentDescription.isNullOrBlank()) com.network24.player.core.ui.IconHint.attach(v, above = true) { v.contentDescription.toString() }
+        }
+        hintAll(binding.controlsRow)
+
+        // Picture size: Fit (black bars) -> Zoom (fills the screen, crops the edges) -> Stretch; remembered
+        applyAspect(prefs.getAspectMode())
+        binding.btnAspect.setOnClickListener {
+            val next = (prefs.getAspectMode() + 1) % 3
+            prefs.setAspectMode(next); applyAspect(next)
+            com.network24.player.core.ui.IconHint.refresh(binding.btnAspect)
+            Toast.makeText(this, "Picture: " + aspectName(next), Toast.LENGTH_SHORT).show()
+            showUiWithTimeout()
         }
         aiDrawer = AiAssistantDrawer(this, binding.btnAi)
         programDrawer = com.network24.player.features.player.program.ProgramInfoDrawer(this, binding.btnProgram) { aiDrawer.close(); chatPanel.close() }

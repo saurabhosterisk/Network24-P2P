@@ -441,6 +441,18 @@
                     android:layout_gravity="end"
                     android:background="@drawable/bg_player_dock">
                     <ImageButton
+                        android:id="@+id/btnAspect"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="2dp"
+                        android:layout_marginEnd="2dp"
+                        android:padding="10dp"
+                        android:background="@drawable/bg_player_btn_flat"
+                        android:contentDescription="Picture size"
+                        android:src="@drawable/ic_aspect"
+                        android:tint="#FFFFFF"
+                        android:focusable="true" />
+                    <ImageButton
                         android:id="@+id/btnSubtitle"
                         android:layout_width="44dp"
                         android:layout_height="44dp"

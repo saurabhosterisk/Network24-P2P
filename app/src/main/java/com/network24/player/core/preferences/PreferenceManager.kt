@@ -49,6 +49,7 @@ class PreferenceManager(context: Context) {
         private const val KEY_AUTO_REFRESH_HOURS = "auto_refresh_hours"
         private const val KEY_LAST_DATA_REFRESH_MS = "last_data_refresh_ms"
         private const val KEY_AUTO_CLEAN_DAYS = "auto_clean_days"
+        private const val KEY_ASPECT_MODE = "player_aspect_mode"
         private const val KEY_LAST_CLEAN_MS = "last_clean_ms"
         private const val KEY_LAST_CLEAN_FREED = "last_clean_freed"
         // Settings > Auto Refresh default: every 8 hours (0 = off)
@@ -223,6 +224,9 @@ class PreferenceManager(context: Context) {
     }
 
     /** Settings > Auto clean: every N days (0 = off). Default every week. */
+    /** Player > Picture size: 0 = Fit, 1 = Zoom (fill, crop the edges), 2 = Stretch. */
+    fun getAspectMode(): Int = prefs.getInt(KEY_ASPECT_MODE, 0)
+    fun setAspectMode(mode: Int) { prefs.edit().putInt(KEY_ASPECT_MODE, mode).apply() }
     fun getAutoCleanDays(): Int = prefs.getInt(KEY_AUTO_CLEAN_DAYS, 7)
     fun setAutoCleanDays(days: Int) { prefs.edit().putInt(KEY_AUTO_CLEAN_DAYS, days).apply() }
     fun getLastCleanMs(): Long = prefs.getLong(KEY_LAST_CLEAN_MS, 0L)
