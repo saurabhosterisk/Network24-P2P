@@ -315,6 +315,8 @@ class ChatPanel(private val activity: AppCompatActivity, button: View) {
         val me = runCatching { api.me() }.getOrElse { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show(); return false }
         if (me.optBoolean("banned")) { Toast.makeText(activity, "You cannot use the chat right now.", Toast.LENGTH_LONG).show(); return false }
         nick = me.optString("nick").takeIf { !me.isNull("nick") && it.isNotBlank() } ?: (askNick() ?: return false)
+        // a name chosen just now: ask Main again, this time it also signs the Firebase token
+        if (me.isNull("token")) runCatching { api.me() }.onFailure { Toast.makeText(activity, it.message, Toast.LENGTH_LONG).show(); return false }
         ChatApi.setUsed(activity)
         return true
     }

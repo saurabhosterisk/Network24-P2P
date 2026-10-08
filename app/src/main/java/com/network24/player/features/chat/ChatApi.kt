@@ -52,8 +52,10 @@ class ChatApi(private val context: Context) {
 
     /** Firebase sign-in with Main's 1-hour custom token (skipped while this account's session is fresh). */
     suspend fun signIn(me: JSONObject) {
+        // JSON null comes back from optString as the word "null": a viewer without a chat name has no token yet
+        if (me.isNull("token") || me.isNull("nick") || me.isNull("uid")) return
         val token = me.optString("token"); val uid = me.optString("uid"); val nick = me.optString("nick")
-        if (token.isBlank() || uid.isBlank()) return
+        if (token.isBlank() || uid.isBlank() || token == "null") return
         val auth = FirebaseAuth.getInstance()
         if (auth.currentUser?.uid == uid && signedNick == nick && System.currentTimeMillis() - signedAt < 50 * 60_000L) return
         auth.signInWithCustomToken(token).await()
