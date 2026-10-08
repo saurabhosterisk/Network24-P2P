@@ -251,6 +251,7 @@ object RemoteAgent {
             "update" -> { act?.startActivity(settingsIntent(act).putExtra(EXTRA_CHECK_UPDATE, true)); "checking for update" }
             "fresh_start" -> { act?.startActivity(settingsIntent(act).putExtra(EXTRA_FRESH_START, true)); "done" }
             "restart" -> { restart(); "restarting" }
+            "logs" -> "logs sent - code " + com.network24.player.core.diagnostics.AppLogs.send(app, "support (console)")
             else -> "unknown command"
         }
     }

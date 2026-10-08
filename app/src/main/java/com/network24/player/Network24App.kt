@@ -62,6 +62,8 @@ class Network24App : Application(), Application.ActivityLifecycleCallbacks {
         // Remote Help & Setup: commands from the console, help sessions, Easy Mode
         com.network24.player.core.remote.RemoteAgent.init(this)
         Network24CrashReporter.initialize(this, legacyTv)
+        // after Crashlytics: our handler keeps the stack trace on the device, then hands over to it
+        com.network24.player.core.diagnostics.AppLogs.installCrashSaver(this)
 
         // Secure Relay is an explicit, per-session choice by default - it
         // never reconnects on its own when the app is (re)opened, and it's

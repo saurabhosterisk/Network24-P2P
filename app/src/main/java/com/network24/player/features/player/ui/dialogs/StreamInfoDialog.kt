@@ -212,7 +212,7 @@ class StreamInfoDialog : DialogFragment() {
         body.addView(right, lp(0, -1, 0.63f).apply { marginStart = dp(16) })
 
         tabRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false; setPadding(dp(2), dp(2), dp(2), dp(2)) }
-        listOf("live" to "Live", "test" to "Speed test", "stream" to "Stream", "network" to "Network", "device" to "Device", "events" to "Events").forEach { (key, name) ->
+        listOf("live" to "Live", "test" to "Speed test", "stream" to "Stream", "network" to "Network", "device" to "Device", "events" to "Events", "logs" to "Logs").forEach { (key, name) ->
             val t = text(name, 13f, textSub, 700).apply {
                 id = View.generateViewId()
                 gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
@@ -286,6 +286,7 @@ class StreamInfoDialog : DialogFragment() {
         when (key) {
             "live" -> content.addView(ScrollView(ctx).apply { isVerticalScrollBarEnabled = false; isFocusable = false; addView(buildLive()) })
             "test" -> content.addView(buildTest())
+            "logs" -> content.addView(buildLogs())
             else -> content.addView(ScrollView(ctx).apply {
                 // every list fits the screen; the scroll is only for small phones (touch), never a remote focus stop
                 isVerticalScrollBarEnabled = false; isFocusable = false
@@ -785,6 +786,79 @@ class StreamInfoDialog : DialogFragment() {
             c.addView(r)
         }
         box.addView(c)
+    }
+
+    // ------------------------------------------------------------------------------------------------ logs tab
+    // the app's own log on the screen, the last crash, and "Send to support" (a short code staff open in the console)
+    private var logLines: List<com.network24.player.core.diagnostics.AppLogs.Line> = emptyList()
+    private var logFilter = "all"
+
+    private fun buildLogs(): View {
+        val box = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
+        val bar = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false; clipToPadding = false }
+        val view = text("Reading the app log…", 11.5f, textSub, 500, 100000).apply {
+            typeface = android.graphics.Typeface.MONOSPACE; setLineSpacing(0f, 1.12f); setTextIsSelectable(false)
+        }
+        val scroll = ScrollView(ctx).apply {
+            isVerticalScrollBarEnabled = true; isFocusable = true; isFocusableInTouchMode = true; addView(view)
+            background = shape(Color.parseColor("#0D0F14"), 14f); setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        focusable(scroll, 14f, 1.0f, accent)
+        val chips = LinkedHashMap<String, TextView>()
+        fun paint() = chips.forEach { (k, v) -> v.setTextColor(if (k == logFilter) bg else textSub); v.background = if (k == logFilter) shape(Color.WHITE, 16f) else shape(0x14FFFFFF, 16f) }
+        fun render() {
+            val crash = com.network24.player.core.diagnostics.AppLogs.lastCrash(ctx)
+            val pick = logLines.filter { l ->
+                when (logFilter) {
+                    "err" -> l.level in "EFW"
+                    "player" -> Regex("ExoPlayer|Media|Codec|Player|PesReader|Audio|Video", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
+                    "net" -> Regex("N24Api|OkHttp|Socket|SSL|http|Remote|Firestore|DNS", RegexOption.IGNORE_CASE).containsMatchIn(l.text)
+                    else -> true
+                }
+            }.takeLast(400)
+            val sb = android.text.SpannableStringBuilder()
+            if (crash != null && logFilter != "player") {
+                val s = sb.length; sb.append("LAST CRASH\n").append(crash.take(3000)).append("\n\n")
+                sb.setSpan(android.text.style.ForegroundColorSpan(live), s, sb.length, 0)
+            }
+            if (pick.isEmpty()) sb.append(if (logLines.isEmpty()) "No log lines yet." else "Nothing for this filter.")
+            pick.forEach { l ->
+                val s = sb.length; sb.append(l.text).append('\n')
+                val col = when (l.level) { 'E', 'F' -> live; 'W' -> gold; 'D', 'V' -> textSub; else -> Color.parseColor("#C9CDD6") }
+                sb.setSpan(android.text.style.ForegroundColorSpan(col), s, sb.length, 0)
+            }
+            view.text = sb
+            scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+        }
+        listOf("all" to "All", "err" to "Errors", "player" to "Player", "net" to "Network").forEach { (k, n) ->
+            val c = text(n, 12.5f, textSub, 700).apply {
+                gravity = Gravity.CENTER; setPadding(dp(12), dp(6), dp(12), dp(6))
+                setOnClickListener { logFilter = k; paint(); render() }
+                focusable(this, 16f, 1.05f, accent)
+            }
+            chips[k] = c; bar.addView(c, lp(-2, -2).apply { marginEnd = dp(6) })
+        }
+        bar.addView(View(ctx), lp(0, 1, 1f))
+        val status = text("", 12f, accentSoft, 700)
+        bar.addView(status, lp(-2, -2).apply { marginEnd = dp(10) })
+        var sending = false
+        bar.addView(pill("Send to support", primary = true) {
+            if (!sending) {
+            sending = true; status.text = "Sending…"
+            lifecycleScope.launch {
+                runCatching { com.network24.player.core.diagnostics.AppLogs.send(ctx, "viewer (Stream health)") }
+                    .onSuccess { code -> status.text = "Sent  ·  code $code"; android.widget.Toast.makeText(ctx, "Logs sent. Tell support this code: $code", android.widget.Toast.LENGTH_LONG).show() }
+                    .onFailure { status.text = "Not sent - " + (it.message ?: "try again") }
+                sending = false
+            }
+            }
+        }, lp(-2, -2))
+        box.addView(bar, lp(-1, -2))
+        box.addView(text("This app's own log - what support needs when something does not work. Passwords and tokens are hidden.", 11.5f, textSub, 500, 2).apply { setPadding(dp(2), dp(8), 0, dp(8)) })
+        box.addView(scroll, lp(-1, 0, 1f))
+        paint()
+        lifecycleScope.launch { logLines = com.network24.player.core.diagnostics.AppLogs.read(1500); render() }
+        return box
     }
 
     // ------------------------------------------------------------------------------------------------ helpers
