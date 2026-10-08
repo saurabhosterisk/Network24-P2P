@@ -29,6 +29,7 @@ object ServerRoute {
             // only fall back when https fails but http works (no internet at all = keep https)
             val use = https || !reachable(PreferenceManager.HTTP_URL)
             PreferenceManager.useHttps = use
+            android.util.Log.i("N24Api", "route: https=$https -> using ${PreferenceManager.SERVER_URL}")
             p.edit().putBoolean("https", use).apply()
         }
     }

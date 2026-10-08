@@ -212,7 +212,7 @@ class CatchupActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
             "Live TV" to { go(com.network24.player.features.livetv.LiveTvActivity::class.java) },
-            "Cinema Pro" to { CinemaPro.open(this@CatchupActivity) },
+            "Cinema" to { CinemaPro.open(this@CatchupActivity) },
             "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { go(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { showOverview() },

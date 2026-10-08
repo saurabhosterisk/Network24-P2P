@@ -92,7 +92,7 @@ class DashboardActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to {},
             "Live TV" to { open(com.network24.player.features.livetv.LiveTvActivity::class.java) },
-            "Cinema Pro" to { openCinemaPro3() },
+            "Cinema" to { openCinemaPro3() },
             "Sports" to { open(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { open(com.network24.player.features.guide.TvGuideActivity::class.java) },
             "Catch-up" to { open(com.network24.player.features.catchup.CatchupActivity::class.java) },

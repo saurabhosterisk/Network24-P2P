@@ -265,7 +265,7 @@ class LiveTvActivity : BaseActivity() {
         val tabs = listOf<Pair<String, () -> Unit>>(
             "Home" to { finish() },
             "Live TV" to { focusChannel(lastChannelPos) },
-            "Cinema Pro" to { stopPreview(); CinemaPro.open(this@LiveTvActivity) },
+            "Cinema" to { stopPreview(); CinemaPro.open(this@LiveTvActivity) },
             "Sports" to { go(com.network24.player.features.sports.SportsActivity::class.java) },
             "TV Guide" to { go(TvGuideActivity::class.java) },
             "Catch-up" to { go(CatchupActivity::class.java) },
@@ -574,6 +574,27 @@ class LiveTvActivity : BaseActivity() {
         }
     }
 
+    // the rail row a held key is heading for (focus itself lags a few frames behind the key events)
+    private var railPos = -1
+    private var railPending = false
+
+    private fun focusCat(pos: Int, tries: Int = 0) {
+        val p = pos.coerceIn(0, cats.size - 1)
+        val v = rail.findViewHolderForAdapterPosition(p)?.itemView
+        if (v == null || !rail.isLaidOut) {
+            if (tries > 20) { railPending = false; return }
+            if (tries == 0) rail.scrollToPosition(p)
+            handler.postDelayed({ focusCat(p, tries + 1) }, 16)
+            return
+        }
+        // keep the row away from the edges so the next press has somewhere to go without a scroll first
+        val lm = rail.layoutManager as LinearLayoutManager
+        if (p >= lm.findLastCompletelyVisibleItemPosition() && p < cats.size - 1) rail.scrollBy(0, v.height + dp(4))
+        else if (p <= lm.findFirstCompletelyVisibleItemPosition() && p > 0) rail.scrollBy(0, -(v.height + dp(4)))
+        railPending = false
+        v.requestFocus()
+    }
+
     private fun focusChannel(pos: Int, tries: Int = 0) {
         if (channels.isEmpty()) return
         val p = pos.coerceIn(0, channels.size - 1)
@@ -608,6 +629,17 @@ class LiveTvActivity : BaseActivity() {
                     return true
                 }
                 inRail && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT -> return true
+                // UP / DOWN on the rail are moved by hand, like the TV guide rows: RecyclerView's own focus search gives up while
+                // it scrolls, so a held key (repeat events every ~50 ms) lost the focus to the top bar or stuck on one row
+                inRail && (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN || event.keyCode == KeyEvent.KEYCODE_DPAD_UP) -> {
+                    val cur = k(((focus.tag as? String) ?: "").removePrefix("cat:")).let { if (railPos in cats.indices && railPending) railPos else it }
+                    val next = cur + (if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1)
+                    if (next < 0) return super.dispatchKeyEvent(event)   // above the first category: the top bar, as before
+                    if (next >= cats.size) return true
+                    railPos = next; railPending = true
+                    focusCat(next)
+                    return true
+                }
             }
         }
         return super.dispatchKeyEvent(event)

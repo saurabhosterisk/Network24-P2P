@@ -373,7 +373,8 @@ class HomeScreen(
      * Channel card, 16:9: the artwork of the programme on now (TMDB) with the channel's logo as a badge, the
      * programme name and how far it is. Until the artwork arrives (or when there is none): the channel's logo.
      */
-    private fun channelCard(ch: ChannelEntity, now: EpgEntity?, list: List<ChannelEntity>) = FrameLayout(act).apply {
+    /** [viewers]: "eye 214" pill at the top right (Trending row - from the popular API). */
+    private fun channelCard(ch: ChannelEntity, now: EpgEntity?, list: List<ChannelEntity>, viewers: Int? = null) = FrameLayout(act).apply {
         background = shape(surface, 14f, line)
         clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         layoutParams = LinearLayout.LayoutParams(dp(288), dp(162))
@@ -392,6 +393,11 @@ class HomeScreen(
             load(ch.icon?.takeIf { it.isNotBlank() })
         }
         addView(badge, FrameLayout.LayoutParams(dp(62), dp(34), Gravity.TOP or Gravity.START).apply { setMargins(dp(10), dp(10), 0, 0) })
+        if (viewers != null && viewers > 0) addView(text(viewers.toString(), 12f, textMain, 800).apply {
+            setPadding(dp(8), dp(4), dp(9), dp(4)); background = shape(0xB3000000.toInt(), 8f); fontFeatureSettings = "tnum"
+            act.getDrawable(R.drawable.ic_eye)?.mutate()?.let { ic -> ic.setTint(textMain); ic.setBounds(0, 0, dp(14), dp(14)); setCompoundDrawables(ic, null, null, null); compoundDrawablePadding = dp(5) }
+            gravity = Gravity.CENTER_VERTICAL
+        }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(10), dp(10), 0) })
         val prog = cleanProgram(now?.title).takeIf { it.isNotBlank() }
         val info = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, dp(14), dp(16)) }
         info.addView(text(prog ?: cleanName(ch.name), 15f, weight = 700))
@@ -595,14 +601,18 @@ class HomeScreen(
     }
 
     private fun loadTrending(locked: Set<String>) = act.lifecycleScope.launch {
-        val pop = runCatching { Web24Api.objects(Web24Api(act).support("popular").optJSONArray("streams")).map { it.optInt("stream_id") } }.getOrDefault(emptyList())
+        android.util.Log.i("N24Api", "home: loadTrending start")
+        val popular = runCatching { Web24Api.objects(Web24Api(act).support("popular").optJSONArray("streams")).map { it.optInt("stream_id") to it.optInt("viewers") } }.onFailure { android.util.Log.w("N24Api", "home popular: ${it.message}") }.getOrDefault(emptyList())
+        val pop = popular.map { it.first }
+        android.util.Log.i("N24Api", "home: popular ${pop.size} ids")
+        val viewers = popular.toMap()
         if (pop.isEmpty()) return@launch
         val list = withContext(Dispatchers.IO) {
             val by = db.channelDao().getByStreamIds(pop).associateBy { it.streamId }
             pop.mapNotNull { by[it] }.filter { it.categoryId == null || it.categoryId !in locked }.take(MAX_ROW)
         }
         val now = nowPlaying(list)
-        addRow("trending", "Trending on Network24", "what most viewers are watching right now", list.map { channelCard(it, now[it.epgChannelId], list) },
+        addRow("trending", "Trending on Network24", "what most viewers are watching right now", list.map { channelCard(it, now[it.epgChannelId], list, viewers[it.streamId]) },
             "Top 40 now" to { openAct(com.network24.player.features.discover.TrendingActivity::class.java) })
         if (heroChannel == null && list.isNotEmpty()) showHero(list[0], list, now[list[0].epgChannelId])
     }
@@ -612,7 +622,8 @@ class HomeScreen(
      * the next 48 hours. Each card says the day (Today / Tomorrow / Sat).
      */
     private fun loadSports() = act.lifecycleScope.launch {
-        val r = runCatching { Web24Api(act).support("scores") }.getOrNull() ?: return@launch
+        android.util.Log.i("N24Api", "home: loadSports start")
+        val r = runCatching { Web24Api(act).support("scores") }.onFailure { android.util.Log.w("N24Api", "home scores: ${it.message}") }.getOrNull() ?: return@launch
         val names = Web24Api.objects(r.optJSONArray("leagues")).associate { it.optString("code") to it.optString("name") }
         val keys = com.network24.player.features.discover.Teams.keys(act)
         val nowS = System.currentTimeMillis() / 1000
@@ -623,6 +634,7 @@ class HomeScreen(
         }.sortedWith(compareBy({ if (mine(it)) 0 else 1 }, { if (it.optString("state") == "in") 0 else 1 }, { it.optLong("start") }))
             .take(MAX_ROW)
             .map { JSONObject(it.toString()).put("league_name", names[it.optString("league")] ?: it.optString("league")).put("mine", mine(it)) }
+        android.util.Log.i("N24Api", "home: sports ${all.size} games/events")
         val n = all.count { it.optString("state") == "in" }
         val yours = all.count { it.optBoolean("mine") }
         val sub = listOfNotNull(if (n > 0) "$n live now" else null, if (yours > 0) "$yours with your teams" else null).joinToString("  ·  ").ifBlank { "today and tomorrow" }

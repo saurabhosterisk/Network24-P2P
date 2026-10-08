@@ -30,12 +30,14 @@ class Web24Api(context: Context) {
             .add("doc_user", prefs.getUsername()).add("action", action)
         fields.forEach { (k, v) -> form.add(k, v) }
         val req = Request.Builder().url(PreferenceManager.SERVER_URL + "/support_api.php").post(form.build()).header("User-Agent", UA).build()
+        val t0 = System.currentTimeMillis()
         val text = try {
-            client.newCall(req).execute().use { it.body?.string().orEmpty() }
+            client.newCall(req).execute().use { r -> r.body?.string().orEmpty().also { android.util.Log.i("N24Api", "support $action: HTTP ${r.code} ${it.length} chars in ${System.currentTimeMillis() - t0} ms") } }
         } catch (e: Exception) {
+            android.util.Log.w("N24Api", "support $action failed: ${e.javaClass.simpleName}: ${e.message} (${PreferenceManager.SERVER_URL})")
             throw Error("Network24 could not be reached. Please check your connection and try again.")
         }
-        val j = runCatching { JSONObject(text) }.getOrNull() ?: throw Error("Unexpected answer from the server.")
+        val j = runCatching { JSONObject(text) }.getOrNull() ?: run { android.util.Log.w("N24Api", "support $action: not JSON (${text.length} chars): ${text.take(120)}"); throw Error("Unexpected answer from the server.") }
         if (j.has("error") || (j.has("result") && !j.optBoolean("result"))) throw Error(j.optString("message", "Something went wrong."))
         j
     }
