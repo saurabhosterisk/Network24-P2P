@@ -239,7 +239,7 @@ class DashboardActivity : BaseActivity() {
 
     private fun setClickListeners() {
         binding.cardLiveTv.setOnClickListener { startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java)) }
-        binding.cardFavorites.setOnClickListener { startActivity(Intent(this, FavoriteChannelsActivity::class.java)) }
+        binding.cardFavorites.setOnClickListener { startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java).putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_CATEGORY_ID, "fav")) }
         binding.cardNotification.setOnClickListener { openCinemaPro3() }
         binding.cardSupport.setOnClickListener { com.network24.player.features.help.HelpCenter.show(this) }
         binding.cardSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }

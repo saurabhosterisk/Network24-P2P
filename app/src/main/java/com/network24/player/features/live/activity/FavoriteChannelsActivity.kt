@@ -163,6 +163,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
     private var currentFavIds:
             Set<String> = emptySet()
+    private var currentFavOrder: List<String> = emptyList()
 
 
 
@@ -256,6 +257,10 @@ class FavoriteChannelsActivity : BaseActivity() {
         super.onCreate(
             savedInstanceState
         )
+        // the favorites live in the new Live TV screen now (same design as the rest of the app)
+        startActivity(Intent(this, com.network24.player.features.livetv.LiveTvActivity::class.java).putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_CATEGORY_ID, "fav"))
+        finish()
+        return
 
 
 
@@ -456,17 +461,9 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
-                    currentFavIds =
-
-                        favs.map {
-
-
-                            it.itemId
-
-
-                        }
-
-                            .toSet()
+                    // the DAO gives them in the viewer's own order
+                    currentFavOrder = favs.map { it.itemId }
+                    currentFavIds = currentFavOrder.toSet()
 
 
 
@@ -615,20 +612,11 @@ class FavoriteChannelsActivity : BaseActivity() {
 
         // channels of categories under the parental lock are left out until the PIN is entered
         val locked = com.network24.player.core.parental.ParentalLock.activeLockedIds(this)
-        val favChannels =
-
-            allChannels.filter {
-
-
-                favIds.contains(
-
-                    it.stream_id
-                        ?.toString()
-                        .orEmpty()
-
-                ) && it.category_id !in locked
-
-            }
+        // in the viewer's own order (or the sort they picked), not the playlist's order
+        val byId = allChannels.associateBy { it.stream_id?.toString().orEmpty() }
+        val order = currentFavOrder.ifEmpty { favIds.toList() }
+        val favChannels = com.network24.player.core.database.repository.FavoritesOrder.apply(this,
+            order.mapNotNull { byId[it] }.filter { it.category_id !in locked }, { it.name.orEmpty() }, { it.num ?: 0 })
 
 
 
@@ -841,9 +829,7 @@ class FavoriteChannelsActivity : BaseActivity() {
 
                 onLongClicked =
                     { channel, _ ->
-
-
-                        confirmRemoveFavorite(
+                        favoriteOptions(
                             channel
                         )
 
@@ -1792,6 +1778,56 @@ class FavoriteChannelsActivity : BaseActivity() {
 
 
 
+
+    /** Long-press on a favorite: arrange the list (My order), pick a sort, or remove it. */
+    private fun favoriteOptions(channel: LiveChannel) {
+        val id = channel.stream_id?.toString() ?: return
+        val fo = com.network24.player.core.database.repository.FavoritesOrder
+        val items = listOf("Move up", "Move down", "Move to top", "Move to bottom", "Sort favorites: " + fo.label(fo.mode(this)) + "…", "Remove from favorites")
+        showChoiceDialog(title = channel.name ?: "Favorite", items = items, selectedIndex = -1, focusIndex = 0) { which ->
+            when (which) {
+                0 -> moveFavorite(id, -1)
+                1 -> moveFavorite(id, 1)
+                2 -> moveFavorite(id, Int.MIN_VALUE)
+                3 -> moveFavorite(id, Int.MAX_VALUE)
+                4 -> sortFavorites()
+                5 -> confirmRemoveFavorite(channel)
+            }
+        }
+    }
+
+    private fun sortFavorites() {
+        val fo = com.network24.player.core.database.repository.FavoritesOrder
+        val modes = listOf(fo.MY, fo.NAME, fo.NUM)
+        showChoiceDialog(title = "Sort favorites", items = modes.map { fo.label(it) }, selectedIndex = modes.indexOf(fo.mode(this))) { i ->
+            fo.setMode(this, modes[i])
+            refreshFavoriteListFromDb(currentFavIds)
+            Toast.makeText(this, "Favorites: " + fo.label(modes[i]), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** [step]: -1 / +1 one place, Int.MIN_VALUE = top, Int.MAX_VALUE = bottom. Arranging switches the sort to My order. */
+    private fun moveFavorite(id: String, step: Int) {
+        val fo = com.network24.player.core.database.repository.FavoritesOrder
+        // start from what is on screen, so a name / number sort becomes the base of my order
+        val order = channelList.mapNotNull { it.stream_id?.toString() }.toMutableList()
+        val from = order.indexOf(id)
+        if (from < 0) return
+        val to = when (step) { Int.MIN_VALUE -> 0; Int.MAX_VALUE -> order.size - 1; else -> (from + step).coerceIn(0, order.size - 1) }
+        if (to == from) return
+        order.removeAt(from); order.add(to, id)
+        // favorites hidden by the parental lock keep a place after the visible ones
+        val hidden = currentFavOrder.filter { it !in order }
+        if (fo.mode(this) != fo.MY) { fo.setMode(this, fo.MY); Toast.makeText(this, "Favorites: My order", Toast.LENGTH_SHORT).show() }
+        lifecycleScope.launch {
+            favRepo.saveOrder(prefs.getUsername(), FavoriteItemType.LIVE_CHANNEL, order + hidden)
+            // the list observer re-renders; keep the moved channel in view and focused
+            binding.rvChannels.postDelayed({
+                binding.rvChannels.scrollToPosition(to)
+                binding.rvChannels.post { binding.rvChannels.findViewHolderForAdapterPosition(to)?.itemView?.requestFocus() }
+            }, 150)
+        }
+    }
 
     private fun confirmRemoveFavorite(
         channel: LiveChannel

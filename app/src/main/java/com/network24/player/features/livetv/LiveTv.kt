@@ -44,6 +44,7 @@ import com.network24.player.core.database.entity.ChannelEntity
 import com.network24.player.core.database.entity.EpgEntity
 import com.network24.player.core.database.mapper.toLiveChannel
 import com.network24.player.core.database.repository.FavoritesRepository
+import com.network24.player.core.database.repository.FavoritesOrder
 import com.network24.player.core.net.StreamDataSourceFactory
 import com.network24.player.core.parental.ParentalLock
 import com.network24.player.core.preferences.PreferenceManager
@@ -105,6 +106,8 @@ class LiveTvActivity : BaseActivity() {
     private var cats: List<Cat> = emptyList()
     private var allChannels: List<ChannelEntity> = emptyList()
     private var favChannelIds: Set<Int> = emptySet()
+    // favorites in the viewer's own order (the DAO's order)
+    private var favOrder: List<Int> = emptyList()
     private var favCatIds: Set<String> = emptySet()
     private var catKey = ""
     private var channels: List<ChannelEntity> = emptyList()
@@ -351,7 +354,9 @@ class LiveTvActivity : BaseActivity() {
             val all = db.categoryDao().getByType(CategoryType.LIVE).sortedBy { it.position }
                 .filter { it.categoryId !in disabled && (counts[it.categoryId] ?: 0) > 0 }
                 .map { Cat(it.categoryId, it.name, counts[it.categoryId] ?: 0, it.categoryId in favCats, it.categoryId in locked) }
-            val favs = db.favoritesDao().getByType(FavoriteItemType.LIVE_CHANNEL).mapNotNull { it.itemId.toIntOrNull() }.toSet()
+            val favList = db.favoritesDao().getByType(FavoriteItemType.LIVE_CHANNEL).mapNotNull { it.itemId.toIntOrNull() }
+            favOrder = favList
+            val favs = favList.toSet()
             favCatIds = favCats
             // favourite categories first, then the provider's order
             Triple(all.filter { it.fav } + all.filterNot { it.fav }, chans, favs)
@@ -373,16 +378,19 @@ class LiveTvActivity : BaseActivity() {
         val changed = catKey != id
         catKey = id
         repaintRail()
-        listTitle.text = when (id) { "fav" -> "★  Favorite channels"; "pick" -> cat.name; else -> niceName(cat.name) }
+        listTitle.text = when (id) { "fav" -> "★  Favorites  ·  " + FavoritesOrder.label(FavoritesOrder.mode(this)); "pick" -> cat.name; else -> niceName(cat.name) }
         listCount.text = "${cat.count} channels"
         if (cat.locked) {
             channels = emptyList(); guide = emptyMap(); listAdapter.notifyDataSetChanged()
             status.visibility = View.VISIBLE; status.text = "🔒  This category is locked.\nSelect it and enter your PIN to open it."
             return
         }
-        val chans = if (id == "pick") pickChannels.filterNot { ParentalLock.isLocked(this, it.categoryId) }
-        else (if (id == "fav") allChannels.filter { it.streamId in favChannelIds && !ParentalLock.isLocked(this, it.categoryId) } else allChannels.filter { it.categoryId == id })
-            .sortedWith(compareBy({ it.num ?: Int.MAX_VALUE }, { it.name }))
+        val chans = when (id) {
+            "pick" -> pickChannels.filterNot { ParentalLock.isLocked(this, it.categoryId) }
+            // favorites: the viewer's own order, or the sort they picked
+            "fav" -> allChannels.associateBy { it.streamId }.let { by -> FavoritesOrder.apply(this, favOrder.mapNotNull { by[it] }.filterNot { ParentalLock.isLocked(this, it.categoryId) }, { it.name.orEmpty() }, { it.num ?: 0 }) }
+            else -> allChannels.filter { it.categoryId == id }.sortedWith(compareBy({ it.num ?: Int.MAX_VALUE }, { it.name }))
+        }
         if (!changed && chans.size == channels.size) { if (focusList) focusChannel(lastChannelPos); return }
         channels = chans; guide = emptyMap(); lastChannelPos = 0
         status.visibility = if (chans.isEmpty()) View.VISIBLE else View.GONE
@@ -771,8 +779,39 @@ class LiveTvActivity : BaseActivity() {
             "Watch in MultiView" to { multiView(ch) },
             (if (fav) "Remove from Favorites" else "Add to Favorites") to { toggleFavorite(ch) },
             "TV Guide" to { stopPreview(); startActivity(Intent(this, TvGuideActivity::class.java)) },
-        )
+        ).let { base ->
+            // in Favorites the list can be arranged like a cable line-up
+            if (catKey != "fav") base else listOf<Pair<String, () -> Unit>>(
+                "Move up" to { moveFav(ch, -1) }, "Move down" to { moveFav(ch, 1) },
+                "Move to top" to { moveFav(ch, Int.MIN_VALUE) }, "Move to bottom" to { moveFav(ch, Int.MAX_VALUE) },
+                "Sort favorites: " + FavoritesOrder.label(FavoritesOrder.mode(this)) + "…" to { sortFavs() },
+            ) + base
+        }
         showChoiceDialog(title = cleanName(ch.name), items = items.map { it.first }, selectedIndex = -1, focusIndex = 0) { which -> items[which].second() }
+    }
+
+    /** [step]: -1 / +1 one place, Int.MIN_VALUE = top, Int.MAX_VALUE = bottom. Arranging switches the sort to My order. */
+    private fun moveFav(ch: ChannelEntity, step: Int) {
+        val order = channels.map { it.streamId }.toMutableList()
+        val from = order.indexOf(ch.streamId)
+        if (from < 0) return
+        val to = when (step) { Int.MIN_VALUE -> 0; Int.MAX_VALUE -> order.size - 1; else -> (from + step).coerceIn(0, order.size - 1) }
+        if (to == from) return
+        order.removeAt(from); order.add(to, ch.streamId)
+        // favorites hidden by the parental lock keep a place after the visible ones
+        val full = order + favOrder.filter { it !in order }
+        if (FavoritesOrder.mode(this) != FavoritesOrder.MY) FavoritesOrder.setMode(this, FavoritesOrder.MY)
+        favOrder = full
+        channels = emptyList(); selectCategory("fav", focusList = false); focusChannel(to)
+        lifecycleScope.launch { runCatching { favRepo.saveOrder(prefs.getUsername(), FavoriteItemType.LIVE_CHANNEL, full.map { it.toString() }) } }
+    }
+
+    private fun sortFavs() {
+        val modes = listOf(FavoritesOrder.MY, FavoritesOrder.NAME, FavoritesOrder.NUM)
+        showChoiceDialog(title = "Sort favorites", items = modes.map { FavoritesOrder.label(it) }, selectedIndex = modes.indexOf(FavoritesOrder.mode(this))) { i ->
+            FavoritesOrder.setMode(this, modes[i])
+            channels = emptyList(); selectCategory("fav", focusList = true)
+        }
     }
 
     private fun multiView(ch: ChannelEntity) {

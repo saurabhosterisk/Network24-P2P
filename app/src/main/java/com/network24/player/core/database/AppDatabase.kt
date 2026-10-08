@@ -18,11 +18,12 @@ import com.network24.player.core.database.entity.*
 
         SyncMetaEntity::class,
     ],
-    version = 2,
-    // Schemas are exported to app/schemas so a future version bump can use
-    // @AutoMigration(from = 2, to = 3) instead of wiping history and
-    // continue-watching (see DatabaseProvider).
-    exportSchema = true
+    version = 3,
+    // Schemas are exported to app/schemas; version bumps use an auto-migration so history,
+    // continue-watching and favorites survive (see DatabaseProvider).
+    // 2 -> 3: favorites.position ("My order" on the favorites screen).
+    exportSchema = true,
+    autoMigrations = [androidx.room.AutoMigration(from = 2, to = 3)]
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao

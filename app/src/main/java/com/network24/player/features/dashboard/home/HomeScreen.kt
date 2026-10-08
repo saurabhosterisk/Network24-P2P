@@ -552,7 +552,9 @@ class HomeScreen(
             val favs = withContext(Dispatchers.IO) {
                 val ids = db.favoritesDao().getByType(FavoriteItemType.LIVE_CHANNEL).mapNotNull { it.itemId.toIntOrNull() }
                 val by = db.channelDao().getByStreamIds(ids).associateBy { it.streamId }
-                ids.mapNotNull { by[it] }.filter { it.categoryId == null || it.categoryId !in locked }.take(MAX_ROW)
+                // the viewer's own order (or the sort they picked on the favorites screen)
+                com.network24.player.core.database.repository.FavoritesOrder.apply(act, ids.mapNotNull { by[it] }, { it.name.orEmpty() }, { it.num ?: 0 })
+                    .filter { it.categoryId == null || it.categoryId !in locked }.take(MAX_ROW)
             }
             // the billboard was on a channel that is hidden now (category locked / adult): it is taken off
             if (heroChannel?.categoryId?.let { it in locked } == true) {
@@ -571,7 +573,7 @@ class HomeScreen(
             addRow("continue", "Continue watching", "live now on the channels you watched", recent.map { channelCard(it, now[it.epgChannelId], recent) },
                 "Recently watched" to { openAct(com.network24.player.features.live.activity.RecentlyWatchedActivity::class.java) })
             addRow("favorites", "Your favorites", "", favs.map { channelCard(it, now[it.epgChannelId], favs) },
-                "All favorites" to { openAct(com.network24.player.features.live.activity.FavoriteChannelsActivity::class.java) })
+                "All favorites" to { act.startActivity(Intent(act, com.network24.player.features.livetv.LiveTvActivity::class.java).putExtra(com.network24.player.features.livetv.LiveTvActivity.EXTRA_CATEGORY_ID, "fav")) })
             focusStart()
             loadSports()
             loadTrending(locked)
